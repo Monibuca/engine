@@ -31,8 +31,9 @@ func Run(configFile string) (err error) {
 		return
 	}
 	go Summary.StartSummary()
+	cg := &Config{Plugins: make(map[string]interface{})}
 	if _, err = toml.Decode(string(ConfigRaw), cg); err == nil {
-		for name, config := range plugins {
+		for name, config := range Plugins {
 			if cfg, ok := cg.Plugins[name]; ok {
 				b, _ := json.Marshal(cfg)
 				if err = json.Unmarshal(b, config.Config); err != nil {
