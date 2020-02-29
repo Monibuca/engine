@@ -14,10 +14,12 @@ var (
 	roomCtxBg = context.Background()
 )
 
+// Collection 对sync.Map的包装
 type Collection struct {
 	sync.Map
 }
 
+// Get 根据流名称获取房间
 func (c *Collection) Get(name string) (result *Room) {
 	item, loaded := AllRoom.LoadOrStore(name, &Room{
 		Subscribers: make(map[string]*OutputStream),
@@ -34,6 +36,7 @@ func (c *Collection) Get(name string) (result *Room) {
 	return
 }
 
+// Room 房间定义
 type Room struct {
 	context.Context
 	Publisher
@@ -49,6 +52,7 @@ type Room struct {
 	UseTimestamp bool //是否采用数据包中的时间戳
 }
 
+// RoomInfo 房间可序列化信息，用于控制台显示
 type RoomInfo struct {
 	StreamPath     string
 	StartTime      time.Time
@@ -67,12 +71,18 @@ type RoomInfo struct {
 		SoundType   byte //1bit
 	}
 }
+
+// UnSubscribeCmd 取消订阅命令
 type UnSubscribeCmd struct {
 	*OutputStream
 }
+
+// SubscribeCmd 订阅房间命令
 type SubscribeCmd struct {
 	*OutputStream
 }
+
+// ChangeRoomCmd 切换房间命令
 type ChangeRoomCmd struct {
 	*OutputStream
 	NewRoom *Room
@@ -85,6 +95,8 @@ func (r *Room) onClosed() {
 		r.OnClosed()
 	}
 }
+
+//Subscribe 订阅房间
 func (r *Room) Subscribe(s *OutputStream) {
 	s.Room = r
 	if r.Err() == nil {
@@ -96,11 +108,14 @@ func (r *Room) Subscribe(s *OutputStream) {
 	}
 }
 
+//UnSubscribe 取消订阅房间
 func (r *Room) UnSubscribe(s *OutputStream) {
 	if r.Err() == nil {
 		r.Control <- &UnSubscribeCmd{s}
 	}
 }
+
+// Run 房间运行，转发逻辑
 func (r *Room) Run() {
 	log.Printf("room create :%s", r.StreamPath)
 	defer r.onClosed()
@@ -153,6 +168,8 @@ func (r *Room) Run() {
 		}
 	}
 }
+
+// PushAudio 来自发布者推送的音频
 func (r *Room) PushAudio(audio *avformat.AVPacket) {
 	if len(audio.Payload) < 4 {
 		return
@@ -211,6 +228,8 @@ func (r *Room) setH264Info(video *avformat.AVPacket) {
 		r.VideoInfo.SPSInfo, err = avformat.ParseSPS(info.SequenceParameterSetNALUnit)
 	}
 }
+
+// PushVideo 来自发布者推送的视频
 func (r *Room) PushVideo(video *avformat.AVPacket) {
 	if len(video.Payload) < 3 {
 		return

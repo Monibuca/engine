@@ -3,14 +3,17 @@ package engine
 import (
 	"context"
 	"fmt"
-	"github.com/Monibuca/engine/avformat"
 	"time"
+
+	"github.com/Monibuca/engine/avformat"
 )
 
+// Subscriber 订阅者
 type Subscriber interface {
 	Send(*avformat.SendPacket) error
 }
 
+// SubscriberInfo 订阅者可序列化信息，用于控制台输出
 type SubscriberInfo struct {
 	ID            string
 	TotalDrop     int //总丢帧
@@ -19,6 +22,8 @@ type SubscriberInfo struct {
 	BufferLength  int
 	SubscribeTime time.Time
 }
+
+// OutputStream 订阅者实体定义
 type OutputStream struct {
 	context.Context
 	*Room
@@ -36,15 +41,19 @@ type OutputStream struct {
 	firstScreenIndex int
 }
 
+// IsClosed 检查订阅者是否已经关闭
 func (s *OutputStream) IsClosed() bool {
 	return s.Context != nil && s.Err() != nil
 }
 
+// Close 关闭订阅者
 func (s *OutputStream) Close() {
 	if s.Cancel != nil {
 		s.Cancel()
 	}
 }
+
+//Play 开始订阅
 func (s *OutputStream) Play(streamPath string) (err error) {
 	AllRoom.Get(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
@@ -61,6 +70,7 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 		}
 	}
 }
+
 func (s *OutputStream) sendPacket(packet *avformat.AVPacket, timestamp uint32) {
 	if !packet.IsAVCSequence && timestamp == 0 {
 		timestamp = 1 //防止为0

@@ -12,13 +12,19 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-var ConfigRaw []byte
-var Version = "1.0.0"
-var EngineInfo = &struct {
-	Version   string
-	StartTime time.Time
-}{Version, time.Now()}
+var (
+	// ConfigRaw 配置信息的原始数据
+	ConfigRaw []byte
+	// Version 引擎版本号
+	Version = "1.0.2"
+	// EngineInfo 引擎信息
+	EngineInfo = &struct {
+		Version   string
+		StartTime time.Time //启动时间
+	}{Version, time.Now()}
+)
 
+// Run 启动Monibuca引擎
 func Run(configFile string) (err error) {
 	if runtime.GOOS == "windows" {
 		ioutil.WriteFile("shutdown.bat", []byte(fmt.Sprintf("taskkill /pid %d  -t  -f", os.Getpid())), 0777)
