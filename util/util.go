@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 // 检查文件或目录是否存在
@@ -37,4 +39,12 @@ func ReadFileLines(filename string) (lines []string, err error) {
 	}
 
 	return
+}
+
+func CurrentDir(path ...string) string {
+	_, currentFilePath, _, _ := runtime.Caller(1)
+	if len(path) == 0 {
+		return filepath.Dir(currentFilePath)
+	}
+	return filepath.Join(filepath.Dir(currentFilePath), filepath.Join(path...))
 }
