@@ -22,11 +22,6 @@ type PluginConfig struct {
 	Run     func()      //插件启动函数
 }
 
-// Config 程序总体配置结构，初始化从config.toml中读取
-type Config struct {
-	Plugins map[string]interface{}
-}
-
 // InstallPlugin 安装插件
 func InstallPlugin(opt *PluginConfig) {
 	log.Printf("install plugin %s version: %s", opt.Name, opt.Version)
