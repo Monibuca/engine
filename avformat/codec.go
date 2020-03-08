@@ -189,7 +189,7 @@ type ADTSFixedHeader struct {
 // 2: Scalable Sampling Rate profile(SSR)
 // 3: Reserved
 //
-var SamplingFrequencies = [...]int{96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350}
+var SamplingFrequencies = [...]int{96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0}
 
 // Sampling Frequencies[]:
 //

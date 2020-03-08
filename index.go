@@ -16,7 +16,7 @@ var (
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw []byte
 	// Version 引擎版本号
-	Version = "1.1.0"
+	Version = "1.1.1"
 	// EngineInfo 引擎信息
 	EngineInfo = &struct {
 		Version   string
