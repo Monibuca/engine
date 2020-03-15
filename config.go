@@ -32,3 +32,7 @@ func InstallPlugin(opt *PluginConfig) {
 type ListenerConfig struct {
 	ListenAddr string
 }
+
+var config = &struct {
+	EnableWaitRoom bool
+}{true}

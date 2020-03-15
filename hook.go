@@ -42,6 +42,19 @@ func (h OnSubscribeHook) Trigger(s *OutputStream) {
 	}
 }
 
+var OnUnSubscribeHooks = make(OnUnSubscribeHook, 0)
+
+type OnUnSubscribeHook []func(s *OutputStream)
+
+func (h OnUnSubscribeHook) AddHook(hook func(s *OutputStream)) {
+	OnUnSubscribeHooks = append(h, hook)
+}
+func (h OnUnSubscribeHook) Trigger(s *OutputStream) {
+	for _, f := range h {
+		f(s)
+	}
+}
+
 var OnDropHooks = make(OnDropHook, 0)
 
 type OnDropHook []func(s *OutputStream)
@@ -63,6 +76,19 @@ func (h OnSummaryHook) AddHook(hook func(bool)) {
 	OnSummaryHooks = append(h, hook)
 }
 func (h OnSummaryHook) Trigger(v bool) {
+	for _, f := range h {
+		f(v)
+	}
+}
+
+var OnRoomClosedHooks = make(OnRoomClosedHook, 0)
+
+type OnRoomClosedHook []func(*Room)
+
+func (h OnRoomClosedHook) AddHook(hook func(*Room)) {
+	OnRoomClosedHooks = append(h, hook)
+}
+func (h OnRoomClosedHook) Trigger(v *Room) {
 	for _, f := range h {
 		f(v)
 	}

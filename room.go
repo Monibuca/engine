@@ -91,6 +91,7 @@ type ChangeRoomCmd struct {
 func (r *Room) onClosed() {
 	log.Printf("room destoryed :%s", r.StreamPath)
 	AllRoom.Delete(r.StreamPath)
+	OnRoomClosedHooks.Trigger(r)
 	if r.Publisher != nil {
 		r.OnClosed()
 	}
@@ -138,6 +139,7 @@ func (r *Room) Run() {
 			switch v := s.(type) {
 			case *UnSubscribeCmd:
 				delete(r.Subscribers, v.ID)
+				OnUnSubscribeHooks.Trigger(v.OutputStream)
 				log.Printf("%s subscriber %s removed remains:%d", r.StreamPath, v.ID, len(r.Subscribers))
 				if len(r.Subscribers) == 0 && r.Publisher == nil {
 					r.Cancel()

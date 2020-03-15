@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Monibuca/engine/avformat"
+	"github.com/pkg/errors"
 )
 
 // Subscriber 订阅者
@@ -55,6 +56,11 @@ func (s *OutputStream) Close() {
 
 //Play 开始订阅
 func (s *OutputStream) Play(streamPath string) (err error) {
+	if !config.EnableWaitRoom {
+		if _, ok := AllRoom.Load(streamPath); !ok {
+			return errors.New(fmt.Sprintf("Stream not found:%s", streamPath))
+		}
+	}
 	AllRoom.Get(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
 	for {
