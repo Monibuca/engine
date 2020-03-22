@@ -136,6 +136,10 @@ func (s *OutputStream) sendVideo(video *avformat.AVPacket) error {
 	return s.sendVideo(video)
 }
 func (s *OutputStream) sendAudio(audio *avformat.AVPacket) error {
+	if !s.VTSent {
+		audio.Recycle()
+		return nil
+	}
 	if s.ATSent {
 		if s.FirstScreen != nil && s.firstScreenIndex == -1 {
 			audio.Recycle()
