@@ -1,6 +1,12 @@
 package engine
 
-import "log"
+import (
+	"log"
+	"path/filepath"
+	"runtime"
+
+	"github.com/Monibuca/engine/util"
+)
 
 const (
 	PLUGIN_NONE       = 0      //独立插件
@@ -19,6 +25,7 @@ type PluginConfig struct {
 	Config  interface{} //插件配置
 	UI      string      //界面路径
 	Version string      //插件版本
+	Dir     string      //插件代码路径
 	Run     func()      //插件启动函数
 }
 
@@ -26,6 +33,12 @@ type PluginConfig struct {
 func InstallPlugin(opt *PluginConfig) {
 	log.Printf("install plugin %s version: %s", opt.Name, opt.Version)
 	Plugins[opt.Name] = opt
+	_, pluginFilePath, _, _ := runtime.Caller(1)
+	opt.Dir = filepath.Dir(pluginFilePath)
+	ui := filepath.Join(opt.Dir, "ui", "dist")
+	if util.Exist(ui) {
+		opt.UI = ui
+	}
 }
 
 // ListenerConfig 带有监听地址端口的插件配置类型
