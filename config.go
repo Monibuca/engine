@@ -4,6 +4,7 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/Monibuca/engine/util"
 )
@@ -35,7 +36,7 @@ func InstallPlugin(opt *PluginConfig) {
 	Plugins[opt.Name] = opt
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	opt.Dir = filepath.Dir(pluginFilePath)
-	ui := filepath.Join(opt.Dir, "ui", "dist")
+	ui := filepath.Join(opt.Dir, "ui", "dist", "plugin-"+strings.ToLower(opt.Name)+".min.js")
 	if util.Exist(ui) {
 		opt.UI = ui
 	}
