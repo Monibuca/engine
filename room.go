@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Monibuca/engine/avformat"
+	. "github.com/logrusorgru/aurora"
 )
 
 var (
@@ -89,7 +90,7 @@ type ChangeRoomCmd struct {
 }
 
 func (r *Room) onClosed() {
-	log.Printf("room destoryed :%s", r.StreamPath)
+	Print(Yellow("room destoryed :"), BgBrightCyan(r.StreamPath))
 	AllRoom.Delete(r.StreamPath)
 	OnRoomClosedHooks.Trigger(r)
 	if r.Publisher != nil {
@@ -118,7 +119,7 @@ func (r *Room) UnSubscribe(s *OutputStream) {
 
 // Run 房间运行，转发逻辑
 func (r *Room) Run() {
-	log.Printf("room create :%s", r.StreamPath)
+	Print(Green("room create:"), BgBrightCyan(r.StreamPath))
 	defer r.onClosed()
 	update := time.NewTicker(time.Second)
 	defer update.Stop()

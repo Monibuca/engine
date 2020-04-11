@@ -1,12 +1,12 @@
 package engine
 
 import (
-	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/Monibuca/engine/util"
+	. "github.com/logrusorgru/aurora"
 )
 
 const (
@@ -32,7 +32,6 @@ type PluginConfig struct {
 
 // InstallPlugin 安装插件
 func InstallPlugin(opt *PluginConfig) {
-	log.Printf("install plugin %s version: %s", opt.Name, opt.Version)
 	Plugins[opt.Name] = opt
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	opt.Dir = filepath.Dir(pluginFilePath)
@@ -40,6 +39,10 @@ func InstallPlugin(opt *PluginConfig) {
 	if util.Exist(ui) {
 		opt.UI = ui
 	}
+	if parts := strings.Split(opt.Dir, "@"); len(parts) > 1 {
+		opt.Version = parts[len(parts)-1]
+	}
+	Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
 }
 
 // ListenerConfig 带有监听地址端口的插件配置类型

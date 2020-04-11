@@ -6,22 +6,25 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
-	"time"
+	"strings"
+	"time" // colorable
 
 	"github.com/BurntSushi/toml"
+	. "github.com/logrusorgru/aurora"
 )
 
 var (
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw []byte
 	// Version 引擎版本号
-	Version = "1.1.3"
+	Version string
 	// EngineInfo 引擎信息
 	EngineInfo = &struct {
-		Version   string
+		Version   *string
 		StartTime time.Time //启动时间
-	}{Version, time.Now()}
+	}{&Version, time.Now()}
 )
 
 // Run 启动Monibuca引擎
@@ -31,11 +34,15 @@ func Run(configFile string) (err error) {
 	} else {
 		ioutil.WriteFile("shutdown.sh", []byte(fmt.Sprintf("kill -9 %d", os.Getpid())), 0777)
 	}
-	log.Printf("start monibuca version:%s", Version)
+	_, enginePath, _, _ := runtime.Caller(0)
+	if parts := strings.Split(filepath.Dir(enginePath), "@"); len(parts) > 1 {
+		Version = parts[len(parts)-1]
+	}
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		log.Printf("read config file error: %v", err)
+		Print(Red("read config file error:"), err)
 		return
 	}
+	Print(Green("start monibuca"), BrightBlue(Version))
 	go Summary.StartSummary()
 	var cg map[string]interface{}
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
@@ -60,7 +67,7 @@ func Run(configFile string) (err error) {
 			}
 		}
 	} else {
-		log.Printf("decode config file error: %v", err)
+		Print(Red("decode config file error:"), err)
 	}
 	return
 }
