@@ -2,8 +2,6 @@ package avformat
 
 import (
 	"sync"
-
-	"github.com/Monibuca/engine/pool"
 )
 
 var (
@@ -24,12 +22,12 @@ type AVPacket struct {
 	Timestamp     uint32
 	Type          byte //8 audio,9 video
 	IsAACSequence bool
-	IsADTS        bool
+	// IsADTS        bool
 	// Video
 	VideoFrameType byte //4bit
 	IsAVCSequence  bool
 	Payload        []byte
-	RefCount       int //Payload的引用次数
+	// RefCount       int //Payload的引用次数
 }
 
 func (av *AVPacket) IsKeyFrame() bool {
@@ -48,25 +46,27 @@ func (av *AVPacket) ADTS2ASC() (tagPacket *AVPacket) {
 	}
 	return
 }
-func (av *AVPacket) Recycle() {
-	if av.RefCount == 0 {
-		return
-	} else if av.RefCount == 1 {
-		av.RefCount = 0
-		pool.RecycleSlice(av.Payload)
-		AVPacketPool.Put(av)
-	} else {
-		av.RefCount--
-	}
-}
+
+// func (av *AVPacket) Recycle() {
+// 	if av.RefCount == 0 {
+// 		return
+// 	} else if av.RefCount == 1 {
+// 		av.RefCount = 0
+// 		pool.RecycleSlice(av.Payload)
+// 		AVPacketPool.Put(av)
+// 	} else {
+// 		av.RefCount--
+// 	}
+// }
 func NewAVPacket(avType byte) (p *AVPacket) {
-	p = AVPacketPool.Get().(*AVPacket)
+	// p = AVPacketPool.Get().(*AVPacket)
+	p = new(AVPacket)
 	p.Type = avType
-	p.IsAVCSequence = false
-	p.VideoFrameType = 0
-	p.Timestamp = 0
-	p.IsAACSequence = false
-	p.IsADTS = false
+	// p.IsAVCSequence = false
+	// p.VideoFrameType = 0
+	// p.Timestamp = 0
+	// p.IsAACSequence = false
+	// p.IsADTS = false
 	return
 }
 
@@ -75,10 +75,10 @@ type SendPacket struct {
 	Packet    *AVPacket
 }
 
-func (packet *SendPacket) Recycle() {
-	packet.Packet.Recycle()
-	SendPacketPool.Put(packet)
-}
+// func (packet *SendPacket) Recycle() {
+// 	packet.Packet.Recycle()
+// 	SendPacketPool.Put(packet)
+// }
 func NewSendPacket(p *AVPacket, timestamp uint32) (result *SendPacket) {
 	result = SendPacketPool.Get().(*SendPacket)
 	result.Packet = p

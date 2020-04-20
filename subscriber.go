@@ -29,16 +29,11 @@ type OutputStream struct {
 	context.Context
 	*Room
 	SubscriberInfo
-	SendHandler func(*avformat.SendPacket) error
+	SendHandler func(uint32, *avformat.AVPacket) error
 	Cancel      context.CancelFunc
 	Sign        string
-	VTSent      bool
-	ATSent      bool
-	VSentTime   uint32
-	ASentTime   uint32
-	//packetQueue      chan *avformat.SendPacket
-	dropCount  int
-	OffsetTime uint32
+	dropCount   int
+	OffsetTime  uint32
 }
 
 // IsClosed 检查订阅者是否已经关闭
@@ -62,23 +57,38 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 	}
 	AllRoom.Get(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
-	p := avformat.NewSendPacket(s.VideoTag, 0)
-	s.SendHandler(p)
-	p = avformat.NewSendPacket(s.AudioTag, 0)
-	s.SendHandler(p)
+
+	s.SendHandler(0, s.VideoTag)
 	packet := s.FirstScreen
-	s.VSentTime = packet.Timestamp
-	s.ASentTime = packet.Timestamp
+	startTime := packet.Timestamp
+	s.SendHandler(0, packet.AVPacket)
+	packet = packet.next
+	s.SendHandler(0, s.AudioTag)
 	for {
 		select {
 		case <-s.Done():
 			return s.Err()
 		default:
 			packet.RLock()
-			p = avformat.NewSendPacket(packet.AVPacket, packet.Timestamp-s.VSentTime)
-			s.SendHandler(p)
+			s.SendHandler(packet.Timestamp-startTime, packet.AVPacket)
 			packet.RUnlock()
-			packet = packet.next
+			packet = s.checkDrop(packet)
 		}
 	}
+}
+func (s *OutputStream) checkDrop(packet *CircleItem) *CircleItem {
+	pIndex := s.AVCircle.index
+	if pIndex < packet.index {
+		pIndex = pIndex + CIRCLE_SIZE
+	}
+	if pIndex-packet.index > CIRCLE_SIZE/2 {
+		droped := 0
+		for packet = packet.next; !packet.IsKeyFrame(); packet = packet.next {
+			droped++
+		}
+		fmt.Println("drop package ", droped)
+		s.dropCount += droped
+		return packet
+	}
+	return packet.next
 }

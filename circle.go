@@ -25,5 +25,6 @@ func CreateCircle() (p *CircleItem) {
 	}
 	first.pre = p
 	p.next = first
+	p.Lock()
 	return
 }

@@ -158,14 +158,6 @@ func (r *Room) Run() {
 					}
 				}
 			}
-			// case audio := <-r.AudioChan:
-			// 	for _, v := range r.Subscribers {
-			// 		v.sendAudio(audio)
-			// 	}
-			// case video := <-r.VideoChan:
-			// 	for _, v := range r.Subscribers {
-			// 		v.sendVideo(video)
-			// 	}
 		}
 	}
 }
@@ -173,30 +165,33 @@ func (r *Room) Run() {
 // PushAudio 来自发布者推送的音频
 func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 	audio := r.AVCircle
+	audio.Type = avformat.FLV_TAG_TYPE_AUDIO
 	audio.Timestamp = timestamp
 	audio.Payload = payload
+	audio.VideoFrameType = 0
 	audio.IsAACSequence = false
-	if len(audio.Payload) < 4 {
+	audio.IsAVCSequence = false
+	if len(payload) < 4 {
 		return
 	}
-	if audio.Payload[0] == 0xFF && (audio.Payload[1]&0xF0) == 0xF0 {
+	if payload[0] == 0xFF && (payload[1]&0xF0) == 0xF0 {
 		//audio.IsADTS = true
 		r.AudioInfo.SoundFormat = 10
-		r.AudioInfo.SoundRate = avformat.SamplingFrequencies[(audio.Payload[2]&0x3c)>>2]
-		r.AudioInfo.SoundType = ((audio.Payload[2] & 0x1) << 2) | ((audio.Payload[3] & 0xc0) >> 6)
+		r.AudioInfo.SoundRate = avformat.SamplingFrequencies[(payload[2]&0x3c)>>2]
+		r.AudioInfo.SoundType = ((payload[2] & 0x1) << 2) | ((payload[3] & 0xc0) >> 6)
 		r.AudioTag = audio.ADTS2ASC()
 	} else if r.AudioTag == nil {
 		audio.IsAACSequence = true
-		if len(audio.Payload) < 5 {
+		if len(payload) < 5 {
 			return
 		}
 		r.AudioTag = audio.AVPacket
-		tmp := audio.Payload[0]                                                // 第一个字节保存着音频的相关信息
+		tmp := payload[0]                                                      // 第一个字节保存着音频的相关信息
 		if r.AudioInfo.SoundFormat = tmp >> 4; r.AudioInfo.SoundFormat == 10 { //真的是AAC的话，后面有一个字节的详细信息
 			//0 = AAC sequence header，1 = AAC raw。
-			if aacPacketType := audio.Payload[1]; aacPacketType == 0 {
-				config1 := audio.Payload[2]
-				config2 := audio.Payload[3]
+			if aacPacketType := payload[1]; aacPacketType == 0 {
+				config1 := payload[2]
+				config2 := payload[3]
 				//audioObjectType = (config1 & 0xF8) >> 3
 				// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
 				// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
@@ -221,7 +216,7 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 		audio.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 	}
 	r.AudioInfo.PacketCount++
-	r.AVCircle = r.AVCircle.next
+	r.AVCircle = audio.next
 	r.AVCircle.Lock()
 	audio.Unlock()
 	//r.AudioChan <- audio
@@ -242,14 +237,16 @@ func (r *Room) setH264Info(video *CircleItem) {
 // PushVideo 来自发布者推送的视频
 func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 	video := r.AVCircle
+	video.Type = avformat.FLV_TAG_TYPE_VIDEO
 	video.Timestamp = timestamp
 	video.Payload = payload
-	if len(video.Payload) < 3 {
+	video.IsAACSequence = false
+	if len(payload) < 3 {
 		return
 	}
-	video.VideoFrameType = video.Payload[0] >> 4  // 帧类型 4Bit, H264一般为1或者2
-	r.VideoInfo.CodecID = video.Payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
-	video.IsAVCSequence = video.VideoFrameType == 1 && video.Payload[1] == 0
+	video.VideoFrameType = payload[0] >> 4  // 帧类型 4Bit, H264一般为1或者2
+	r.VideoInfo.CodecID = payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
+	video.IsAVCSequence = video.VideoFrameType == 1 && payload[1] == 0
 	if r.VideoTag == nil {
 		if video.IsAVCSequence {
 			r.setH264Info(video)
@@ -268,7 +265,7 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 			video.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 		}
 		r.VideoInfo.PacketCount++
-		r.AVCircle = r.AVCircle.next
+		r.AVCircle = video.next
 		r.AVCircle.Lock()
 		video.Unlock()
 	}
