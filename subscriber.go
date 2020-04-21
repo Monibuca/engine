@@ -10,9 +10,9 @@ import (
 )
 
 // Subscriber 订阅者
-type Subscriber interface {
-	Send(*avformat.SendPacket) error
-}
+// type Subscriber interface {
+// 	Send(*avformat.SendPacket) error
+// }
 
 // SubscriberInfo 订阅者可序列化信息，用于控制台输出
 type SubscriberInfo struct {
@@ -21,6 +21,7 @@ type SubscriberInfo struct {
 	TotalPacket   int
 	Type          string
 	BufferLength  int
+	Delay         uint32
 	SubscribeTime time.Time
 }
 
@@ -29,10 +30,9 @@ type OutputStream struct {
 	context.Context
 	*Room
 	SubscriberInfo
-	SendHandler func(uint32, *avformat.AVPacket) error
+	SendHandler func(*avformat.SendPacket) error
 	Cancel      context.CancelFunc
 	Sign        string
-	dropCount   int
 	OffsetTime  uint32
 }
 
@@ -57,38 +57,58 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 	}
 	AllRoom.Get(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
-
-	s.SendHandler(0, s.VideoTag)
+	s.WaitingMutex.RLock()
+	s.WaitingMutex.RUnlock()
+	sendPacket := avformat.NewSendPacket(s.VideoTag, 0)
+	defer sendPacket.Recycle()
+	s.SendHandler(sendPacket)
 	packet := s.FirstScreen
 	startTime := packet.Timestamp
-	s.SendHandler(0, packet.AVPacket)
+	packet.RLock()
+	sendPacket.AVPacket = packet.AVPacket
+	s.SendHandler(sendPacket)
+	packet.RUnlock()
 	packet = packet.next
-	s.SendHandler(0, s.AudioTag)
+	sendPacket.AVPacket = s.AudioTag
+	s.SendHandler(sendPacket)
+	dropping := false
+	droped := 0
 	for {
 		select {
 		case <-s.Done():
 			return s.Err()
 		default:
+			s.TotalPacket++
 			packet.RLock()
-			s.SendHandler(packet.Timestamp-startTime, packet.AVPacket)
-			packet.RUnlock()
-			packet = s.checkDrop(packet)
+			if !dropping {
+				sendPacket.AVPacket = packet.AVPacket
+				sendPacket.Timestamp = packet.Timestamp - startTime
+				s.SendHandler(sendPacket)
+				if s.checkDrop(packet) {
+					dropping = true
+					droped = 0
+				}
+				packet.RUnlock()
+				packet = packet.next
+			} else if packet.AVPacket.IsKeyFrame() {
+				dropping = false
+				//fmt.Println("drop package ", droped)
+				s.TotalDrop += droped
+				packet.RUnlock()
+			} else {
+				droped++
+				packet.RUnlock()
+				packet = packet.next
+			}
 		}
 	}
 }
-func (s *OutputStream) checkDrop(packet *CircleItem) *CircleItem {
+func (s *OutputStream) checkDrop(packet *CircleItem) bool {
 	pIndex := s.AVCircle.index
 	if pIndex < packet.index {
 		pIndex = pIndex + CIRCLE_SIZE
 	}
-	if pIndex-packet.index > CIRCLE_SIZE/2 {
-		droped := 0
-		for packet = packet.next; !packet.IsKeyFrame(); packet = packet.next {
-			droped++
-		}
-		fmt.Println("drop package ", droped)
-		s.dropCount += droped
-		return packet
-	}
-	return packet.next
+	s.BufferLength = pIndex - packet.index
+	s.Delay = s.AVCircle.Timestamp - packet.Timestamp
+	return s.BufferLength > CIRCLE_SIZE/2
 }

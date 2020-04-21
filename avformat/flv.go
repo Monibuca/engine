@@ -76,8 +76,8 @@ func WriteFLVTag(w io.Writer, tag *SendPacket) (err error) {
 	defer pool.RecycleSlice(head)
 	tail := pool.GetSlice(4)
 	defer pool.RecycleSlice(tail)
-	head[0] = tag.Packet.Type
-	dataSize := uint32(len(tag.Packet.Payload))
+	head[0] = tag.Type
+	dataSize := uint32(len(tag.Payload))
 	util.BigEndian.PutUint32(tail, dataSize+11)
 	util.BigEndian.PutUint24(head[1:], dataSize)
 	util.BigEndian.PutUint24(head[4:], tag.Timestamp)
@@ -86,7 +86,7 @@ func WriteFLVTag(w io.Writer, tag *SendPacket) (err error) {
 		return
 	}
 	// Tag Data
-	if _, err = w.Write(tag.Packet.Payload); err != nil {
+	if _, err = w.Write(tag.Payload); err != nil {
 		return
 	}
 	if _, err = w.Write(tail); err != nil { // PreviousTagSizeN(4)

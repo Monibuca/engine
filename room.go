@@ -23,14 +23,16 @@ type Collection struct {
 // Get 根据流名称获取房间
 func (c *Collection) Get(name string) (result *Room) {
 	item, loaded := AllRoom.LoadOrStore(name, &Room{
-		Subscribers: make(map[string]*OutputStream),
-		Control:     make(chan interface{}),
-		AVCircle:    CreateCircle(),
+		Subscribers:  make(map[string]*OutputStream),
+		Control:      make(chan interface{}),
+		AVCircle:     CreateCircle(),
+		WaitingMutex: new(sync.RWMutex),
 	})
 	result = item.(*Room)
 	if !loaded {
 		result.StreamPath = name
 		result.Context, result.Cancel = context.WithCancel(roomCtxBg)
+		result.WaitingMutex.Lock() //等待发布者
 		go result.Run()
 	}
 	return
@@ -46,9 +48,10 @@ type Room struct {
 	Subscribers  map[string]*OutputStream // 订阅者
 	VideoTag     *avformat.AVPacket       // 每个视频包都是这样的结构,区别在于Payload的大小.FMS在发送AVC sequence header,需要加上 VideoTags,这个tag 1个字节(8bits)的数据
 	AudioTag     *avformat.AVPacket       // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
-	FirstScreen  *CircleItem
-	AVCircle     *CircleItem
-	UseTimestamp bool //是否采用数据包中的时间戳
+	FirstScreen  *CircleItem              //最近的关键帧，首屏渲染
+	AVCircle     *CircleItem              //数据环
+	WaitingMutex *sync.RWMutex            //用于订阅和等待发布者
+	UseTimestamp bool                     //是否采用数据包中的时间戳
 }
 
 // RoomInfo 房间可序列化信息，用于控制台显示
@@ -259,6 +262,9 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 			r.setH264Info(video)
 		}
 		if video.IsKeyFrame() {
+			if r.FirstScreen == nil {
+				defer r.WaitingMutex.Unlock()
+			}
 			r.FirstScreen = video
 		}
 		if !r.UseTimestamp {

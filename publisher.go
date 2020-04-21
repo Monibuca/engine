@@ -46,5 +46,6 @@ func (p *InputStream) Publish(streamPath string, publisher Publisher) bool {
 	p.StartTime = time.Now()
 	//触发钩子
 	OnPublishHooks.Trigger(p.Room)
+
 	return true
 }

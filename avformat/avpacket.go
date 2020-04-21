@@ -71,17 +71,16 @@ func NewAVPacket(avType byte) (p *AVPacket) {
 }
 
 type SendPacket struct {
+	*AVPacket
 	Timestamp uint32
-	Packet    *AVPacket
 }
 
-// func (packet *SendPacket) Recycle() {
-// 	packet.Packet.Recycle()
-// 	SendPacketPool.Put(packet)
-// }
+func (packet *SendPacket) Recycle() {
+	SendPacketPool.Put(packet)
+}
 func NewSendPacket(p *AVPacket, timestamp uint32) (result *SendPacket) {
 	result = SendPacketPool.Get().(*SendPacket)
-	result.Packet = p
+	result.AVPacket = p
 	result.Timestamp = timestamp
 	return
 }
