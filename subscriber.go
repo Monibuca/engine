@@ -69,8 +69,7 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 	s.SendHandler(sendPacket)
 	packet.RUnlock()
 	packet = packet.next
-	sendPacket.AVPacket = s.AudioTag
-	s.SendHandler(sendPacket)
+	atsent := false
 	dropping := false
 	droped := 0
 	for {
@@ -81,6 +80,12 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 			s.TotalPacket++
 			packet.RLock()
 			if !dropping {
+				if packet.Type == avformat.FLV_TAG_TYPE_AUDIO && !atsent {
+					sendPacket.AVPacket = s.AudioTag
+					sendPacket.Timestamp = 0
+					s.SendHandler(sendPacket)
+					atsent = true
+				}
 				sendPacket.AVPacket = packet.AVPacket
 				sendPacket.Timestamp = packet.Timestamp - startTime
 				s.SendHandler(sendPacket)
