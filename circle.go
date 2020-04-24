@@ -12,7 +12,7 @@ type CircleItem struct {
 	*avformat.AVPacket
 	next  *CircleItem
 	pre   *CircleItem
-	index int
+	Index int
 	*sync.RWMutex
 }
 
@@ -20,7 +20,7 @@ func CreateCircle() (p *CircleItem) {
 	p = &CircleItem{AVPacket: new(avformat.AVPacket), RWMutex: new(sync.RWMutex)}
 	first := p
 	for i := 0; i < CIRCLE_SIZE; i++ {
-		p.next = &CircleItem{pre: p, index: i, AVPacket: new(avformat.AVPacket), RWMutex: new(sync.RWMutex)}
+		p.next = &CircleItem{pre: p, Index: i, AVPacket: new(avformat.AVPacket), RWMutex: new(sync.RWMutex)}
 		p = p.next
 	}
 	first.pre = p

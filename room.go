@@ -52,6 +52,8 @@ type Room struct {
 	AVCircle     *CircleItem              //数据环
 	WaitingMutex *sync.RWMutex            //用于订阅和等待发布者
 	UseTimestamp bool                     //是否采用数据包中的时间戳
+	audioBPS     int                      //暂存的1秒内的音频数据大小
+	videoBPS     int                      //暂存的1秒内的视频数据大小
 }
 
 // RoomInfo 房间可序列化信息，用于控制台显示
@@ -64,6 +66,7 @@ type RoomInfo struct {
 		PacketCount int
 		CodecID     byte
 		SPSInfo     avformat.SPSInfo
+		BPS         int
 	}
 	AudioInfo struct {
 		PacketCount int
@@ -71,6 +74,7 @@ type RoomInfo struct {
 		SoundRate   int  //2bit
 		SoundSize   byte //1bit
 		SoundType   byte //1bit
+		BPS         int
 	}
 }
 
@@ -136,6 +140,10 @@ func (r *Room) Run() {
 					r.SubscriberInfo[i] = &v.SubscriberInfo
 					i++
 				}
+				r.AudioInfo.BPS = r.audioBPS
+				r.audioBPS = 0
+				r.VideoInfo.BPS = r.videoBPS
+				r.videoBPS = 0
 			}
 		case s := <-r.Control:
 			switch v := s.(type) {
@@ -167,6 +175,8 @@ func (r *Room) Run() {
 
 // PushAudio 来自发布者推送的音频
 func (r *Room) PushAudio(timestamp uint32, payload []byte) {
+	payloadLen := len(payload)
+	r.audioBPS += payloadLen
 	audio := r.AVCircle
 	audio.Type = avformat.FLV_TAG_TYPE_AUDIO
 	audio.Timestamp = timestamp
@@ -174,7 +184,7 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 	audio.VideoFrameType = 0
 	audio.IsAACSequence = false
 	audio.IsAVCSequence = false
-	if len(payload) < 4 {
+	if payloadLen < 4 {
 		return
 	}
 	if payload[0] == 0xFF && (payload[1]&0xF0) == 0xF0 {
@@ -185,7 +195,7 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 		r.AudioTag = audio.ADTS2ASC()
 	} else if r.AudioTag == nil {
 		audio.IsAACSequence = true
-		if len(payload) < 5 {
+		if payloadLen < 5 {
 			return
 		}
 		r.AudioTag = audio.AVPacket
@@ -239,12 +249,14 @@ func (r *Room) setH264Info(video *CircleItem) {
 
 // PushVideo 来自发布者推送的视频
 func (r *Room) PushVideo(timestamp uint32, payload []byte) {
+	payloadLen := len(payload)
+	r.videoBPS += payloadLen
 	video := r.AVCircle
 	video.Type = avformat.FLV_TAG_TYPE_VIDEO
 	video.Timestamp = timestamp
 	video.Payload = payload
 	video.IsAACSequence = false
-	if len(payload) < 3 {
+	if payloadLen < 3 {
 		return
 	}
 	video.VideoFrameType = payload[0] >> 4  // 帧类型 4Bit, H264一般为1或者2

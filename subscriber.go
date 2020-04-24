@@ -57,6 +57,7 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 	}
 	AllRoom.Get(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
+	//加锁解锁的目的是等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
 	s.WaitingMutex.RLock()
 	s.WaitingMutex.RUnlock()
 	sendPacket := avformat.NewSendPacket(s.VideoTag, 0)
@@ -96,6 +97,7 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 				packet.RUnlock()
 				packet = packet.next
 			} else if packet.AVPacket.IsKeyFrame() {
+				//遇到关键帧则退出丢帧
 				dropping = false
 				//fmt.Println("drop package ", droped)
 				s.TotalDrop += droped
@@ -109,11 +111,11 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 	}
 }
 func (s *OutputStream) checkDrop(packet *CircleItem) bool {
-	pIndex := s.AVCircle.index
-	if pIndex < packet.index {
+	pIndex := s.AVCircle.Index
+	if pIndex < packet.Index {
 		pIndex = pIndex + CIRCLE_SIZE
 	}
-	s.BufferLength = pIndex - packet.index
+	s.BufferLength = pIndex - packet.Index
 	s.Delay = s.AVCircle.Timestamp - packet.Timestamp
 	return s.BufferLength > CIRCLE_SIZE/2
 }
