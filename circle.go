@@ -6,7 +6,7 @@ import (
 	"github.com/Monibuca/engine/avformat"
 )
 
-const CIRCLE_SIZE = 512
+const CIRCLE_SIZE = 256
 
 type CircleItem struct {
 	*avformat.AVPacket
