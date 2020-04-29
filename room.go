@@ -11,26 +11,29 @@ import (
 )
 
 var (
-	AllRoom   = Collection{}
+	AllRoom   = RoomCollection{}
 	roomCtxBg = context.Background()
 )
 
 // Collection 对sync.Map的包装
-type Collection struct {
+type RoomCollection struct {
 	sync.Map
 }
 
 // Get 根据流名称获取房间
-func (c *Collection) Get(name string) (result *Room) {
+func (c *RoomCollection) Get(name string) (result *Room) {
 	item, loaded := AllRoom.LoadOrStore(name, &Room{
 		Subscribers:  make(map[string]*OutputStream),
 		Control:      make(chan interface{}),
-		AVCircle:     CreateCircle(),
+		AVRing:       NewRing(),
 		WaitingMutex: new(sync.RWMutex),
+		RoomInfo: RoomInfo{
+			StreamPath:     name,
+			SubscriberInfo: make([]*SubscriberInfo, 0),
+		},
 	})
 	result = item.(*Room)
 	if !loaded {
-		result.StreamPath = name
 		result.Context, result.Cancel = context.WithCancel(roomCtxBg)
 		result.WaitingMutex.Lock() //等待发布者
 		go result.Run()
@@ -48,12 +51,10 @@ type Room struct {
 	Subscribers  map[string]*OutputStream // 订阅者
 	VideoTag     *avformat.AVPacket       // 每个视频包都是这样的结构,区别在于Payload的大小.FMS在发送AVC sequence header,需要加上 VideoTags,这个tag 1个字节(8bits)的数据
 	AudioTag     *avformat.AVPacket       // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
-	FirstScreen  *CircleItem              //最近的关键帧，首屏渲染
-	AVCircle     *CircleItem              //数据环
+	FirstScreen  *Ring                    //最近的关键帧位置，首屏渲染
+	AVRing       *Ring                    //数据环
 	WaitingMutex *sync.RWMutex            //用于订阅和等待发布者
 	UseTimestamp bool                     //是否采用数据包中的时间戳
-	audioBPS     int                      //暂存的1秒内的音频数据大小
-	videoBPS     int                      //暂存的1秒内的视频数据大小
 }
 
 // RoomInfo 房间可序列化信息，用于控制台显示
@@ -109,7 +110,6 @@ func (r *Room) Subscribe(s *OutputStream) {
 	if r.Err() == nil {
 		s.SubscribeTime = time.Now()
 		Print(Sprintf(Yellow("subscribe :%s %s,to room %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
-		//s.packetQueue = make(chan *avformat.SendPacket, 1024)
 		s.Context, s.Cancel = context.WithCancel(r)
 		s.Control <- &SubscribeCmd{s}
 	}
@@ -126,45 +126,43 @@ func (r *Room) UnSubscribe(s *OutputStream) {
 func (r *Room) Run() {
 	Print(Green("room create:"), BrightCyan(r.StreamPath))
 	defer r.onClosed()
-	update := time.NewTicker(time.Second)
-	defer update.Stop()
 	for {
 		select {
 		case <-r.Done():
 			return
-		case <-update.C:
-			if Summary.Running() {
-				r.SubscriberInfo = make([]*SubscriberInfo, len(r.Subscribers))
-				i := 0
-				for _, v := range r.Subscribers {
-					r.SubscriberInfo[i] = &v.SubscriberInfo
-					i++
-				}
-				r.AudioInfo.BPS = r.audioBPS
-				r.audioBPS = 0
-				r.VideoInfo.BPS = r.videoBPS
-				r.videoBPS = 0
-			}
 		case s := <-r.Control:
 			switch v := s.(type) {
 			case *UnSubscribeCmd:
-				delete(r.Subscribers, v.ID)
-				OnUnSubscribeHooks.Trigger(v.OutputStream)
-				Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.Subscribers))))
-				if len(r.Subscribers) == 0 && r.Publisher == nil {
-					r.Cancel()
+				if _, ok := r.Subscribers[v.ID]; ok {
+					delete(r.Subscribers, v.ID)
+					var hole int
+					for i, val := range r.SubscriberInfo {
+						if val == &v.SubscriberInfo {
+							hole = i
+							break
+						}
+					}
+					copy(r.SubscriberInfo[hole:], r.SubscriberInfo[hole+1:])
+					r.SubscriberInfo = r.SubscriberInfo[:len(r.SubscriberInfo)-1]
+					OnUnSubscribeHooks.Trigger(v.OutputStream)
+					Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.SubscriberInfo))))
+					if len(r.SubscriberInfo) == 0 && r.Publisher == nil {
+						r.Cancel()
+					}
 				}
 			case *SubscribeCmd:
+				//防止重复添加
 				if _, ok := r.Subscribers[v.ID]; !ok {
 					r.Subscribers[v.ID] = v.OutputStream
-					Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.Subscribers))))
+					r.SubscriberInfo = append(r.SubscriberInfo, &v.SubscriberInfo)
+					Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.SubscriberInfo))))
 					OnSubscribeHooks.Trigger(v.OutputStream)
 				}
 			case *ChangeRoomCmd:
 				if _, ok := v.NewRoom.Subscribers[v.ID]; !ok {
 					delete(r.Subscribers, v.ID)
 					v.NewRoom.Subscribe(v.OutputStream)
-					if len(r.Subscribers) == 0 && r.Publisher == nil {
+					if len(r.SubscriberInfo) == 0 && r.Publisher == nil {
 						r.Cancel()
 					}
 				}
@@ -176,14 +174,16 @@ func (r *Room) Run() {
 // PushAudio 来自发布者推送的音频
 func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 	payloadLen := len(payload)
-	r.audioBPS += payloadLen
-	audio := r.AVCircle
+	audio := r.AVRing
 	audio.Type = avformat.FLV_TAG_TYPE_AUDIO
 	audio.Timestamp = timestamp
 	audio.Payload = payload
 	audio.VideoFrameType = 0
 	audio.IsAACSequence = false
 	audio.IsAVCSequence = false
+	if audio.GetLast().Timestamp > 0 {
+		r.AudioInfo.BPS = payloadLen * 1000 / int(timestamp-audio.GetLast().Timestamp)
+	}
 	if payloadLen < 4 {
 		return
 	}
@@ -198,7 +198,7 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 		if payloadLen < 5 {
 			return
 		}
-		r.AudioTag = audio.AVPacket
+		r.AudioTag = audio.AVPacket.Clone()
 		tmp := payload[0]                                                      // 第一个字节保存着音频的相关信息
 		if r.AudioInfo.SoundFormat = tmp >> 4; r.AudioInfo.SoundFormat == 10 { //真的是AAC的话，后面有一个字节的详细信息
 			//0 = AAC sequence header，1 = AAC raw。
@@ -221,21 +221,18 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 			r.AudioInfo.SoundSize = (tmp & 0x02) >> 1                 // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
 			r.AudioInfo.SoundType = tmp & 0x01                        // 0 单声道，1立体声
 		}
-		audio.AVPacket = avformat.NewAVPacket(audio.Type)
 		return
 	}
-	//audio.RefCount = len(r.Subscribers)
 	if !r.UseTimestamp {
 		audio.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 	}
 	r.AudioInfo.PacketCount++
-	r.AVCircle = audio.next
-	r.AVCircle.Lock()
-	audio.Unlock()
-	//r.AudioChan <- audio
+	audio.GoNext()
+	audio.Lock()
+	audio.GetLast().Unlock()
 }
-func (r *Room) setH264Info(video *CircleItem) {
-	r.VideoTag = video.AVPacket
+func (r *Room) setH264Info(video *Ring) {
+	r.VideoTag = video.AVPacket.Clone()
 	if r.VideoInfo.CodecID != 7 {
 		return
 	}
@@ -244,18 +241,19 @@ func (r *Room) setH264Info(video *CircleItem) {
 	if _, err := info.Unmarshal(video.Payload[5:]); err == nil {
 		r.VideoInfo.SPSInfo, err = avformat.ParseSPS(info.SequenceParameterSetNALUnit)
 	}
-	video.AVPacket = avformat.NewAVPacket(video.Type)
 }
 
 // PushVideo 来自发布者推送的视频
 func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 	payloadLen := len(payload)
-	r.videoBPS += payloadLen
-	video := r.AVCircle
+	video := r.AVRing
 	video.Type = avformat.FLV_TAG_TYPE_VIDEO
 	video.Timestamp = timestamp
 	video.Payload = payload
 	video.IsAACSequence = false
+	if video.GetLast().Timestamp > 0 {
+		r.VideoInfo.BPS = payloadLen * 1000 / int(timestamp-video.GetLast().Timestamp)
+	}
 	if payloadLen < 3 {
 		return
 	}
@@ -276,15 +274,18 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 		if video.IsKeyFrame() {
 			if r.FirstScreen == nil {
 				defer r.WaitingMutex.Unlock()
+				r.FirstScreen = video.Clone()
+			} else {
+				r.FirstScreen.Index = video.Index
+				r.FirstScreen.RingItem = video.RingItem
 			}
-			r.FirstScreen = video
 		}
 		if !r.UseTimestamp {
 			video.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 		}
 		r.VideoInfo.PacketCount++
-		r.AVCircle = video.next
-		r.AVCircle.Lock()
-		video.Unlock()
+		video.GoNext()
+		video.Lock()
+		video.GetLast().Unlock()
 	}
 }

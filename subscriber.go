@@ -20,7 +20,7 @@ type SubscriberInfo struct {
 	TotalDrop     int //总丢帧
 	TotalPacket   int
 	Type          string
-	BufferLength  int
+	BufferLength  byte
 	Delay         uint32
 	SubscribeTime time.Time
 }
@@ -63,13 +63,13 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 	sendPacket := avformat.NewSendPacket(s.VideoTag, 0)
 	defer sendPacket.Recycle()
 	s.SendHandler(sendPacket)
-	packet := s.FirstScreen
+	packet := s.FirstScreen.Clone()
 	startTime := packet.Timestamp
 	packet.RLock()
 	sendPacket.AVPacket = packet.AVPacket
 	s.SendHandler(sendPacket)
 	packet.RUnlock()
-	packet = packet.next
+	packet.GoNext()
 	atsent := false
 	dropping := false
 	droped := 0
@@ -95,7 +95,7 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 					droped = 0
 				}
 				packet.RUnlock()
-				packet = packet.next
+				packet.GoNext()
 			} else if packet.AVPacket.IsKeyFrame() {
 				//遇到关键帧则退出丢帧
 				dropping = false
@@ -105,17 +105,14 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 			} else {
 				droped++
 				packet.RUnlock()
-				packet = packet.next
+				packet.GoNext()
 			}
 		}
 	}
 }
-func (s *OutputStream) checkDrop(packet *CircleItem) bool {
-	pIndex := s.AVCircle.Index
-	if pIndex < packet.Index {
-		pIndex = pIndex + CIRCLE_SIZE
-	}
+func (s *OutputStream) checkDrop(packet *Ring) bool {
+	pIndex := s.AVRing.Index
 	s.BufferLength = pIndex - packet.Index
-	s.Delay = s.AVCircle.Timestamp - packet.Timestamp
-	return s.BufferLength > CIRCLE_SIZE/2
+	s.Delay = s.AVRing.Timestamp - packet.Timestamp
+	return s.BufferLength > RING_SIZE/2
 }

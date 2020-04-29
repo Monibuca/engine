@@ -69,6 +69,9 @@ func NewAVPacket(avType byte) (p *AVPacket) {
 	// p.IsADTS = false
 	return
 }
+func (av AVPacket) Clone() *AVPacket {
+	return &av
+}
 
 type SendPacket struct {
 	*AVPacket
