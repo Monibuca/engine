@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/Monibuca/engine/avformat"
@@ -69,6 +70,7 @@ func (s *OutputStream) Play(streamPath string) (err error) {
 			return s.Err()
 		case p := <-s.packetQueue:
 			if err = s.SendHandler(p); err != nil {
+				log.Println(err)
 				s.Cancel() //此处为了使得IsClosed 返回true
 				return
 			}
