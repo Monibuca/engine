@@ -5,11 +5,6 @@ import (
 )
 
 var (
-	AVPacketPool = &sync.Pool{
-		New: func() interface{} {
-			return new(AVPacket)
-		},
-	}
 	SendPacketPool = &sync.Pool{
 		New: func() interface{} {
 			return new(SendPacket)
@@ -19,15 +14,12 @@ var (
 
 // Video or Audio
 type AVPacket struct {
-	Timestamp     uint32
-	Type          byte //8 audio,9 video
-	IsAACSequence bool
-	// IsADTS        bool
-	// Video
+	Timestamp      uint32
+	Type           byte //8 audio,9 video
+	IsSequence     bool //序列帧
 	VideoFrameType byte //4bit
-	IsAVCSequence  bool
 	Payload        []byte
-	// RefCount       int //Payload的引用次数
+	Number         int //编号，audio和video独立编号
 }
 
 func (av *AVPacket) IsKeyFrame() bool {
@@ -36,7 +28,7 @@ func (av *AVPacket) IsKeyFrame() bool {
 func (av *AVPacket) ADTS2ASC() (tagPacket *AVPacket) {
 	tagPacket = NewAVPacket(FLV_TAG_TYPE_AUDIO)
 	tagPacket.Payload = ADTSToAudioSpecificConfig(av.Payload)
-	tagPacket.IsAACSequence = true
+	tagPacket.IsSequence = true
 	ADTSLength := 7 + ((1 - int(av.Payload[1]&1)) << 1)
 	if len(av.Payload) > ADTSLength {
 		av.Payload[0] = 0xAF
@@ -47,26 +39,9 @@ func (av *AVPacket) ADTS2ASC() (tagPacket *AVPacket) {
 	return
 }
 
-// func (av *AVPacket) Recycle() {
-// 	if av.RefCount == 0 {
-// 		return
-// 	} else if av.RefCount == 1 {
-// 		av.RefCount = 0
-// 		pool.RecycleSlice(av.Payload)
-// 		AVPacketPool.Put(av)
-// 	} else {
-// 		av.RefCount--
-// 	}
-// }
 func NewAVPacket(avType byte) (p *AVPacket) {
-	// p = AVPacketPool.Get().(*AVPacket)
 	p = new(AVPacket)
 	p.Type = avType
-	// p.IsAVCSequence = false
-	// p.VideoFrameType = 0
-	// p.Timestamp = 0
-	// p.IsAACSequence = false
-	// p.IsADTS = false
 	return
 }
 func (av AVPacket) Clone() *AVPacket {

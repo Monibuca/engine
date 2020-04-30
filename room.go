@@ -45,7 +45,7 @@ func (c *RoomCollection) Get(name string) (result *Room) {
 type Room struct {
 	context.Context
 	Publisher
-	RoomInfo
+	RoomInfo     //可序列化，供后台查看的数据
 	Control      chan interface{}
 	Cancel       context.CancelFunc
 	Subscribers  map[string]*OutputStream // 订阅者
@@ -68,6 +68,7 @@ type RoomInfo struct {
 		CodecID     byte
 		SPSInfo     avformat.SPSInfo
 		BPS         int
+		GOP         int //关键帧间隔
 	}
 	AudioInfo struct {
 		PacketCount int
@@ -179,8 +180,7 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 	audio.Timestamp = timestamp
 	audio.Payload = payload
 	audio.VideoFrameType = 0
-	audio.IsAACSequence = false
-	audio.IsAVCSequence = false
+	audio.IsSequence = false
 	if audio.GetLast().Timestamp > 0 {
 		r.AudioInfo.BPS = payloadLen * 1000 / int(timestamp-audio.GetLast().Timestamp)
 	}
@@ -188,13 +188,13 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 		return
 	}
 	if payload[0] == 0xFF && (payload[1]&0xF0) == 0xF0 {
-		//audio.IsADTS = true
+		//将ADTS转换成ASC
 		r.AudioInfo.SoundFormat = 10
 		r.AudioInfo.SoundRate = avformat.SamplingFrequencies[(payload[2]&0x3c)>>2]
 		r.AudioInfo.SoundType = ((payload[2] & 0x1) << 2) | ((payload[3] & 0xc0) >> 6)
 		r.AudioTag = audio.ADTS2ASC()
 	} else if r.AudioTag == nil {
-		audio.IsAACSequence = true
+		audio.IsSequence = true
 		if payloadLen < 5 {
 			return
 		}
@@ -227,6 +227,7 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 		audio.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 	}
 	r.AudioInfo.PacketCount++
+	audio.Number = r.AudioInfo.PacketCount
 	audio.GoNext()
 	audio.Lock()
 	audio.GetLast().Unlock()
@@ -250,7 +251,6 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 	video.Type = avformat.FLV_TAG_TYPE_VIDEO
 	video.Timestamp = timestamp
 	video.Payload = payload
-	video.IsAACSequence = false
 	if video.GetLast().Timestamp > 0 {
 		r.VideoInfo.BPS = payloadLen * 1000 / int(timestamp-video.GetLast().Timestamp)
 	}
@@ -259,16 +259,16 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 	}
 	video.VideoFrameType = payload[0] >> 4  // 帧类型 4Bit, H264一般为1或者2
 	r.VideoInfo.CodecID = payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
-	video.IsAVCSequence = video.VideoFrameType == 1 && payload[1] == 0
+	video.IsSequence = video.VideoFrameType == 1 && payload[1] == 0
 	if r.VideoTag == nil {
-		if video.IsAVCSequence {
+		if video.IsSequence {
 			r.setH264Info(video)
 		} else {
 			log.Println("no AVCSequence")
 		}
 	} else {
 		//更换AVCSequence
-		if video.IsAVCSequence {
+		if video.IsSequence {
 			r.setH264Info(video)
 		}
 		if video.IsKeyFrame() {
@@ -276,14 +276,17 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 				defer r.WaitingMutex.Unlock()
 				r.FirstScreen = video.Clone()
 			} else {
+				oldNumber := r.FirstScreen.Number
 				r.FirstScreen.Index = video.Index
 				r.FirstScreen.RingItem = video.RingItem
+				r.VideoInfo.GOP = r.FirstScreen.Number - oldNumber
 			}
 		}
 		if !r.UseTimestamp {
 			video.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 		}
 		r.VideoInfo.PacketCount++
+		video.Number = r.VideoInfo.PacketCount
 		video.GoNext()
 		video.Lock()
 		video.GetLast().Unlock()
