@@ -1,7 +1,7 @@
 package avformat
 
 import (
-	"github.com/Monibuca/engine/util"
+	"github.com/Monibuca/engine/v2/util"
 )
 
 type MP4 interface {

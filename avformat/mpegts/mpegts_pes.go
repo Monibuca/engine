@@ -7,8 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/Monibuca/engine/avformat"
-	"github.com/Monibuca/engine/util"
+	"github.com/Monibuca/engine/v2/avformat"
+	"github.com/Monibuca/engine/v2/util"
 )
 
 // ios13818-1-CN.pdf 45/166

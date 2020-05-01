@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/Monibuca/engine/util"
+	"github.com/Monibuca/engine/v2/util"
 )
 
 // ios13818-1-CN.pdf 43(57)/166

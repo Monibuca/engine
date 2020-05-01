@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Monibuca/engine/util"
+	"github.com/Monibuca/engine/v2/util"
 	. "github.com/logrusorgru/aurora"
 )
 

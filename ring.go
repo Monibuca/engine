@@ -3,7 +3,7 @@ package engine
 import (
 	"sync"
 
-	"github.com/Monibuca/engine/avformat"
+	"github.com/Monibuca/engine/v2/avformat"
 )
 
 const RING_SIZE = 256
@@ -48,7 +48,7 @@ func (r *Ring) NextW() {
 	item := r.RingItem
 	r.RingItem = r.buffer[r.Index]
 	r.RingItem.Lock()
-	item.UnLock()
+	item.Unlock()
 }
 func (r *Ring) NextR() {
 	r.RingItem.RUnlock()

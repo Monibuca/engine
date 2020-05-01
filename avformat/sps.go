@@ -3,7 +3,7 @@ package avformat
 import (
 	"bytes"
 
-	"github.com/Monibuca/engine/util/bits"
+	"github.com/Monibuca/engine/v2/util/bits"
 )
 
 type SPSInfo struct {

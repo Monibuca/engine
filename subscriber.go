@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Monibuca/engine/avformat"
+	"github.com/Monibuca/engine/v2/avformat"
 	"github.com/pkg/errors"
 )
 
@@ -102,7 +102,7 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		}
 	}
 }
-func (s *OutputStream) checkDrop(packet *Ring) bool {
+func (s *Subscriber) checkDrop(packet *Ring) bool {
 	pIndex := s.AVRing.Index
 	s.BufferLength = pIndex - packet.Index
 	s.Delay = s.AVRing.Timestamp - packet.Timestamp

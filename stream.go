@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Monibuca/engine/avformat"
+	"github.com/Monibuca/engine/v2/avformat"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -21,7 +21,7 @@ type Collection struct {
 
 //GetStream 根据流路径获取流，如果不存在则创建一个新的
 func GetStream(streamPath string) (result *Stream) {
-	item, loaded := streamCollection.LoadOrStore(name, &Stream{
+	item, loaded := streamCollection.LoadOrStore(streamPath, &Stream{
 		Subscribers:  make(map[string]*Subscriber),
 		Control:      make(chan interface{}),
 		AVRing:       NewRing(),
@@ -44,7 +44,7 @@ func GetStream(streamPath string) (result *Stream) {
 // Stream 流定义
 type Stream struct {
 	context.Context
-	Publisher
+	*Publisher
 	StreamInfo   //可序列化，供后台查看的数据
 	Control      chan interface{}
 	Cancel       context.CancelFunc
