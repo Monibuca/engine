@@ -43,6 +43,17 @@ func (r *Ring) GoBack() {
 	r.Index--
 	r.RingItem = r.buffer[r.Index]
 }
+func (r *Ring) NextW() {
+	r.Index++
+	item := r.RingItem
+	r.RingItem = r.buffer[r.Index]
+	r.RingItem.Lock()
+	item.UnLock()
+}
+func (r *Ring) NextR() {
+	r.RingItem.RUnlock()
+	r.GoNext()
+}
 func (r Ring) Clone() *Ring {
 	return &r
 }

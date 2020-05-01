@@ -11,54 +11,54 @@ import (
 )
 
 var (
-	AllRoom   = RoomCollection{}
-	roomCtxBg = context.Background()
+	streamCollection = Collection{}
 )
 
 // Collection 对sync.Map的包装
-type RoomCollection struct {
+type Collection struct {
 	sync.Map
 }
 
-// Get 根据流名称获取房间
-func (c *RoomCollection) Get(name string) (result *Room) {
-	item, loaded := AllRoom.LoadOrStore(name, &Room{
-		Subscribers:  make(map[string]*OutputStream),
+//GetStream 根据流路径获取流，如果不存在则创建一个新的
+func GetStream(streamPath string) (result *Stream) {
+	item, loaded := streamCollection.LoadOrStore(name, &Stream{
+		Subscribers:  make(map[string]*Subscriber),
 		Control:      make(chan interface{}),
 		AVRing:       NewRing(),
 		WaitingMutex: new(sync.RWMutex),
-		RoomInfo: RoomInfo{
-			StreamPath:     name,
+		StreamInfo: StreamInfo{
+			StreamPath:     streamPath,
 			SubscriberInfo: make([]*SubscriberInfo, 0),
 		},
 	})
-	result = item.(*Room)
+	result = item.(*Stream)
 	if !loaded {
-		result.Context, result.Cancel = context.WithCancel(roomCtxBg)
+		Summary.Streams = append(Summary.Streams, &result.StreamInfo)
+		result.Context, result.Cancel = context.WithCancel(context.Background())
 		result.WaitingMutex.Lock() //等待发布者
 		go result.Run()
 	}
 	return
 }
 
-// Room 房间定义
-type Room struct {
+// Stream 流定义
+type Stream struct {
 	context.Context
 	Publisher
-	RoomInfo     //可序列化，供后台查看的数据
+	StreamInfo   //可序列化，供后台查看的数据
 	Control      chan interface{}
 	Cancel       context.CancelFunc
-	Subscribers  map[string]*OutputStream // 订阅者
-	VideoTag     *avformat.AVPacket       // 每个视频包都是这样的结构,区别在于Payload的大小.FMS在发送AVC sequence header,需要加上 VideoTags,这个tag 1个字节(8bits)的数据
-	AudioTag     *avformat.AVPacket       // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
-	FirstScreen  *Ring                    //最近的关键帧位置，首屏渲染
-	AVRing       *Ring                    //数据环
-	WaitingMutex *sync.RWMutex            //用于订阅和等待发布者
-	UseTimestamp bool                     //是否采用数据包中的时间戳
+	Subscribers  map[string]*Subscriber // 订阅者
+	VideoTag     *avformat.AVPacket     // 每个视频包都是这样的结构,区别在于Payload的大小.FMS在发送AVC sequence header,需要加上 VideoTags,这个tag 1个字节(8bits)的数据
+	AudioTag     *avformat.AVPacket     // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
+	FirstScreen  *Ring                  //最近的关键帧位置，首屏渲染
+	AVRing       *Ring                  //数据环
+	WaitingMutex *sync.RWMutex          //用于订阅和等待发布者
+	UseTimestamp bool                   //是否采用数据包中的时间戳
 }
 
-// RoomInfo 房间可序列化信息，用于控制台显示
-type RoomInfo struct {
+// StreamInfo 流可序列化信息，用于控制台显示
+type StreamInfo struct {
 	StreamPath     string
 	StartTime      time.Time
 	SubscriberInfo []*SubscriberInfo
@@ -82,50 +82,47 @@ type RoomInfo struct {
 
 // UnSubscribeCmd 取消订阅命令
 type UnSubscribeCmd struct {
-	*OutputStream
+	*Subscriber
 }
 
-// SubscribeCmd 订阅房间命令
+// SubscribeCmd 订阅流命令
 type SubscribeCmd struct {
-	*OutputStream
+	*Subscriber
 }
 
-// ChangeRoomCmd 切换房间命令
-type ChangeRoomCmd struct {
-	*OutputStream
-	NewRoom *Room
+// ChangeStreamCmd 切换流命令
+type ChangeStreamCmd struct {
+	*Subscriber
+	NewStream *Stream
 }
 
-func (r *Room) onClosed() {
-	Print(Yellow("room destoryed :"), BrightCyan(r.StreamPath))
-	AllRoom.Delete(r.StreamPath)
-	OnRoomClosedHooks.Trigger(r)
-	if r.Publisher != nil {
-		r.OnClosed()
-	}
+func (r *Stream) onClosed() {
+	Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
+	streamCollection.Delete(r.StreamPath)
+	OnStreamClosedHooks.Trigger(r)
 }
 
-//Subscribe 订阅房间
-func (r *Room) Subscribe(s *OutputStream) {
-	s.Room = r
+//Subscribe 订阅流
+func (r *Stream) Subscribe(s *Subscriber) {
+	s.Stream = r
 	if r.Err() == nil {
 		s.SubscribeTime = time.Now()
-		Print(Sprintf(Yellow("subscribe :%s %s,to room %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
+		Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
 		s.Context, s.Cancel = context.WithCancel(r)
 		s.Control <- &SubscribeCmd{s}
 	}
 }
 
-//UnSubscribe 取消订阅房间
-func (r *Room) UnSubscribe(s *OutputStream) {
+//UnSubscribe 取消订阅流
+func (r *Stream) UnSubscribe(s *Subscriber) {
 	if r.Err() == nil {
 		r.Control <- &UnSubscribeCmd{s}
 	}
 }
 
-// Run 房间运行，转发逻辑
-func (r *Room) Run() {
-	Print(Green("room create:"), BrightCyan(r.StreamPath))
+// Run 流运行
+func (r *Stream) Run() {
+	Print(Green("Stream create:"), BrightCyan(r.StreamPath))
 	defer r.onClosed()
 	for {
 		select {
@@ -145,7 +142,7 @@ func (r *Room) Run() {
 					}
 					copy(r.SubscriberInfo[hole:], r.SubscriberInfo[hole+1:])
 					r.SubscriberInfo = r.SubscriberInfo[:len(r.SubscriberInfo)-1]
-					OnUnSubscribeHooks.Trigger(v.OutputStream)
+					OnUnSubscribeHooks.Trigger(v.Subscriber)
 					Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.SubscriberInfo))))
 					if len(r.SubscriberInfo) == 0 && r.Publisher == nil {
 						r.Cancel()
@@ -154,15 +151,15 @@ func (r *Room) Run() {
 			case *SubscribeCmd:
 				//防止重复添加
 				if _, ok := r.Subscribers[v.ID]; !ok {
-					r.Subscribers[v.ID] = v.OutputStream
+					r.Subscribers[v.ID] = v.Subscriber
 					r.SubscriberInfo = append(r.SubscriberInfo, &v.SubscriberInfo)
 					Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.SubscriberInfo))))
-					OnSubscribeHooks.Trigger(v.OutputStream)
+					OnSubscribeHooks.Trigger(v.Subscriber)
 				}
-			case *ChangeRoomCmd:
-				if _, ok := v.NewRoom.Subscribers[v.ID]; !ok {
+			case *ChangeStreamCmd:
+				if _, ok := v.NewStream.Subscribers[v.ID]; !ok {
 					delete(r.Subscribers, v.ID)
-					v.NewRoom.Subscribe(v.OutputStream)
+					v.NewStream.Subscribe(v.Subscriber)
 					if len(r.SubscriberInfo) == 0 && r.Publisher == nil {
 						r.Cancel()
 					}
@@ -173,13 +170,13 @@ func (r *Room) Run() {
 }
 
 // PushAudio 来自发布者推送的音频
-func (r *Room) PushAudio(timestamp uint32, payload []byte) {
+func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	payloadLen := len(payload)
 	audio := r.AVRing
 	audio.Type = avformat.FLV_TAG_TYPE_AUDIO
 	audio.Timestamp = timestamp
 	audio.Payload = payload
-	audio.VideoFrameType = 0
+	audio.IsKeyFrame = false
 	audio.IsSequence = false
 	if audio.GetLast().Timestamp > 0 {
 		r.AudioInfo.BPS = payloadLen * 1000 / int(timestamp-audio.GetLast().Timestamp)
@@ -228,11 +225,9 @@ func (r *Room) PushAudio(timestamp uint32, payload []byte) {
 	}
 	r.AudioInfo.PacketCount++
 	audio.Number = r.AudioInfo.PacketCount
-	audio.GoNext()
-	audio.Lock()
-	audio.GetLast().Unlock()
+	audio.NextW()
 }
-func (r *Room) setH264Info(video *Ring) {
+func (r *Stream) setH264Info(video *Ring) {
 	r.VideoTag = video.AVPacket.Clone()
 	if r.VideoInfo.CodecID != 7 {
 		return
@@ -245,7 +240,7 @@ func (r *Room) setH264Info(video *Ring) {
 }
 
 // PushVideo 来自发布者推送的视频
-func (r *Room) PushVideo(timestamp uint32, payload []byte) {
+func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
 	payloadLen := len(payload)
 	video := r.AVRing
 	video.Type = avformat.FLV_TAG_TYPE_VIDEO
@@ -257,9 +252,10 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 	if payloadLen < 3 {
 		return
 	}
-	video.VideoFrameType = payload[0] >> 4  // 帧类型 4Bit, H264一般为1或者2
+	videoFrameType := payload[0] >> 4       // 帧类型 4Bit, H264一般为1或者2
 	r.VideoInfo.CodecID = payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
-	video.IsSequence = video.VideoFrameType == 1 && payload[1] == 0
+	video.IsSequence = videoFrameType == 1 && payload[1] == 0
+	video.IsKeyFrame = videoFrameType == 1 || videoFrameType == 4
 	if r.VideoTag == nil {
 		if video.IsSequence {
 			r.setH264Info(video)
@@ -271,7 +267,7 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 		if video.IsSequence {
 			r.setH264Info(video)
 		}
-		if video.IsKeyFrame() {
+		if video.IsKeyFrame {
 			if r.FirstScreen == nil {
 				defer r.WaitingMutex.Unlock()
 				r.FirstScreen = video.Clone()
@@ -287,8 +283,6 @@ func (r *Room) PushVideo(timestamp uint32, payload []byte) {
 		}
 		r.VideoInfo.PacketCount++
 		video.Number = r.VideoInfo.PacketCount
-		video.GoNext()
-		video.Lock()
-		video.GetLast().Unlock()
+		video.NextW()
 	}
 }

@@ -18,12 +18,12 @@ func (h AuthHook) Trigger(sign string) error {
 
 var OnPublishHooks = make(OnPublishHook, 0)
 
-type OnPublishHook []func(r *Room)
+type OnPublishHook []func(r *Stream)
 
-func (h OnPublishHook) AddHook(hook func(r *Room)) {
+func (h OnPublishHook) AddHook(hook func(r *Stream)) {
 	OnPublishHooks = append(h, hook)
 }
-func (h OnPublishHook) Trigger(r *Room) {
+func (h OnPublishHook) Trigger(r *Stream) {
 	for _, f := range h {
 		f(r)
 	}
@@ -31,12 +31,12 @@ func (h OnPublishHook) Trigger(r *Room) {
 
 var OnSubscribeHooks = make(OnSubscribeHook, 0)
 
-type OnSubscribeHook []func(s *OutputStream)
+type OnSubscribeHook []func(s *Subscriber)
 
-func (h OnSubscribeHook) AddHook(hook func(s *OutputStream)) {
+func (h OnSubscribeHook) AddHook(hook func(s *Subscriber)) {
 	OnSubscribeHooks = append(h, hook)
 }
-func (h OnSubscribeHook) Trigger(s *OutputStream) {
+func (h OnSubscribeHook) Trigger(s *Subscriber) {
 	for _, f := range h {
 		f(s)
 	}
@@ -44,12 +44,12 @@ func (h OnSubscribeHook) Trigger(s *OutputStream) {
 
 var OnUnSubscribeHooks = make(OnUnSubscribeHook, 0)
 
-type OnUnSubscribeHook []func(s *OutputStream)
+type OnUnSubscribeHook []func(s *Subscriber)
 
-func (h OnUnSubscribeHook) AddHook(hook func(s *OutputStream)) {
+func (h OnUnSubscribeHook) AddHook(hook func(s *Subscriber)) {
 	OnUnSubscribeHooks = append(h, hook)
 }
-func (h OnUnSubscribeHook) Trigger(s *OutputStream) {
+func (h OnUnSubscribeHook) Trigger(s *Subscriber) {
 	for _, f := range h {
 		f(s)
 	}
@@ -57,12 +57,12 @@ func (h OnUnSubscribeHook) Trigger(s *OutputStream) {
 
 var OnDropHooks = make(OnDropHook, 0)
 
-type OnDropHook []func(s *OutputStream)
+type OnDropHook []func(s *Subscriber)
 
-func (h OnDropHook) AddHook(hook func(s *OutputStream)) {
+func (h OnDropHook) AddHook(hook func(s *Subscriber)) {
 	OnDropHooks = append(h, hook)
 }
-func (h OnDropHook) Trigger(s *OutputStream) {
+func (h OnDropHook) Trigger(s *Subscriber) {
 	for _, f := range h {
 		f(s)
 	}
@@ -81,14 +81,14 @@ func (h OnSummaryHook) Trigger(v bool) {
 	}
 }
 
-var OnRoomClosedHooks = make(OnRoomClosedHook, 0)
+var OnStreamClosedHooks = make(OnStreamClosedHook, 0)
 
-type OnRoomClosedHook []func(*Room)
+type OnStreamClosedHook []func(*Stream)
 
-func (h OnRoomClosedHook) AddHook(hook func(*Room)) {
-	OnRoomClosedHooks = append(h, hook)
+func (h OnStreamClosedHook) AddHook(hook func(*Stream)) {
+	OnStreamClosedHooks = append(h, hook)
 }
-func (h OnRoomClosedHook) Trigger(v *Room) {
+func (h OnStreamClosedHook) Trigger(v *Stream) {
 	for _, f := range h {
 		f(v)
 	}

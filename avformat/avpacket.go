@@ -17,14 +17,11 @@ type AVPacket struct {
 	Timestamp      uint32
 	Type           byte //8 audio,9 video
 	IsSequence     bool //序列帧
-	VideoFrameType byte //4bit
+	IsKeyFrame bool//是否为关键帧
 	Payload        []byte
 	Number         int //编号，audio和video独立编号
 }
 
-func (av *AVPacket) IsKeyFrame() bool {
-	return av.VideoFrameType == 1 || av.VideoFrameType == 4
-}
 func (av *AVPacket) ADTS2ASC() (tagPacket *AVPacket) {
 	tagPacket = NewAVPacket(FLV_TAG_TYPE_AUDIO)
 	tagPacket.Payload = ADTSToAudioSpecificConfig(av.Payload)

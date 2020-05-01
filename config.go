@@ -14,6 +14,7 @@ const (
 	PLUGIN_SUBSCRIBER = 1      //订阅者插件
 	PLUGIN_PUBLISHER  = 1 << 1 //发布者插件
 	PLUGIN_HOOK       = 1 << 2 //钩子插件
+	PLUGIN_APP        = 1 << 3 //应用插件
 )
 
 // Plugins 所有的插件配置
@@ -53,5 +54,5 @@ type ListenerConfig struct {
 }
 
 var config = &struct {
-	EnableWaitRoom bool
+	EnableWaitStream bool
 }{true}
