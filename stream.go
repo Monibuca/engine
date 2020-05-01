@@ -19,6 +19,14 @@ type Collection struct {
 	sync.Map
 }
 
+//FindStream 根据流路径查找流
+func FindStream(streamPath string) *Stream {
+	if s, ok := streamCollection.Load(streamPath); ok {
+		return s.(*Stream)
+	}
+	return nil
+}
+
 //GetStream 根据流路径获取流，如果不存在则创建一个新的
 func GetStream(streamPath string) (result *Stream) {
 	item, loaded := streamCollection.LoadOrStore(streamPath, &Stream{

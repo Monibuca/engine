@@ -44,7 +44,9 @@ func NewAVPacket(avType byte) (p *AVPacket) {
 func (av AVPacket) Clone() *AVPacket {
 	return &av
 }
-
+func (av *AVPacket) VideoFrameType() byte{
+	return av.Payload[0] >> 4
+}
 type SendPacket struct {
 	*AVPacket
 	Timestamp uint32
