@@ -94,19 +94,17 @@ func WriteFLVTag(w io.Writer, tag *SendPacket) (err error) {
 	}
 	return
 }
-func ReadFLVTag(r io.Reader) (tag *AVPacket, err error) {
+func ReadFLVTag(r io.Reader) (t byte, timestamp uint32, payload []byte, err error) {
 	head := pool.GetSlice(11)
 	defer pool.RecycleSlice(head)
 	if _, err = io.ReadFull(r, head); err != nil {
 		return
 	}
-	tag = NewAVPacket(head[0])
+	t = head[0]
 	dataSize := util.BigEndian.Uint24(head[1:])
-	tag.Timestamp = util.BigEndian.Uint24(head[4:])
-	body := pool.GetSlice(int(dataSize))
-	defer pool.RecycleSlice(body)
-	if _, err = io.ReadFull(r, body); err == nil {
-		tag.Payload = body
+	timestamp = util.BigEndian.Uint24(head[4:])
+	payload = make([]byte, int(dataSize))
+	if _, err = io.ReadFull(r, payload); err == nil {
 		t := pool.GetSlice(4)
 		_, err = io.ReadFull(r, t)
 		pool.RecycleSlice(t)

@@ -76,6 +76,7 @@ type StreamInfo struct {
 		CodecID     byte
 		SPSInfo     avformat.SPSInfo
 		BPS         int
+		lastIndex   int
 		GOP         int //关键帧间隔
 	}
 	AudioInfo struct {
@@ -84,6 +85,7 @@ type StreamInfo struct {
 		SoundRate   int  //2bit
 		SoundSize   byte //1bit
 		SoundType   byte //1bit
+		lastIndex   int
 		BPS         int
 	}
 }
@@ -107,6 +109,12 @@ type ChangeStreamCmd struct {
 func (r *Stream) onClosed() {
 	Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 	streamCollection.Delete(r.StreamPath)
+	for i, val := range Summary.Streams {
+		if val == &r.StreamInfo {
+			Summary.Streams = append(Summary.Streams[:i], Summary.Streams[i+1:]...)
+			break
+		}
+	}
 	OnStreamClosedHooks.Trigger(r)
 }
 
@@ -141,15 +149,12 @@ func (r *Stream) Run() {
 			case *UnSubscribeCmd:
 				if _, ok := r.Subscribers[v.ID]; ok {
 					delete(r.Subscribers, v.ID)
-					var hole int
 					for i, val := range r.SubscriberInfo {
 						if val == &v.SubscriberInfo {
-							hole = i
+							r.SubscriberInfo = append(r.SubscriberInfo[:i], r.SubscriberInfo[i+1:]...)
 							break
 						}
 					}
-					copy(r.SubscriberInfo[hole:], r.SubscriberInfo[hole+1:])
-					r.SubscriberInfo = r.SubscriberInfo[:len(r.SubscriberInfo)-1]
 					OnUnSubscribeHooks.Trigger(v.Subscriber)
 					Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.SubscriberInfo))))
 					if len(r.SubscriberInfo) == 0 && r.Publisher == nil {
@@ -186,9 +191,7 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	audio.Payload = payload
 	audio.IsKeyFrame = false
 	audio.IsSequence = false
-	if audio.GetLast().Timestamp > 0 {
-		r.AudioInfo.BPS = payloadLen * 1000 / int(timestamp-audio.GetLast().Timestamp)
-	}
+
 	if payloadLen < 4 {
 		return
 	}
@@ -231,8 +234,13 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	if !r.UseTimestamp {
 		audio.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 	}
+	lastTimestamp := audio.GetAt(r.AudioInfo.lastIndex).Timestamp
+	if lastTimestamp > 0 && lastTimestamp != audio.Timestamp {
+		r.AudioInfo.BPS = payloadLen * 1000 / int(audio.Timestamp-lastTimestamp)
+	}
 	r.AudioInfo.PacketCount++
 	audio.Number = r.AudioInfo.PacketCount
+	r.AudioInfo.lastIndex = audio.Index
 	audio.NextW()
 }
 func (r *Stream) setH264Info(video *Ring) {
@@ -254,9 +262,7 @@ func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
 	video.Type = avformat.FLV_TAG_TYPE_VIDEO
 	video.Timestamp = timestamp
 	video.Payload = payload
-	if video.GetLast().Timestamp > 0 {
-		r.VideoInfo.BPS = payloadLen * 1000 / int(timestamp-video.GetLast().Timestamp)
-	}
+
 	if payloadLen < 3 {
 		return
 	}
@@ -264,6 +270,8 @@ func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
 	r.VideoInfo.CodecID = payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
 	video.IsSequence = videoFrameType == 1 && payload[1] == 0
 	video.IsKeyFrame = videoFrameType == 1 || videoFrameType == 4
+	r.VideoInfo.PacketCount++
+	video.Number = r.VideoInfo.PacketCount
 	if r.VideoTag == nil {
 		if video.IsSequence {
 			r.setH264Info(video)
@@ -281,16 +289,18 @@ func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
 				r.FirstScreen = video.Clone()
 			} else {
 				oldNumber := r.FirstScreen.Number
-				r.FirstScreen.Index = video.Index
-				r.FirstScreen.RingItem = video.RingItem
+				r.FirstScreen.GoTo(video.Index)
 				r.VideoInfo.GOP = r.FirstScreen.Number - oldNumber
 			}
 		}
 		if !r.UseTimestamp {
 			video.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
 		}
-		r.VideoInfo.PacketCount++
-		video.Number = r.VideoInfo.PacketCount
+		lastTimestamp := video.GetAt(r.VideoInfo.lastIndex).Timestamp
+		if lastTimestamp > 0 && lastTimestamp != video.Timestamp {
+			r.VideoInfo.BPS = payloadLen * 1000 / int(video.Timestamp-lastTimestamp)
+		}
+		r.VideoInfo.lastIndex = video.Index
 		video.NextW()
 	}
 }

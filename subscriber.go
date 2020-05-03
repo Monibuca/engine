@@ -15,7 +15,7 @@ type SubscriberInfo struct {
 	TotalDrop     int //总丢帧
 	TotalPacket   int
 	Type          string
-	BufferLength  byte
+	BufferLength  int
 	Delay         uint32
 	SubscribeTime time.Time
 }
