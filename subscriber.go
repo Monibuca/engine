@@ -61,7 +61,7 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	packet := s.FirstScreen.Clone()
 	startTime := packet.Timestamp
 	packet.RLock()
-	sendPacket.AVPacket = packet.AVPacket
+	sendPacket.AVPacket = &packet.AVPacket
 	s.OnData(sendPacket)
 	packet.NextR()
 	atsent := false
@@ -81,7 +81,7 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 					s.OnData(sendPacket)
 					atsent = true
 				}
-				sendPacket.AVPacket = packet.AVPacket
+				sendPacket.AVPacket = &packet.AVPacket
 				sendPacket.Timestamp = packet.Timestamp - startTime
 				s.OnData(sendPacket)
 				if s.checkDrop(packet) {
@@ -106,5 +106,5 @@ func (s *Subscriber) checkDrop(packet *Ring) bool {
 	pIndex := s.AVRing.Index
 	s.BufferLength = pIndex - packet.Index
 	s.Delay = s.AVRing.Timestamp - packet.Timestamp
-	return s.BufferLength > RING_SIZE/2
+	return s.BufferLength > s.AVRing.Size/2
 }

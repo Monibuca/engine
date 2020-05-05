@@ -32,7 +32,7 @@ func GetStream(streamPath string) (result *Stream) {
 	item, loaded := streamCollection.LoadOrStore(streamPath, &Stream{
 		Subscribers:  make(map[string]*Subscriber),
 		Control:      make(chan interface{}),
-		AVRing:       NewRing(),
+		AVRing:       NewRing(config.RingSize),
 		WaitingMutex: new(sync.RWMutex),
 		StreamInfo: StreamInfo{
 			StreamPath:     streamPath,

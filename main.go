@@ -16,15 +16,21 @@ import (
 )
 
 var (
+	config = &struct {
+		EnableWaitStream bool
+		RingSize         int
+	}{true, 10}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw []byte
 	// Version 引擎版本号
 	Version string
 	// EngineInfo 引擎信息
 	EngineInfo = &struct {
-		Version   *string
-		StartTime time.Time //启动时间
-	}{&Version, time.Now()}
+		Version          *string
+		StartTime        time.Time //启动时间
+		EnableWaitStream *bool
+		RingSize         *int
+	}{&Version, time.Now(), &config.EnableWaitStream, &config.RingSize}
 )
 
 // Run 启动Monibuca引擎
