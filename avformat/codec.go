@@ -114,8 +114,12 @@ func (p *AVCDecoderConfigurationRecord) Unmarshal(b []byte) (n int, err error) {
 		pps = append(pps, b[n:n+ppslen])
 		n += ppslen
 	}
-	p.PictureParameterSetLength = uint16(len(pps[0]))
-	p.PictureParameterSetNALUnit = pps[0]
+	if ppscount >= 1 {
+		p.PictureParameterSetLength = uint16(len(pps[0]))
+		p.PictureParameterSetNALUnit = pps[0]
+	} else {
+		err = ErrDecconfInvalid
+	}
 	return
 }
 
