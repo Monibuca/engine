@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"sync"
@@ -182,10 +183,15 @@ func (r *Stream) Run() {
 	}
 }
 
+// GetBuffer 获取用于写入的缓冲区
+func (r *Stream) GetBuffer() *bytes.Buffer {
+	return r.AVRing.GetBuffer()
+}
+
 // PushAudio 来自发布者推送的音频
 func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
-	payloadLen := len(payload)
 	audio := r.AVRing
+	payloadLen := len(payload)
 	audio.Type = avformat.FLV_TAG_TYPE_AUDIO
 	audio.Timestamp = timestamp
 	audio.Payload = payload
@@ -257,8 +263,8 @@ func (r *Stream) setH264Info(video *Ring) {
 
 // PushVideo 来自发布者推送的视频
 func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
-	payloadLen := len(payload)
 	video := r.AVRing
+	payloadLen := len(payload)
 	video.Type = avformat.FLV_TAG_TYPE_VIDEO
 	video.Timestamp = timestamp
 	video.Payload = payload

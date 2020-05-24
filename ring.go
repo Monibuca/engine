@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"sync"
 
 	"github.com/Monibuca/engine/v2/avformat"
@@ -9,6 +10,7 @@ import (
 type RingItem struct {
 	avformat.AVPacket
 	sync.RWMutex
+	*bytes.Buffer
 }
 
 // Ring 环形缓冲，使用数组实现
@@ -77,6 +79,15 @@ func (r *Ring) NextW() {
 func (r *Ring) NextR() {
 	r.RingItem.RUnlock()
 	r.GoNext()
+}
+
+func (r *Ring) GetBuffer() *bytes.Buffer {
+	if r.Buffer == nil {
+		r.Buffer = bytes.NewBuffer([]byte{})
+	} else {
+		r.Reset()
+	}
+	return r.Buffer
 }
 
 // Clone 克隆一个Ring
