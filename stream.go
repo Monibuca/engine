@@ -7,13 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Monibuca/engine/v2/avformat"
+	. "github.com/Monibuca/engine/v2/avformat"
 	. "github.com/logrusorgru/aurora"
 )
 
-var (
-	streamCollection = Collection{}
-)
+var streamCollection Collection
 
 // Collection 对sync.Map的包装
 type Collection struct {
@@ -58,8 +56,8 @@ type Stream struct {
 	Control      chan interface{}
 	Cancel       context.CancelFunc
 	Subscribers  map[string]*Subscriber // 订阅者
-	VideoTag     *avformat.AVPacket     // 每个视频包都是这样的结构,区别在于Payload的大小.FMS在发送AVC sequence header,需要加上 VideoTags,这个tag 1个字节(8bits)的数据
-	AudioTag     *avformat.AVPacket     // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
+	VideoTag     *AVPacket              // 每个视频包都是这样的结构,区别在于Payload的大小.FMS在发送AVC sequence header,需要加上 VideoTags,这个tag 1个字节(8bits)的数据
+	AudioTag     *AVPacket              // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
 	FirstScreen  *Ring                  //最近的关键帧位置，首屏渲染
 	AVRing       *Ring                  //数据环
 	WaitingMutex *sync.RWMutex          //用于订阅和等待发布者
@@ -75,7 +73,7 @@ type StreamInfo struct {
 	VideoInfo      struct {
 		PacketCount int
 		CodecID     byte
-		SPSInfo     avformat.SPSInfo
+		SPSInfo     SPSInfo
 		BPS         int
 		lastIndex   int
 		GOP         int //关键帧间隔
@@ -187,12 +185,34 @@ func (r *Stream) Run() {
 func (r *Stream) GetBuffer() *bytes.Buffer {
 	return r.AVRing.GetBuffer()
 }
+func (r *Stream) WriteASC(asc []byte) {
+	if r.AudioTag == nil {
+		r.AudioTag = NewAVPacket(FLV_TAG_TYPE_AUDIO)
+		r.AudioTag.IsSequence = true
+		r.AudioTag.Payload = append(append(r.AudioTag.Payload, 0xAF, 0), asc...)
+	} else {
+		r.AudioTag.Payload = append(r.AudioTag.Payload[:2], asc...)
+	}
+	config1 := asc[2]
+	config2 := asc[3]
+	r.AudioInfo.SoundFormat = 10
+	//audioObjectType = (config1 & 0xF8) >> 3
+	// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
+	// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
+	// 3 AAC SSR 	ISO/IEC 14496-3 subpart 4
+	// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
+	r.AudioInfo.SoundRate = SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)]
+	r.AudioInfo.SoundType = (config2 >> 3) & 0x0F //声道
+	//frameLengthFlag = (config2 >> 2) & 0x01
+	//dependsOnCoreCoder = (config2 >> 1) & 0x01
+	//extensionFlag = config2 & 0x01
+}
 
 // PushAudio 来自发布者推送的音频
 func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	audio := r.AVRing
 	payloadLen := len(payload)
-	audio.Type = avformat.FLV_TAG_TYPE_AUDIO
+	audio.Type = FLV_TAG_TYPE_AUDIO
 	audio.Timestamp = timestamp
 	audio.Payload = payload
 	audio.IsKeyFrame = false
@@ -204,7 +224,7 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	if payload[0] == 0xFF && (payload[1]&0xF0) == 0xF0 {
 		//将ADTS转换成ASC
 		r.AudioInfo.SoundFormat = 10
-		r.AudioInfo.SoundRate = avformat.SamplingFrequencies[(payload[2]&0x3c)>>2]
+		r.AudioInfo.SoundRate = SamplingFrequencies[(payload[2]&0x3c)>>2]
 		r.AudioInfo.SoundType = ((payload[2] & 0x1) << 2) | ((payload[3] & 0xc0) >> 6)
 		r.AudioTag = audio.ADTS2ASC()
 	} else if r.AudioTag == nil {
@@ -224,16 +244,16 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 				// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
 				// 3 AAC SSR 	ISO/IEC 14496-3 subpart 4
 				// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
-				r.AudioInfo.SoundRate = avformat.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)]
+				r.AudioInfo.SoundRate = SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)]
 				r.AudioInfo.SoundType = (config2 >> 3) & 0x0F //声道
 				//frameLengthFlag = (config2 >> 2) & 0x01
 				//dependsOnCoreCoder = (config2 >> 1) & 0x01
 				//extensionFlag = config2 & 0x01
 			}
 		} else {
-			r.AudioInfo.SoundRate = avformat.SoundRate[(tmp&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
-			r.AudioInfo.SoundSize = (tmp & 0x02) >> 1                 // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
-			r.AudioInfo.SoundType = tmp & 0x01                        // 0 单声道，1立体声
+			r.AudioInfo.SoundRate = SoundRate[(tmp&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
+			r.AudioInfo.SoundSize = (tmp & 0x02) >> 1        // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
+			r.AudioInfo.SoundType = tmp & 0x01               // 0 单声道，1立体声
 		}
 		return
 	}
@@ -254,24 +274,39 @@ func (r *Stream) setH264Info(video *Ring) {
 	if r.VideoInfo.CodecID != 7 {
 		return
 	}
-	info := avformat.AVCDecoderConfigurationRecord{}
+	var info AVCDecoderConfigurationRecord
 	//0:codec,1:IsAVCSequence,2~4:compositionTime
 	if _, err := info.Unmarshal(video.Payload[5:]); err == nil {
-		r.VideoInfo.SPSInfo, err = avformat.ParseSPS(info.SequenceParameterSetNALUnit)
+		r.VideoInfo.SPSInfo, err = ParseSPS(info.SequenceParameterSetNALUnit)
 	}
+}
+func (r *Stream) WriteSPS(sps []byte) {
+	lenSPS := len(sps)
+	if r.VideoTag == nil {
+		r.VideoTag = NewAVPacket(FLV_TAG_TYPE_VIDEO)
+		r.VideoTag.IsSequence = true
+		r.VideoTag.IsKeyFrame = true
+		r.VideoTag.Payload = append(r.VideoTag.Payload, RTMP_AVC_HEAD...)
+	}
+	r.VideoInfo.SPSInfo, _ = ParseSPS(sps)
+	copy(r.VideoTag.Payload[6:], sps[1:4])
+	r.VideoTag.Payload = append(append(r.VideoTag.Payload[:10], 0xE1, byte(lenSPS>>8), byte(lenSPS)), sps...)
+}
+func (r *Stream) WritePPS(pps []byte) {
+	lenPPS := len(pps)
+	r.VideoTag.Payload = append(append(r.VideoTag.Payload, 0x01, byte(lenPPS>>8), byte(lenPPS)), pps...)
 }
 
 // PushVideo 来自发布者推送的视频
 func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
-	video := r.AVRing
 	payloadLen := len(payload)
-	video.Type = avformat.FLV_TAG_TYPE_VIDEO
-	video.Timestamp = timestamp
-	video.Payload = payload
-
 	if payloadLen < 3 {
 		return
 	}
+	video := r.AVRing
+	video.Type = FLV_TAG_TYPE_VIDEO
+	video.Timestamp = timestamp
+	video.Payload = payload
 	videoFrameType := payload[0] >> 4       // 帧类型 4Bit, H264一般为1或者2
 	r.VideoInfo.CodecID = payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
 	video.IsSequence = videoFrameType == 1 && payload[1] == 0
