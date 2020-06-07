@@ -29,6 +29,8 @@ type Subscriber struct {
 	Cancel     context.CancelFunc
 	Sign       string
 	OffsetTime uint32
+	startTime  uint32
+	avformat.SendPacket
 }
 
 // IsClosed 检查订阅者是否已经关闭
@@ -52,55 +54,45 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	}
 	GetStream(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
-	//加锁解锁的目的是等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
-	s.WaitingMutex.RLock()
-	s.WaitingMutex.RUnlock()
-	sendPacket := avformat.NewSendPacket(s.VideoTag, 0)
-	defer sendPacket.Recycle()
-	s.OnData(sendPacket)
+	//等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
+	s.WaitPub.Wait()
+	s.sendAv(s.VideoTag, 0)
 	packet := s.FirstScreen.Clone()
-	startTime := packet.Timestamp
-	packet.RLock()
-	sendPacket.AVPacket = &packet.AVPacket
-	s.OnData(sendPacket)
-	packet.NextR()
-	atsent := false
-	dropping := false
-	droped := 0
-	for {
-		select {
-		case <-s.Done():
-			return s.Err()
-		default:
-			s.TotalPacket++
-			packet.RLock()
-			if !dropping {
-				if packet.Type == avformat.FLV_TAG_TYPE_AUDIO && !atsent {
-					sendPacket.AVPacket = s.AudioTag
-					sendPacket.Timestamp = 0
-					s.OnData(sendPacket)
-					atsent = true
-				}
-				sendPacket.AVPacket = &packet.AVPacket
-				sendPacket.Timestamp = packet.Timestamp - startTime
-				s.OnData(sendPacket)
-				if s.checkDrop(packet) {
-					dropping = true
-					droped = 0
-				}
-				packet.NextR()
-			} else if packet.IsKeyFrame {
-				//遇到关键帧则退出丢帧
-				dropping = false
-				//fmt.Println("drop package ", droped)
-				s.TotalDrop += droped
-				packet.RUnlock()
-			} else {
-				droped++
-				packet.NextR()
+	s.startTime = packet.Timestamp
+	s.send(packet)
+	packet.GoNext()
+	for atsent, dropping, droped := false, false, 0; s.Err() == nil; packet.GoNext() {
+		s.TotalPacket++
+		if !dropping {
+			if packet.Type == avformat.FLV_TAG_TYPE_AUDIO && !atsent {
+				s.sendAv(s.AudioTag, 0)
+				atsent = true
 			}
+			s.send(packet)
+			if s.checkDrop(packet) {
+				dropping = true
+				droped = 0
+			}
+		} else if packet.IsKeyFrame {
+			//遇到关键帧则退出丢帧
+			dropping = false
+			//fmt.Println("drop package ", droped)
+			s.TotalDrop += droped
+			s.send(packet)
+		} else {
+			droped++
 		}
 	}
+	return s.Err()
+}
+func (s *Subscriber) sendAv(packet *avformat.AVPacket, t uint32) {
+	s.AVPacket = packet
+	s.Timestamp = t
+	s.OnData(&s.SendPacket)
+}
+func (s *Subscriber) send(packet *Ring) {
+	packet.Wait()
+	s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
 }
 func (s *Subscriber) checkDrop(packet *Ring) bool {
 	pIndex := s.AVRing.Index

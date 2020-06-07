@@ -29,10 +29,9 @@ func FindStream(streamPath string) *Stream {
 //GetStream 根据流路径获取流，如果不存在则创建一个新的
 func GetStream(streamPath string) (result *Stream) {
 	item, loaded := streamCollection.LoadOrStore(streamPath, &Stream{
-		Subscribers:  make(map[string]*Subscriber),
-		Control:      make(chan interface{}),
-		AVRing:       NewRing(config.RingSize),
-		WaitingMutex: new(sync.RWMutex),
+		Subscribers: make(map[string]*Subscriber),
+		Control:     make(chan interface{}),
+		AVRing:      NewRing(config.RingSize),
 		StreamInfo: StreamInfo{
 			StreamPath:     streamPath,
 			SubscriberInfo: make([]*SubscriberInfo, 0),
@@ -42,7 +41,7 @@ func GetStream(streamPath string) (result *Stream) {
 	if !loaded {
 		Summary.Streams = append(Summary.Streams, &result.StreamInfo)
 		result.Context, result.Cancel = context.WithCancel(context.Background())
-		result.WaitingMutex.Lock() //等待发布者
+		result.WaitPub.Add(1) //等待发布者
 		go result.Run()
 	}
 	return
@@ -60,7 +59,7 @@ type Stream struct {
 	AudioTag     *AVPacket              // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
 	FirstScreen  *Ring                  //最近的关键帧位置，首屏渲染
 	AVRing       *Ring                  //数据环
-	WaitingMutex *sync.RWMutex          //用于订阅和等待发布者
+	WaitPub      sync.WaitGroup         //用于订阅和等待发布者
 	UseTimestamp bool                   //是否采用数据包中的时间戳
 }
 
@@ -326,7 +325,7 @@ func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
 		}
 		if video.IsKeyFrame {
 			if r.FirstScreen == nil {
-				defer r.WaitingMutex.Unlock()
+				defer r.WaitPub.Done()
 				r.FirstScreen = video.Clone()
 			} else {
 				oldNumber := r.FirstScreen.Number

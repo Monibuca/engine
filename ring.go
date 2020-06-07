@@ -9,7 +9,7 @@ import (
 
 type RingItem struct {
 	avformat.AVPacket
-	sync.RWMutex
+	sync.WaitGroup
 	*bytes.Buffer
 }
 
@@ -27,7 +27,7 @@ func NewRing(exp int) (r *Ring) {
 	r.Size = 1 << exp
 	r.buffer = make([]RingItem, r.Size)
 	r.RingItem = &r.buffer[0]
-	r.Lock()
+	r.Add(1)
 	return
 }
 func (r *Ring) offset(v int) int {
@@ -71,14 +71,8 @@ func (r *Ring) GoBack() {
 func (r *Ring) NextW() {
 	item := r.RingItem
 	r.GoNext()
-	r.RingItem.Lock()
-	item.Unlock()
-}
-
-// NextR 读下一个
-func (r *Ring) NextR() {
-	r.RingItem.RUnlock()
-	r.GoNext()
+	r.RingItem.Add(1)
+	item.Done()
 }
 
 func (r *Ring) GetBuffer() *bytes.Buffer {
