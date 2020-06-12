@@ -192,8 +192,8 @@ func (r *Stream) WriteASC(asc []byte) {
 	} else {
 		r.AudioTag.Payload = append(r.AudioTag.Payload[:2], asc...)
 	}
-	config1 := asc[2]
-	config2 := asc[3]
+	config1 := asc[0]
+	config2 := asc[1]
 	r.AudioInfo.SoundFormat = 10
 	//audioObjectType = (config1 & 0xF8) >> 3
 	// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
