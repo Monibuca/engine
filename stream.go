@@ -61,6 +61,8 @@ type Stream struct {
 	AVRing       *Ring                  //数据环
 	WaitPub      sync.WaitGroup         //用于订阅和等待发布者
 	UseTimestamp bool                   //是否采用数据包中的时间戳
+	SPS          []byte
+	PPS          []byte
 }
 
 // StreamInfo 流可序列化信息，用于控制台显示
@@ -277,10 +279,13 @@ func (r *Stream) setH264Info(video *Ring) {
 	//0:codec,1:IsAVCSequence,2~4:compositionTime
 	if _, err := info.Unmarshal(video.Payload[5:]); err == nil {
 		r.VideoInfo.SPSInfo, err = ParseSPS(info.SequenceParameterSetNALUnit)
+		r.SPS = info.SequenceParameterSetNALUnit
+		r.PPS = info.PictureParameterSetNALUnit
 	}
 }
 func (r *Stream) WriteSPS(sps []byte) {
 	lenSPS := len(sps)
+	r.SPS = sps
 	if r.VideoTag == nil {
 		r.VideoTag = NewAVPacket(FLV_TAG_TYPE_VIDEO)
 		r.VideoTag.IsSequence = true
@@ -293,6 +298,7 @@ func (r *Stream) WriteSPS(sps []byte) {
 }
 func (r *Stream) WritePPS(pps []byte) {
 	lenPPS := len(pps)
+	r.PPS = pps
 	r.VideoTag.Payload = append(append(r.VideoTag.Payload, 0x01, byte(lenPPS>>8), byte(lenPPS)), pps...)
 }
 

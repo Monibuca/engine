@@ -70,6 +70,92 @@ var NALU_SEI_BYTE []byte
 type H264 struct {
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+//Payload 分包，用于RTP传输
+func (*H264) Payload(mtu int, nalu []byte) (payloads [][]byte) {
+	if nalu == nil {
+		return payloads
+	}
+	naluType := nalu[0] & 0x1F   //00011111
+	naluRefIdc := nalu[0] & 0x60 //1110000
+
+	if naluType == 9 || naluType == 12 {
+		return
+	}
+
+	// Single NALU
+	if len(nalu) <= mtu {
+		out := make([]byte, len(nalu))
+		copy(out, nalu)
+		payloads = append(payloads, out)
+		return
+	}
+
+	// FU-A
+	maxFragmentSize := mtu - 2
+
+	// The FU payload consists of fragments of the payload of the fragmented
+	// NAL unit so that if the fragmentation unit payloads of consecutive
+	// FUs are sequentially concatenated, the payload of the fragmented NAL
+	// unit can be reconstructed.  The NAL unit type octet of the fragmented
+	// NAL unit is not included as such in the fragmentation unit payload,
+	// 	but rather the information of the NAL unit type octet of the
+	// fragmented NAL unit is conveyed in the F and NRI fields of the FU
+	// indicator octet of the fragmentation unit and in the type field of
+	// the FU header.  An FU payload MAY have any number of octets and MAY
+	// be empty.
+
+	naluData := nalu
+	// According to the RFC, the first octet is skipped due to redundant information
+	naluDataIndex := 1
+	naluDataLength := len(nalu) - naluDataIndex
+	naluDataRemaining := naluDataLength
+
+	if min(maxFragmentSize, naluDataRemaining) <= 0 {
+		return
+	}
+
+	for naluDataRemaining > 0 {
+		currentFragmentSize := min(maxFragmentSize, naluDataRemaining)
+		out := make([]byte, 2+currentFragmentSize)
+
+		// +---------------+
+		// |0|1|2|3|4|5|6|7|
+		// +-+-+-+-+-+-+-+-+
+		// |F|NRI|  Type   |
+		// +---------------+
+		out[0] = NALU_FUA | naluRefIdc
+
+		// +---------------+
+		//|0|1|2|3|4|5|6|7|
+		//+-+-+-+-+-+-+-+-+
+		//|S|E|R|  Type   |
+		//+---------------+
+
+		out[1] = naluType
+		if naluDataRemaining == naluDataLength {
+			// Set start bit
+			out[1] |= 1 << 7
+		} else if naluDataRemaining-currentFragmentSize == 0 {
+			// Set end bit
+			out[1] |= 1 << 6
+		}
+
+		copy(out[2:], naluData[naluDataIndex:naluDataIndex+currentFragmentSize])
+		payloads = append(payloads, out)
+
+		naluDataRemaining -= currentFragmentSize
+		naluDataIndex += currentFragmentSize
+	}
+	return
+}
+
 type NALUnit struct {
 	NALUHeader
 	RBSP

@@ -79,6 +79,7 @@ func (r *NALU) WriteNALU(ts uint32, payload []byte) {
 		r.writePicture(ts, RTMP_KEYFRAME_HEAD, payload)
 	case NALU_Non_IDR_Picture:
 		r.writePicture(ts, RTMP_NORMALFRAME_HEAD, payload)
+	case NALU_SEI:
 	default:
 		Printf("nalType not support yet:%d", nalType)
 	}
