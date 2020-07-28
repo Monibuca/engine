@@ -41,7 +41,6 @@ func GetStream(streamPath string) (result *Stream) {
 	if !loaded {
 		Summary.Streams = append(Summary.Streams, &result.StreamInfo)
 		result.Context, result.Cancel = context.WithCancel(context.Background())
-		result.WaitPub.Add(1) //等待发布者
 		go result.Run()
 	}
 	return
@@ -59,7 +58,7 @@ type Stream struct {
 	AudioTag     *AVPacket              // 每个音频包都是这样的结构,区别在于Payload的大小.FMS在发送AAC sequence header,需要加上 AudioTags,这个tag 1个字节(8bits)的数据
 	FirstScreen  *Ring                  //最近的关键帧位置，首屏渲染
 	AVRing       *Ring                  //数据环
-	WaitPub      sync.WaitGroup         //用于订阅和等待发布者
+	WaitPub      chan struct{}          //用于订阅和等待发布者
 	UseTimestamp bool                   //是否采用数据包中的时间戳
 	SPS          []byte
 	PPS          []byte
@@ -331,7 +330,7 @@ func (r *Stream) PushVideo(timestamp uint32, payload []byte) {
 		}
 		if video.IsKeyFrame {
 			if r.FirstScreen == nil {
-				defer r.WaitPub.Done()
+				defer close(r.WaitPub)
 				r.FirstScreen = video.Clone()
 			} else {
 				oldNumber := r.FirstScreen.Number

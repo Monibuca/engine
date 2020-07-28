@@ -54,8 +54,12 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	}
 	GetStream(streamPath).Subscribe(s)
 	defer s.UnSubscribe(s)
+	select {
 	//等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
-	s.WaitPub.Wait()
+	case <-s.WaitPub:
+	case <-s.Context.Done():
+		return s.Err()
+	}
 	s.sendAv(s.VideoTag, 0)
 	packet := s.FirstScreen.Clone()
 	s.startTime = packet.Timestamp
