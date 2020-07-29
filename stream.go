@@ -36,6 +36,7 @@ func GetStream(streamPath string) (result *Stream) {
 			StreamPath:     streamPath,
 			SubscriberInfo: make([]*SubscriberInfo, 0),
 		},
+		WaitPub: make(chan struct{}),
 	})
 	result = item.(*Stream)
 	if !loaded {
