@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/Monibuca/engine/v2/avformat"
@@ -49,10 +48,13 @@ func (s *Subscriber) Close() {
 func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	if !config.EnableWaitStream {
 		if _, ok := streamCollection.Load(streamPath); !ok {
-			return errors.New(fmt.Sprintf("Stream not found:%s", streamPath))
+			return errors.Errorf("Stream not found:%s", streamPath)
 		}
 	}
 	GetStream(streamPath).Subscribe(s)
+	if s.Context == nil {
+		return errors.Errorf("stream not exist:%s", streamPath)
+	}
 	defer s.UnSubscribe(s)
 	select {
 	//等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
