@@ -90,11 +90,8 @@ func (h264 *H264) Payload(mtu int, payload []byte) (payloads [][]byte) {
 	if videoFrameType == 1 || videoFrameType == 4 {
 		payloads = append(payloads, h264.SPS, h264.PPS)
 	}
-	var nalu []byte
-	var naluLen int
-	for payload := payload[5:]; len(payload) > 4; payload = nalu[naluLen:] {
-		naluLen = int(util.BigEndian.Uint32(payload))
-		nalu = payload[4:]
+	for nalu, naluLen := payload[5:], 4; len(nalu) > naluLen; naluLen = int(util.BigEndian.Uint32(nalu)) + 4 {
+		nalu = nalu[naluLen:]
 		naluType := nalu[0] & 0x1F   //00011111
 		naluRefIdc := nalu[0] & 0x60 //1110000
 
