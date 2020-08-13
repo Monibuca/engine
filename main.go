@@ -19,7 +19,8 @@ var (
 	config = &struct {
 		EnableWaitStream bool
 		RingSize         int
-	}{true, 10}
+		PublishTimeout   time.Duration
+	}{true, 10, time.Minute}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw []byte
 	// Version 引擎版本号

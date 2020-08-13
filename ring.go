@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"sync"
+	"time"
 
 	"github.com/Monibuca/engine/v2/avformat"
 )
@@ -11,6 +12,7 @@ type RingItem struct {
 	avformat.AVPacket
 	sync.WaitGroup
 	*bytes.Buffer
+	UpdateTime time.Time
 }
 
 // Ring 环形缓冲，使用数组实现
@@ -70,6 +72,7 @@ func (r *Ring) GoBack() {
 // NextW 写下一个
 func (r *Ring) NextW() {
 	item := r.RingItem
+	item.UpdateTime = time.Now()
 	r.GoNext()
 	r.RingItem.Add(1)
 	item.Done()
@@ -87,4 +90,9 @@ func (r *Ring) GetBuffer() *bytes.Buffer {
 // Clone 克隆一个Ring
 func (r Ring) Clone() *Ring {
 	return &r
+}
+
+// Timeout 发布者是否超时了
+func (r *Ring) Timeout() bool {
+	return time.Since(r.UpdateTime) > config.PublishTimeout
 }

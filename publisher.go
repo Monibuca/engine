@@ -1,18 +1,21 @@
 package engine
 
 import (
+	"context"
 	"time"
 )
 
 // Publisher 发布者实体定义
 type Publisher struct {
+	context.Context
+	Cancel context.CancelFunc
 	*Stream
 }
 
 // Close 关闭发布者
 func (p *Publisher) Close() {
 	if p.Running() {
-		p.Cancel()
+		p.Stream.Cancel()
 	}
 }
 
@@ -26,9 +29,14 @@ func (p *Publisher) Publish(streamPath string) bool {
 	p.Stream = GetStream(streamPath)
 	//检查是否已存在发布者
 	if p.Publisher != nil {
-		return false
+		if p.AVRing.Timeout() {
+			p.Cancel()
+		} else {
+			return false
+		}
 	}
 	p.Publisher = p
+	p.Context, p.Cancel = context.WithCancel(p.Stream)
 	p.StartTime = time.Now()
 	//触发钩子
 	OnPublishHooks.Trigger(p.Stream)
