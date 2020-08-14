@@ -24,6 +24,7 @@ type Subscriber struct {
 	context.Context
 	*Stream
 	SubscriberInfo
+	MetaData   func(stream *Stream) error
 	OnData     func(*avformat.SendPacket) error
 	Cancel     context.CancelFunc
 	Sign       string
@@ -61,6 +62,11 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	case <-s.WaitPub:
 	case <-s.Context.Done():
 		return s.Err()
+	}
+	if s.MetaData != nil {
+		if err = s.MetaData(GetStream(streamPath)); err != nil {
+			return err
+		}
 	}
 	s.sendAv(s.VideoTag, 0)
 	packet := s.FirstScreen.Clone()
