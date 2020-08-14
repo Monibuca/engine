@@ -47,10 +47,8 @@ func (s *Subscriber) Close() {
 
 //Subscribe 开始订阅
 func (s *Subscriber) Subscribe(streamPath string) (err error) {
-	if !config.EnableWaitStream {
-		if _, ok := streamCollection.Load(streamPath); !ok {
-			return errors.Errorf("Stream not found:%s", streamPath)
-		}
+	if !config.EnableWaitStream && FindStream(streamPath) == nil {
+		return errors.Errorf("Stream not found:%s", streamPath)
 	}
 	GetStream(streamPath).Subscribe(s)
 	if s.Context == nil {
