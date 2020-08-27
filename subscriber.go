@@ -24,6 +24,7 @@ type Subscriber struct {
 	context.Context
 	*Stream
 	SubscriberInfo
+	MetaData   func(stream *Stream) error
 	OnData     func(*avformat.SendPacket) error
 	Cancel     context.CancelFunc
 	Sign       string
@@ -46,10 +47,8 @@ func (s *Subscriber) Close() {
 
 //Subscribe 开始订阅
 func (s *Subscriber) Subscribe(streamPath string) (err error) {
-	if !config.EnableWaitStream {
-		if _, ok := streamCollection.Load(streamPath); !ok {
-			return errors.Errorf("Stream not found:%s", streamPath)
-		}
+	if !config.EnableWaitStream && FindStream(streamPath) == nil {
+		return errors.Errorf("Stream not found:%s", streamPath)
 	}
 	GetStream(streamPath).Subscribe(s)
 	if s.Context == nil {
@@ -61,6 +60,11 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	case <-s.WaitPub:
 	case <-s.Context.Done():
 		return s.Err()
+	}
+	if s.MetaData != nil {
+		if err = s.MetaData(s.Stream); err != nil {
+			return err
+		}
 	}
 	if s.HasVideo {
 		s.sendAv(s.VideoTag, 0)
