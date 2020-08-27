@@ -8,14 +8,14 @@ import (
 // Publisher 发布者实体定义
 type Publisher struct {
 	context.Context
-	Cancel context.CancelFunc
+	cancel context.CancelFunc
 	*Stream
 }
 
 // Close 关闭发布者
 func (p *Publisher) Close() {
 	if p.Running() {
-		p.Stream.Cancel()
+		p.Cancel()
 	}
 }
 
@@ -30,13 +30,13 @@ func (p *Publisher) Publish(streamPath string) bool {
 	//检查是否已存在发布者
 	if p.Publisher != nil {
 		if p.AVRing.Timeout() {
-			p.Cancel()
+			p.cancel() //单独关闭Publisher而复用Stream
 		} else {
 			return false
 		}
 	}
 	p.Publisher = p
-	p.Context, p.Cancel = context.WithCancel(p.Stream)
+	p.Context, p.cancel = context.WithCancel(p.Stream)
 	p.StartTime = time.Now()
 	//触发钩子
 	OnPublishHooks.Trigger(p.Stream)

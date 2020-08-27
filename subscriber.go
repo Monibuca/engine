@@ -62,31 +62,39 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	case <-s.Context.Done():
 		return s.Err()
 	}
-	s.sendAv(s.VideoTag, 0)
-	packet := s.FirstScreen.Clone()
-	s.startTime = packet.Timestamp
-	s.send(packet)
-	packet.GoNext()
-	for atsent, dropping, droped := false, false, 0; s.Err() == nil; packet.GoNext() {
-		s.TotalPacket++
-		if !dropping {
-			if packet.Type == avformat.FLV_TAG_TYPE_AUDIO && !atsent {
-				s.sendAv(s.AudioTag, 0)
-				atsent = true
+	if s.HasVideo {
+		s.sendAv(s.VideoTag, 0)
+		packet := s.FirstScreen.Clone()
+		s.startTime = packet.Timestamp
+		s.send(packet)
+		packet.GoNext()
+		for atsent, dropping, droped := false, false, 0; s.Err() == nil; packet.GoNext() {
+			s.TotalPacket++
+			if !dropping {
+				if packet.Type == avformat.FLV_TAG_TYPE_AUDIO && !atsent {
+					s.sendAv(s.AudioTag, 0)
+					atsent = true
+				}
+				s.send(packet)
+				if s.checkDrop(packet) {
+					dropping = true
+					droped = 0
+				}
+			} else if packet.IsKeyFrame {
+				//遇到关键帧则退出丢帧
+				dropping = false
+				//fmt.Println("drop package ", droped)
+				s.TotalDrop += droped
+				s.send(packet)
+			} else {
+				droped++
 			}
+		}
+	} else {
+		s.sendAv(s.AudioTag, 0)
+		for packet := s.AVRing; s.Err() == nil; packet.GoNext() {
+			s.TotalPacket++
 			s.send(packet)
-			if s.checkDrop(packet) {
-				dropping = true
-				droped = 0
-			}
-		} else if packet.IsKeyFrame {
-			//遇到关键帧则退出丢帧
-			dropping = false
-			//fmt.Println("drop package ", droped)
-			s.TotalDrop += droped
-			s.send(packet)
-		} else {
-			droped++
 		}
 	}
 	return s.Err()

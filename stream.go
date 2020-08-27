@@ -35,6 +35,8 @@ func GetStream(streamPath string) (result *Stream) {
 		StreamInfo: StreamInfo{
 			StreamPath:     streamPath,
 			SubscriberInfo: make([]*SubscriberInfo, 0),
+			HasVideo:       true,
+			HasAudio:       true,
 		},
 		WaitPub: make(chan struct{}),
 	})
@@ -88,6 +90,8 @@ type StreamInfo struct {
 		lastIndex   int
 		BPS         int
 	}
+	HasAudio bool
+	HasVideo bool
 }
 
 // UnSubscribeCmd 取消订阅命令
@@ -229,6 +233,7 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 		r.AudioInfo.SoundType = ((payload[2] & 0x1) << 2) | ((payload[3] & 0xc0) >> 6)
 		r.AudioTag = audio.ADTS2ASC()
 	} else if r.AudioTag == nil {
+
 		audio.IsSequence = true
 		if payloadLen < 5 {
 			return
@@ -269,6 +274,9 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	audio.Number = r.AudioInfo.PacketCount
 	r.AudioInfo.lastIndex = audio.Index
 	audio.NextW()
+	if r.AudioInfo.PacketCount == 1 && !r.HasVideo {
+		close(r.WaitPub)
+	}
 }
 func (r *Stream) setH264Info(video *Ring) {
 	r.VideoTag = video.AVPacket.Clone()
