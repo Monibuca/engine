@@ -2,9 +2,10 @@ package pio
 
 import (
 	"fmt"
+	"testing"
 )
 
-func ExampleVec() {
+func TestExampleVec(t *testing.T) {
 	vec := [][]byte{[]byte{1, 2, 3}, []byte{4, 5, 6, 7, 8, 9}, []byte{10, 11, 12, 13}}
 	println(VecLen(vec))
 

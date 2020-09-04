@@ -574,5 +574,4 @@ func (s *MpegTsStream) Feed(ts io.Reader) error {
 			}
 		}
 	}
-	return nil
 }
