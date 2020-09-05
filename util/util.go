@@ -37,8 +37,6 @@ func ReadFileLines(filename string) (lines []string, err error) {
 
 		lines = append(lines, string(line))
 	}
-
-	return
 }
 
 func CurrentDir(path ...string) string {
