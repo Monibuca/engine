@@ -18,9 +18,11 @@ import (
 var (
 	config = &struct {
 		EnableWaitStream bool
+		EnableAudio     bool
+		EnableVideo     bool
 		RingSize         int
 		PublishTimeout   time.Duration
-	}{true, 10, time.Minute}
+	}{true, true, true, 10, time.Minute}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw []byte
 	// Version 引擎版本号
@@ -49,7 +51,7 @@ func Run(configFile string) (err error) {
 		Print(Red("read config file error:"), err)
 		return
 	}
-	Print(Green("start monibuca"), BrightBlue(Version))
+	Print(BgGreen(Black("Ⓜ start monibuca ")), BrightBlue(Version))
 	go Summary.StartSummary()
 	var cg map[string]interface{}
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {

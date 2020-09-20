@@ -1,6 +1,7 @@
 package avformat
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/Monibuca/engine/v2/util"
@@ -68,6 +69,18 @@ var NALU_SEI_BYTE []byte
 // H.264/AVC视频编码标准中,整个系统框架被分为了两个层面:视频编码层面(VCL)和网络抽象层面(NAL)
 // NAL - Network Abstract Layer
 // raw byte sequence payload (RBSP) 原始字节序列载荷
+
+// SplitH264 以0x00000001分割H264裸数据
+func SplitH264(payload []byte) (nalus [][]byte){
+	for _, v := range bytes.SplitN(payload, NALU_Delimiter2, -1) {
+		if len(v) == 0 {
+			continue
+		}
+		nalus = append(nalus, bytes.SplitN(v, NALU_Delimiter1, -1)...)
+	}
+	return
+}
+
 
 type H264 struct {
 	SPS []byte

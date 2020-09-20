@@ -66,16 +66,16 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 			return err
 		}
 	}
-	if s.HasVideo {
+	if *s.EnableVideo {
 		s.sendAv(s.VideoTag, 0)
 		packet := s.FirstScreen.Clone()
 		s.startTime = packet.Timestamp
 		s.send(packet)
 		packet.GoNext()
-		for atsent, dropping, droped := false, false, 0; s.Err() == nil; packet.GoNext() {
+		for atsent, dropping, droped := s.AudioTag==nil, false, 0; s.Err() == nil; packet.GoNext() {
 			s.TotalPacket++
 			if !dropping {
-				if packet.Type == avformat.FLV_TAG_TYPE_AUDIO && !atsent {
+				if !atsent && packet.Type == avformat.FLV_TAG_TYPE_AUDIO  {
 					s.sendAv(s.AudioTag, 0)
 					atsent = true
 				}
@@ -94,8 +94,10 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 				droped++
 			}
 		}
-	} else {
-		s.sendAv(s.AudioTag, 0)
+	} else if *s.EnableAudio {
+		if s.AudioTag != nil {
+			s.sendAv(s.AudioTag, 0)
+		}
 		for packet := s.AVRing; s.Err() == nil; packet.GoNext() {
 			s.TotalPacket++
 			s.send(packet)
@@ -106,7 +108,9 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 func (s *Subscriber) sendAv(packet *avformat.AVPacket, t uint32) {
 	s.AVPacket = packet
 	s.Timestamp = t
-	s.OnData(&s.SendPacket)
+	if s.OnData(&s.SendPacket) != nil{
+		s.Close()
+	}
 }
 func (s *Subscriber) send(packet *Ring) {
 	packet.Wait()

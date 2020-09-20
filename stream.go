@@ -37,6 +37,8 @@ func GetStream(streamPath string) (result *Stream) {
 			SubscriberInfo: make([]*SubscriberInfo, 0),
 			HasVideo:       true,
 			HasAudio:       true,
+			EnableAudio:    &config.EnableAudio,
+			EnableVideo:    &config.EnableVideo,
 		},
 		WaitPub: make(chan struct{}),
 	})
@@ -44,6 +46,12 @@ func GetStream(streamPath string) (result *Stream) {
 	if !loaded {
 		Summary.Streams = append(Summary.Streams, &result.StreamInfo)
 		result.Context, result.Cancel = context.WithCancel(context.Background())
+		if config.EnableVideo {
+			result.EnableVideo = &result.HasVideo
+		}
+		if config.EnableAudio {
+			result.EnableAudio = &result.HasAudio
+		}
 		go result.Run()
 	}
 	return
@@ -90,8 +98,10 @@ type StreamInfo struct {
 		lastIndex   int
 		BPS         int
 	}
-	HasAudio bool
-	HasVideo bool
+	HasAudio    bool
+	HasVideo    bool
+	EnableVideo *bool
+	EnableAudio *bool
 }
 
 // UnSubscribeCmd 取消订阅命令
@@ -232,8 +242,7 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 		r.AudioInfo.SoundRate = SamplingFrequencies[(payload[2]&0x3c)>>2]
 		r.AudioInfo.SoundType = ((payload[2] & 0x1) << 2) | ((payload[3] & 0xc0) >> 6)
 		r.AudioTag = audio.ADTS2ASC()
-	} else if r.AudioTag == nil {
-
+	} else if r.AudioTag == nil && r.AudioInfo.SoundRate == 0 {
 		audio.IsSequence = true
 		if payloadLen < 5 {
 			return
@@ -256,12 +265,12 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 				//dependsOnCoreCoder = (config2 >> 1) & 0x01
 				//extensionFlag = config2 & 0x01
 			}
+			return
 		} else {
 			r.AudioInfo.SoundRate = SoundRate[(tmp&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
 			r.AudioInfo.SoundSize = (tmp & 0x02) >> 1        // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
 			r.AudioInfo.SoundType = tmp & 0x01               // 0 单声道，1立体声
 		}
-		return
 	}
 	if !r.UseTimestamp {
 		audio.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
@@ -274,7 +283,7 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 	audio.Number = r.AudioInfo.PacketCount
 	r.AudioInfo.lastIndex = audio.Index
 	audio.NextW()
-	if r.AudioInfo.PacketCount == 1 && !r.HasVideo {
+	if r.AudioInfo.PacketCount == 1 && (!*r.EnableVideo) {
 		close(r.WaitPub)
 	}
 }
