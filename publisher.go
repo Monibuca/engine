@@ -30,7 +30,7 @@ func (p *Publisher) Publish(streamPath string) bool {
 	//检查是否已存在发布者
 	if p.Publisher != nil {
 		if p.AVRing.Timeout() {
-			p.cancel() //单独关闭Publisher而复用Stream
+			p.Publisher.cancel() //单独关闭Publisher而复用Stream
 		} else {
 			return false
 		}
