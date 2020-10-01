@@ -75,11 +75,12 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		for atsent, dropping, droped := s.AudioTag==nil, false, 0; s.Err() == nil; packet.GoNext() {
 			s.TotalPacket++
 			if !dropping {
+				packet.Wait()
 				if !atsent && packet.Type == avformat.FLV_TAG_TYPE_AUDIO  {
 					s.sendAv(s.AudioTag, 0)
 					atsent = true
 				}
-				s.send(packet)
+				s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
 				if s.checkDrop(packet) {
 					dropping = true
 					droped = 0
