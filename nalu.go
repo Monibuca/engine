@@ -41,6 +41,9 @@ func (r *NALU) writePicture(ts uint32, head, payload []byte) {
 	r.buffer = append(r.buffer, payload...)
 }
 func (r *NALU) WriteNALU(ts uint32, payload []byte) {
+	if len(payload) == 0 {
+		return
+	}	
 	nalType := payload[0] & naluTypeBitmask
 	switch nalType {
 	case NALU_STAPA:
