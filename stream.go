@@ -244,9 +244,9 @@ func (r *Stream) PushAudio(timestamp uint32, payload []byte) {
 		r.AudioTag = audio.ADTS2ASC()
 	} else if r.AudioTag == nil && r.AudioInfo.SoundRate == 0 {
 		audio.IsSequence = true
-		if payloadLen < 5 {
-			return
-		}
+		// if payloadLen < 5 {
+		// 	return
+		// }
 		r.AudioTag = audio.AVPacket.Clone()
 		tmp := payload[0]                                                      // 第一个字节保存着音频的相关信息
 		if r.AudioInfo.SoundFormat = tmp >> 4; r.AudioInfo.SoundFormat == 10 { //真的是AAC的话，后面有一个字节的详细信息
