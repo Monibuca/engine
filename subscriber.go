@@ -73,7 +73,7 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		s.Delay = s.AVRing.GetLast().Timestamp - packet.Timestamp
 		s.send(packet)
 		packet.GoNext()
-		targetStartTime := s.AVRing.GetLast().Timestamp //实际开始时间戳
+		// targetStartTime := s.AVRing.GetLast().Timestamp //实际开始时间戳
 		for atsent, dropping, droped := s.AudioTag == nil, false, 0; s.Err() == nil; packet.GoNext() {
 			s.TotalPacket++
 			if !dropping {
@@ -83,9 +83,9 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 					atsent = true
 				}
 				s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
-				if targetStartTime > s.startTime {
-					s.startTime++ //逐步追赶，使得开始时间逼近实际开始时间戳
-				}
+				// if targetStartTime > s.startTime {
+				// 	s.startTime++ //逐步追赶，使得开始时间逼近实际开始时间戳
+				// }
 				if s.checkDrop(packet) {
 					dropping = true
 					droped = 0
