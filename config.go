@@ -36,6 +36,10 @@ type PluginConfig struct {
 func InstallPlugin(opt *PluginConfig) {
 	Plugins[opt.Name] = opt
 	_, pluginFilePath, _, _ := runtime.Caller(1)
+	if config.GlobalUIDir != "" {
+		pluginPathSlice := strings.Split(pluginFilePath, "/")
+		pluginFilePath = filepath.Join(config.GlobalUIDir, pluginPathSlice[len(pluginPathSlice)-2])
+	}
 	opt.Dir = filepath.Dir(pluginFilePath)
 	ui := filepath.Join(opt.Dir, "ui", "dist")
 	if util.Exist(ui) {
