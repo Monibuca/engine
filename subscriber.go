@@ -69,18 +69,23 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	if *s.EnableVideo {
 		s.sendAv(s.VideoTag, 0)
 		packet := s.FirstScreen.Clone()
-		s.startTime = packet.Timestamp
+		s.startTime = packet.Timestamp // 开始时间戳，第一个关键帧的
+		s.Delay = s.AVRing.GetLast().Timestamp - packet.Timestamp
 		s.send(packet)
 		packet.GoNext()
-		for atsent, dropping, droped := s.AudioTag==nil, false, 0; s.Err() == nil; packet.GoNext() {
+		// targetStartTime := s.AVRing.GetLast().Timestamp //实际开始时间戳
+		for atsent, dropping, droped := s.AudioTag == nil, false, 0; s.Err() == nil; packet.GoNext() {
 			s.TotalPacket++
 			if !dropping {
 				packet.Wait()
-				if !atsent && packet.Type == avformat.FLV_TAG_TYPE_AUDIO  {
+				if !atsent && packet.Type == avformat.FLV_TAG_TYPE_AUDIO {
 					s.sendAv(s.AudioTag, 0)
 					atsent = true
 				}
 				s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
+				// if targetStartTime > s.startTime {
+				// 	s.startTime++ //逐步追赶，使得开始时间逼近实际开始时间戳
+				// }
 				if s.checkDrop(packet) {
 					dropping = true
 					droped = 0
@@ -109,7 +114,7 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 func (s *Subscriber) sendAv(packet *avformat.AVPacket, t uint32) {
 	s.AVPacket = packet
 	s.Timestamp = t
-	if s.OnData(&s.SendPacket) != nil{
+	if s.OnData(&s.SendPacket) != nil {
 		s.Close()
 	}
 }
