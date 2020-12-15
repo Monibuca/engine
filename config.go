@@ -55,9 +55,11 @@ func InstallPlugin(opt *PluginConfig) {
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	if config.GlobalUIPath != "" {
 		pluginPathSlice := strings.Split(pluginFilePath, "/")
-		pluginFilePath = filepath.Join(config.GlobalUIPath, pluginPathSlice[len(pluginPathSlice)-2])
+		pluginName := pluginPathSlice[len(pluginPathSlice)-2]
+		opt.Dir = filepath.Join(config.GlobalUIPath, pluginName)
+	} else {
+		opt.Dir = filepath.Dir(pluginFilePath)
 	}
-	opt.Dir = filepath.Dir(pluginFilePath)
 	ui := filepath.Join(opt.Dir, "ui", "dist")
 	if util.Exist(ui) {
 		opt.UIDir = ui
