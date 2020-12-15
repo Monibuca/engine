@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time" // colorable
 
-	"github.com/BurntSushi/toml"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -22,7 +21,7 @@ var (
 		EnableVideo      bool
 		RingSize         int
 		PublishTimeout   time.Duration
-		GlobalUIDir      string
+		GlobalUIPath     string
 	}{true, true, true, 10, time.Minute, ""}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw []byte
@@ -35,10 +34,11 @@ var (
 		EnableWaitStream *bool
 		RingSize         *int
 	}{&Version, time.Now(), &config.EnableWaitStream, &config.RingSize}
+	cg map[string]interface{}
 )
 
 // Run 启动Monibuca引擎
-func Run(configFile string) (err error) {
+func Run(configFile ...string) (err error) {
 	if runtime.GOOS == "windows" {
 		ioutil.WriteFile("shutdown.bat", []byte(fmt.Sprintf("taskkill /pid %d  -t  -f", os.Getpid())), 0777)
 	} else {
@@ -48,36 +48,29 @@ func Run(configFile string) (err error) {
 	if parts := strings.Split(filepath.Dir(enginePath), "@"); len(parts) > 1 {
 		Version = parts[len(parts)-1]
 	}
-	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		Print(Red("read config file error:"), err)
-		return
+	if len(configFile) != 0 {
+		if parseConfig(configFile[0]) != nil {
+			return
+		}
 	}
+
 	Print(BgGreen(Black("Ⓜ start monibuca ")), BrightBlue(Version))
 	go Summary.StartSummary()
-	var cg map[string]interface{}
-	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
-		if cfg, ok := cg["Monibuca"]; ok {
+
+	for name, config := range Plugins {
+		if cfg, ok := cg[name]; ok {
 			b, _ := json.Marshal(cfg)
-			if err = json.Unmarshal(b, config); err != nil {
+			if err = json.Unmarshal(b, config.Config); err != nil {
 				log.Println(err)
-			}
-		}
-		for name, config := range Plugins {
-			if cfg, ok := cg[name]; ok {
-				b, _ := json.Marshal(cfg)
-				if err = json.Unmarshal(b, config.Config); err != nil {
-					log.Println(err)
-					continue
-				}
-			} else if config.Config != nil {
 				continue
 			}
-			if config.Run != nil {
-				go config.Run()
-			}
+		} else if config.Config != nil {
+			continue
 		}
-	} else {
-		Print(Red("decode config file error:"), err)
+		if config.Run != nil {
+			go config.Run()
+		}
 	}
+
 	return
 }

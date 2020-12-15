@@ -1,6 +1,11 @@
 package engine
 
 import (
+	"encoding/json"
+	"github.com/BurntSushi/toml"
+	"io/ioutil"
+	"log"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -32,13 +37,25 @@ type PluginConfig struct {
 	HotConfig map[string]func(interface{}) //热修改配置
 }
 
+func init() {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	configFile := filepath.Join(dir, "config.toml")
+	if util.Exist(configFile) {
+		parseConfig(configFile)
+	}
+}
+
 // InstallPlugin 安装插件
 func InstallPlugin(opt *PluginConfig) {
 	Plugins[opt.Name] = opt
 	_, pluginFilePath, _, _ := runtime.Caller(1)
-	if config.GlobalUIDir != "" {
+	if config.GlobalUIPath != "" {
 		pluginPathSlice := strings.Split(pluginFilePath, "/")
-		pluginFilePath = filepath.Join(config.GlobalUIDir, pluginPathSlice[len(pluginPathSlice)-2])
+		pluginFilePath = filepath.Join(config.GlobalUIPath, pluginPathSlice[len(pluginPathSlice)-2])
 	}
 	opt.Dir = filepath.Dir(pluginFilePath)
 	ui := filepath.Join(opt.Dir, "ui", "dist")
@@ -54,4 +71,24 @@ func InstallPlugin(opt *PluginConfig) {
 // ListenerConfig 带有监听地址端口的插件配置类型
 type ListenerConfig struct {
 	ListenAddr string
+}
+
+func parseConfig(configFile string) error {
+	var err error
+	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
+		Print(Red("read config file error:"), err)
+		return err
+	}
+	if _, err = toml.Decode(string(ConfigRaw), &cg); err != nil {
+		Print(Red("decode config file error:"), err)
+		return err
+	}
+	if cfg, ok := cg["Monibuca"]; ok {
+		b, _ := json.Marshal(cfg)
+		if err = json.Unmarshal(b, config); err != nil {
+			log.Println(err)
+			return err
+		}
+	}
+	return nil
 }
