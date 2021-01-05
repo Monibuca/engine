@@ -8,7 +8,8 @@ import (
 // Publisher 发布者实体定义
 type Publisher struct {
 	context.Context
-	cancel context.CancelFunc
+	cancel        context.CancelFunc
+	AutoUnPublish bool //	当无人订阅时自动停止发布
 	*Stream
 }
 

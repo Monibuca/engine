@@ -171,7 +171,7 @@ func (r *Stream) Run() {
 					}
 					OnUnSubscribeHooks.Trigger(v.Subscriber)
 					Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(v.ID), Blue(len(r.SubscriberInfo))))
-					if len(r.SubscriberInfo) == 0 && r.Publisher == nil {
+					if len(r.SubscriberInfo) == 0 && (r.Publisher == nil || r.Publisher.AutoUnPublish) {
 						r.Cancel()
 					}
 				}
