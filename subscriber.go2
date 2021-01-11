@@ -2,9 +2,11 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/pion/rtp"
 	"time"
 
-	"github.com/Monibuca/engine/v2/avformat"
+	"github.com/Monibuca/engine/v3/avformat"
 	"github.com/pkg/errors"
 )
 
@@ -24,13 +26,14 @@ type Subscriber struct {
 	context.Context
 	*Stream
 	SubscriberInfo
-	MetaData   func(stream *Stream) error
-	OnData     func(*avformat.SendPacket) error
+	MetaData   func() error
+	OnData     func(rtp.Packet) error
 	Cancel     context.CancelFunc
 	Sign       string
 	OffsetTime uint32
 	startTime  uint32
-	avformat.SendPacket
+	vtIndex int //第几个视频轨
+	atIndex int //第几个音频轨
 }
 
 // IsClosed 检查订阅者是否已经关闭
@@ -45,6 +48,9 @@ func (s *Subscriber) Close() {
 	}
 }
 
+func (s *Subscriber) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.SubscriberInfo)
+}
 //Subscribe 开始订阅
 func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	if !config.EnableWaitStream && FindStream(streamPath) == nil {
@@ -62,23 +68,23 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		return s.Err()
 	}
 	if s.MetaData != nil {
-		if err = s.MetaData(s.Stream); err != nil {
+		if err = s.MetaData(); err != nil {
 			return err
 		}
 	}
 	if *s.EnableVideo {
-		s.sendAv(s.VideoTag, 0)
-		packet := s.FirstScreen.Clone()
-		s.startTime = packet.Timestamp // 开始时间戳，第一个关键帧的
-		s.Delay = s.AVRing.GetLast().Timestamp - packet.Timestamp
+		videoTrack:=s.VideoTracks[s.vtIndex]
+		packet := videoTrack.Buffer.SubRing(videoTrack.FirstScreen)
+		s.startTime = packet.Current.Timestamp // 开始时间戳，第一个关键帧的
+		s.Delay = videoTrack.Buffer.GetLast().Timestamp - packet.Current.Timestamp
 		s.send(packet)
 		packet.GoNext()
 		// targetStartTime := s.AVRing.GetLast().Timestamp //实际开始时间戳
 		for atsent, dropping, droped := s.AudioTag == nil, false, 0; s.Err() == nil; packet.GoNext() {
 			s.TotalPacket++
 			if !dropping {
-				packet.Wait()
-				if !atsent && packet.Type == avformat.FLV_TAG_TYPE_AUDIO {
+				packet.Current.Wait()
+				if !atsent && packet.Current.Type == avformat.FLV_TAG_TYPE_AUDIO {
 					s.sendAv(s.AudioTag, 0)
 					atsent = true
 				}
@@ -101,10 +107,8 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 			}
 		}
 	} else if *s.EnableAudio {
-		if s.AudioTag != nil {
-			s.sendAv(s.AudioTag, 0)
-		}
-		for packet := s.AVRing; s.Err() == nil; packet.GoNext() {
+		audioTrack:=s.AudioTracks[s.atIndex]
+		for packet := audioTrack; s.Err() == nil; packet.Buffer.GoNext() {
 			s.TotalPacket++
 			s.send(packet)
 		}

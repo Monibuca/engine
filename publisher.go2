@@ -11,12 +11,13 @@ type Publisher struct {
 	cancel        context.CancelFunc
 	AutoUnPublish bool //	当无人订阅时自动停止发布
 	*Stream
+	Type           string //类型，用来区分不同的发布者
 }
 
 // Close 关闭发布者
 func (p *Publisher) Close() {
 	if p.Running() {
-		p.Cancel()
+		p.Stream.Close()
 	}
 }
 
@@ -30,16 +31,12 @@ func (p *Publisher) Publish(streamPath string) bool {
 	p.Stream = GetStream(streamPath)
 	//检查是否已存在发布者
 	if p.Publisher != nil {
-		if p.AVRing.Timeout() {
-			p.Publisher.cancel() //单独关闭Publisher而复用Stream
-		} else {
-			return false
-		}
+		return false
 	}
 	p.Context, p.cancel = context.WithCancel(p.Stream)
 	p.Publisher = p
 	p.StartTime = time.Now()
 	//触发钩子
-	OnPublishHooks.Trigger(p.Stream)
+	TriggerHook(Hook{"Publish",p.Stream})
 	return true
 }

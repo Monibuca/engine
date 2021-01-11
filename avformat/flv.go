@@ -3,8 +3,8 @@ package avformat
 import (
 	"io"
 
-	"github.com/Monibuca/engine/v2/pool"
-	"github.com/Monibuca/engine/v2/util"
+	"github.com/Monibuca/engine/v3/pool"
+	"github.com/Monibuca/engine/v3/util"
 )
 
 const (

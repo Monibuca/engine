@@ -1,0 +1,34 @@
+package engine
+
+import (
+	"context"
+	"github.com/Monibuca/utils/v3/go2"
+)
+type Hook struct {
+	Name string
+	Payload interface{}
+}
+var Hooks = go2.NewRing[Hook]()
+
+func AddHook[T interface{}](name string,channel chan T) {
+	for hooks:= Hooks.SubRing(Hooks.Index);;hooks.GoNext(){
+		hooks.Current.Wait()
+		if name == hooks.Current.Name {
+			channel<-hooks.Current.Payload.(T)
+		}
+	}
+}
+
+func AddHookWithContext[T interface{}](name string,channel chan T,ctx context.Context) {
+	for hooks:= Hooks.SubRing(Hooks.Index);ctx.Err()==nil;hooks.GoNext(){
+		hooks.Current.Wait()
+		if name == hooks.Current.Name && ctx.Err()==nil{
+			channel<-hooks.Current.Payload.(T)
+		}
+	}
+}
+
+func TriggerHook(hook Hook) {
+	Hooks.Current.T = hook
+	Hooks.NextW()
+}
