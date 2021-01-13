@@ -71,13 +71,13 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		packet := s.FirstScreen.Clone()
 		s.startTime = packet.Timestamp // 开始时间戳，第一个关键帧的
 		s.Delay = s.AVRing.GetLast().Timestamp - packet.Timestamp
+		packet.Wait()
 		s.send(packet)
-		packet.GoNext()
+		packet.NextR()
 		// targetStartTime := s.AVRing.GetLast().Timestamp //实际开始时间戳
-		for atsent, dropping, droped := s.AudioTag == nil, false, 0; s.Err() == nil; packet.GoNext() {
+		for atsent, dropping, droped := s.AudioTag == nil, false, 0; s.Err() == nil; packet.NextR() {
 			s.TotalPacket++
 			if !dropping {
-				packet.Wait()
 				if !atsent && packet.Type == avformat.FLV_TAG_TYPE_AUDIO {
 					s.sendAv(s.AudioTag, 0)
 					atsent = true
@@ -104,7 +104,7 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		if s.AudioTag != nil {
 			s.sendAv(s.AudioTag, 0)
 		}
-		for packet := s.AVRing; s.Err() == nil; packet.GoNext() {
+		for packet := s.AVRing; s.Err() == nil; packet.NextR() {
 			s.TotalPacket++
 			s.send(packet)
 		}
@@ -119,7 +119,7 @@ func (s *Subscriber) sendAv(packet *avformat.AVPacket, t uint32) {
 	}
 }
 func (s *Subscriber) send(packet *Ring) {
-	packet.Wait()
+	
 	s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
 }
 func (s *Subscriber) checkDrop(packet *Ring) bool {
