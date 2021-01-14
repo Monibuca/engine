@@ -1,5 +1,6 @@
 // +build linux
-
+// +build !arm
+// +build !arm64
 package util
 
 import (
