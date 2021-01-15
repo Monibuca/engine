@@ -20,6 +20,7 @@ type VideoTrack struct {
 		lastIndex   byte
 		GOP         int //关键帧间隔
 	}
+	RtmpTag []byte //为rtmp协议缓存的序列帧
 }
 func (vt *VideoTrack) GetBPS(payloadLen int){
 	lastTimestamp := vt.Buffer.GetAt(vt.Info.lastIndex).Timestamp
