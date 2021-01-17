@@ -4,14 +4,6 @@ import (
 	"sync"
 )
 
-var (
-	SendPacketPool = &sync.Pool{
-		New: func() interface{} {
-			return new(SendPacket)
-		},
-	}
-)
-
 // Video or Audio
 type AVPacket struct {
 	Timestamp      uint32
@@ -46,18 +38,4 @@ func (av AVPacket) Clone() *AVPacket {
 }
 func (av *AVPacket) VideoFrameType() byte{
 	return av.Payload[0] >> 4
-}
-type SendPacket struct {
-	*AVPacket
-	Timestamp uint32
-}
-
-func (packet *SendPacket) Recycle() {
-	SendPacketPool.Put(packet)
-}
-func NewSendPacket(p *AVPacket, timestamp uint32) (result *SendPacket) {
-	result = SendPacketPool.Get().(*SendPacket)
-	result.AVPacket = p
-	result.Timestamp = timestamp
-	return
 }
