@@ -5,18 +5,17 @@ import (
 	"github.com/Monibuca/utils/v3/go2"
 	"time"
 )
-
+type AudioPack struct {
+	Timestamp uint
+	Payload []byte
+	SequenceNumber  uint16
+}
 type AudioTrack struct {
-	Buffer *go2.Ring[rtp.Packet]
-	 Info struct {
-		 PacketCount int
-		 SoundFormat byte //4bit
-		 SoundRate   int  //2bit
-		 SoundSize   byte //1bit
-		 SoundType   byte //1bit
-		 lastIndex   int
-		 BPS         int
-	 }
+	Track[AudioPack]
+	SoundFormat byte //4bit
+	SoundRate   int  //2bit
+	SoundSize   byte //1bit
+	SoundType   byte //1bit
 }
 // Push 来自发布者推送的音频
 func (at *AudioTrack) Push(timestamp uint32, payload []byte) {

@@ -1,76 +1,81 @@
 package engine
 
 import (
-	"github.com/Monibuca/utils/v3/go2"
-	"github.com/pion/rtp"
+	"context"
 	"log"
 	"time"
 )
-
+type VideoPack struct {
+	Timestamp uint
+	Payload []byte
+	IsKeyFrame bool//是否为关键帧
+	SequenceNumber  uint16 
+}
 type VideoTrack struct {
 	FirstScreen byte //最近的关键帧位置，首屏渲染
-	Buffer *go2.Ring[rtp.Packet]
+	Track[VideoPack]
 	SPS []byte
 	PPS []byte
-	Info struct {
-		PacketCount int
-		CodecID     byte
-		SPSInfo     SPSInfo
-		BPS         int
-		lastIndex   byte
-		GOP         int //关键帧间隔
-	}
-	RtmpTag []byte //为rtmp协议缓存的序列帧
-}
-func (vt *VideoTrack) GetBPS(payloadLen int){
-	lastTimestamp := vt.Buffer.GetAt(vt.Info.lastIndex).Timestamp
-	if lastTimestamp > 0 && lastTimestamp != vt.Buffer.Current.Timestamp {
-		vt.Info.BPS = payloadLen * 1000 / int(vt.Buffer.Current.Timestamp-lastTimestamp)
-	}
-	vt.Info.lastIndex = vt.Buffer.Index
+	SPSInfo     SPSInfo
+	GOP         int //关键帧间隔
+	RtmpTag []byte //rtmp需要先发送一个序列帧，包含SPS和PPS
 }
 
-// PushVideo 来自发布者推送的视频
+// Push 来自发布者推送的视频
 func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 	payloadLen := len(payload)
 	if payloadLen < 3 {
 		return
 	}
-	video := r.VideoRing
-	video.Type = FLV_TAG_TYPE_VIDEO
+	video := r.Buffer
 	video.Timestamp = timestamp
 	video.Payload = payload
-	videoFrameType := payload[0] >> 4       // 帧类型 4Bit, H264一般为1或者2
-	r.VideoInfo.CodecID = payload[0] & 0x0f // 编码类型ID 4Bit, JPEG, H263, AVC...
-	video.IsSequence = videoFrameType == 1 && payload[1] == 0
-	video.IsKeyFrame = videoFrameType == 1 || videoFrameType == 4
-	r.VideoInfo.PacketCount++
-	video.Number = r.VideoInfo.PacketCount
-	if r.VideoTag == nil {
-		if video.IsSequence {
-			r.setH264Info(video)
-		} else {
-			log.Println("no AVCSequence")
-		}
-	} else {
-		//更换AVCSequence
-		if video.IsSequence {
-			r.setH264Info(video)
-		}
-		if video.IsKeyFrame {
-			if r.FirstScreen == nil {
-				defer close(r.WaitPub)
-				r.FirstScreen = video.Clone()
-			} else {
-				oldNumber := r.FirstScreen.Number
-				r.FirstScreen.GoTo(video.Index)
-				r.VideoInfo.GOP = r.FirstScreen.Number - oldNumber
-			}
-		}
-		if !r.UseTimestamp {
-			video.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
-		}
+	video.IsKeyFrame = payload[0] & naluTypeBitmask == NALU_IDR_Picture
+	r.PacketCount++
+	video.SequenceNumber = r.PacketCount
 
-		video.NextW()
+	if video.IsKeyFrame {
+		if r.FirstScreen == nil {
+			defer close(r.WaitPub)
+			r.FirstScreen = video.SubRing(video.Index)
+		} else {
+			oldNumber := r.FirstScreen.SequenceNumber
+			r.FirstScreen.GoTo(video.Index)
+			r.GOP = r.FirstScreen.SequenceNumber - oldNumber
+		}
+	}
+
+	video.NextW()
+}
+
+
+func (vt *VideoTrack) Play(ctx context.Context,callback func(VideoPack)) {
+	ring :=vt.Buffer.SubRing(vt.FirstScreen)
+	ring.Current.Wait()
+	droped:=0
+	var action func()
+	drop := func(){
+		if ring.Current.IsKeyFrame {
+			action = send
+		} else {
+			droped++
+		}
+	}
+	send := func(){
+		callback(ring.Current)
+		pIndex := vt.Buffer.Index
+		//s.BufferLength = pIndex - ring.Index
+		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
+		if pIndex - ring.Index > 128 {
+			action = drop
+		}
+	}
+	for action =send;;ring.NextR() {
+		select {
+		case <-ctx.Done:
+			return
+		default:
+			action()
+		}
 	}
 }
