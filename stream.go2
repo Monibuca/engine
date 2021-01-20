@@ -55,7 +55,6 @@ type Stream struct {
 	VideoTracks  []VideoTrack
 	AudioTracks  []AudioTrack
 	WaitPub      chan struct{}          //用于订阅和等待发布者
-	UseTimestamp bool                   //是否采用数据包中的时间戳
 	HasAudio    bool
 	HasVideo    bool
 	EnableVideo *bool
@@ -75,7 +74,7 @@ func (r *Stream) Subscribe(s *Subscriber) {
 	if s.Stream = r;r.Err() == nil {
 		s.SubscribeTime = time.Now()
 		Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(r.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
-		s.Context, s.Cancel = context.WithCancel(r)
+		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
 		r.Subscribers = append(r.Subscribers,s)
 		r.subscribeMutex.Unlock()

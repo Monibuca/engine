@@ -26,9 +26,7 @@ type Subscriber struct {
 	context.Context
 	*Stream
 	SubscriberInfo
-	MetaData   func() error
-	OnData     func(rtp.Packet) error
-	Cancel     context.CancelFunc
+	cancel     context.CancelFunc
 	Sign       string
 	OffsetTime uint32
 	startTime  uint32
@@ -43,8 +41,9 @@ func (s *Subscriber) IsClosed() bool {
 
 // Close 关闭订阅者
 func (s *Subscriber) Close() {
-	if s.Cancel != nil {
-		s.Cancel()
+	if s.cancel != nil {
+		s.UnSubscribe(s)
+		s.cancel()
 	}
 }
 
@@ -52,7 +51,7 @@ func (s *Subscriber) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.SubscriberInfo)
 }
 //Subscribe 开始订阅
-func (s *Subscriber) Subscribe(streamPath string) (err error) {
+func (s *Subscriber) Subscribe(streamPath string) error {
 	if !config.EnableWaitStream && FindStream(streamPath) == nil {
 		return errors.Errorf("Stream not found:%s", streamPath)
 	}
@@ -60,75 +59,5 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 	if s.Context == nil {
 		return errors.Errorf("stream not exist:%s", streamPath)
 	}
-	defer s.UnSubscribe(s)
-	select {
-	//等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
-	case <-s.WaitPub:
-	case <-s.Context.Done():
-		return s.Err()
-	}
-	if s.MetaData != nil {
-		if err = s.MetaData(); err != nil {
-			return err
-		}
-	}
-	if *s.EnableVideo {
-		videoTrack:=s.VideoTracks[s.vtIndex]
-		packet := videoTrack.Buffer.SubRing(videoTrack.FirstScreen)
-		s.startTime = packet.Current.Timestamp // 开始时间戳，第一个关键帧的
-		s.Delay = videoTrack.Buffer.GetLast().Timestamp - packet.Current.Timestamp
-		s.send(packet)
-		packet.GoNext()
-		// targetStartTime := s.AVRing.GetLast().Timestamp //实际开始时间戳
-		for atsent, dropping, droped := s.AudioTag == nil, false, 0; s.Err() == nil; packet.GoNext() {
-			s.TotalPacket++
-			if !dropping {
-				packet.Current.Wait()
-				if !atsent && packet.Current.Type == avformat.FLV_TAG_TYPE_AUDIO {
-					s.sendAv(s.AudioTag, 0)
-					atsent = true
-				}
-				s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
-				// if targetStartTime > s.startTime {
-				// 	s.startTime++ //逐步追赶，使得开始时间逼近实际开始时间戳
-				// }
-				if s.checkDrop(packet) {
-					dropping = true
-					droped = 0
-				}
-			} else if packet.IsKeyFrame {
-				//遇到关键帧则退出丢帧
-				dropping = false
-				//fmt.Println("drop package ", droped)
-				s.TotalDrop += droped
-				s.send(packet)
-			} else {
-				droped++
-			}
-		}
-	} else if *s.EnableAudio {
-		audioTrack:=s.AudioTracks[s.atIndex]
-		for packet := audioTrack; s.Err() == nil; packet.Buffer.GoNext() {
-			s.TotalPacket++
-			s.send(packet)
-		}
-	}
-	return s.Err()
-}
-func (s *Subscriber) sendAv(packet *avformat.AVPacket, t uint32) {
-	s.AVPacket = packet
-	s.Timestamp = t
-	if s.OnData(&s.SendPacket) != nil {
-		s.Close()
-	}
-}
-func (s *Subscriber) send(packet *Ring) {
-	packet.Wait()
-	s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
-}
-func (s *Subscriber) checkDrop(packet *Ring) bool {
-	pIndex := s.AVRing.Index
-	s.BufferLength = pIndex - packet.Index
-	s.Delay = s.AVRing.Timestamp - packet.Timestamp
-	return s.BufferLength > s.AVRing.Size/2
+	return nil
 }

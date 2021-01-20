@@ -16,68 +16,47 @@ type AudioTrack struct {
 	SoundRate   int  //2bit
 	SoundSize   byte //1bit
 	SoundType   byte //1bit
+	ASC []byte //audio special configure
 }
 // Push 来自发布者推送的音频
 func (at *AudioTrack) Push(timestamp uint32, payload []byte) {
-	audio := at.Buffer
 	payloadLen := len(payload)
-	audio.Type = FLV_TAG_TYPE_AUDIO
-	audio.Timestamp = timestamp
-	audio.Payload = payload
-	audio.IsKeyFrame = false
-	audio.IsSequence = false
-
 	if payloadLen < 4 {
 		return
 	}
-	if payload[0] == 0xFF && (payload[1]&0xF0) == 0xF0 {
-		//将ADTS转换成ASC
-		r.AudioInfo.SoundFormat = 10
-		r.AudioInfo.SoundRate = SamplingFrequencies[(payload[2]&0x3c)>>2]
-		r.AudioInfo.SoundType = ((payload[2] & 0x1) << 2) | ((payload[3] & 0xc0) >> 6)
-		r.AudioTag = audio.ADTS2ASC()
-	} else if r.AudioTag == nil && r.AudioInfo.SoundRate == 0 {
-		audio.IsSequence = true
-		// if payloadLen < 5 {
-		// 	return
-		// }
-		r.AudioTag = audio.AVPacket.Clone()
-		tmp := payload[0]                                                      // 第一个字节保存着音频的相关信息
-		if r.AudioInfo.SoundFormat = tmp >> 4; r.AudioInfo.SoundFormat == 10 { //真的是AAC的话，后面有一个字节的详细信息
-			//0 = AAC sequence header，1 = AAC raw。
-			if aacPacketType := payload[1]; aacPacketType == 0 {
-				config1 := payload[2]
-				config2 := payload[3]
-				//audioObjectType = (config1 & 0xF8) >> 3
-				// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
-				// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
-				// 3 AAC SSR 	ISO/IEC 14496-3 subpart 4
-				// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
-				r.AudioInfo.SoundRate = SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)]
-				r.AudioInfo.SoundType = (config2 >> 3) & 0x0F //声道
-				//frameLengthFlag = (config2 >> 2) & 0x01
-				//dependsOnCoreCoder = (config2 >> 1) & 0x01
-				//extensionFlag = config2 & 0x01
-			}
-			return
+	audio := at.Buffer
+	audio.Timestamp = timestamp
+	audio.Payload = payload
+	at.GetBPS(payloadLen)
+	audio.NextW()
+}
+func (at *AudioTrack) Play(ctx context.Context,callback func(AudioPack)) {
+	ring := at.Buffer.SubRing(at.Buffer.Index)
+	ring.Current.Wait()
+	droped:=0
+	var action func()
+	drop := func(){
+		if at.Buffer.Index - ring.Index < 10 {
+			action = send
 		} else {
-			r.AudioInfo.SoundRate = SoundRate[(tmp&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
-			r.AudioInfo.SoundSize = (tmp & 0x02) >> 1        // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
-			r.AudioInfo.SoundType = tmp & 0x01               // 0 单声道，1立体声
+			droped++
 		}
 	}
-	if !r.UseTimestamp {
-		audio.Timestamp = uint32(time.Since(r.StartTime) / time.Millisecond)
+	send := func(){
+		callback(ring.Current)
+		
+		//s.BufferLength = pIndex - ring.Index
+		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
+		if at.Buffer.Index - ring.Index > 128 {
+			action = drop
+		}
 	}
-	lastTimestamp := audio.GetAt(r.AudioInfo.lastIndex).Timestamp
-	if lastTimestamp > 0 && lastTimestamp != audio.Timestamp {
-		r.AudioInfo.BPS = payloadLen * 1000 / int(audio.Timestamp-lastTimestamp)
-	}
-	r.AudioInfo.PacketCount++
-	audio.Number = r.AudioInfo.PacketCount
-	r.AudioInfo.lastIndex = audio.Index
-	audio.NextW()
-	if r.AudioInfo.PacketCount == 1 && (!*r.EnableVideo) {
-		close(r.WaitPub)
+	for action =send;;ring.NextR() {
+		select {
+		case <-ctx.Done:
+			return
+		default:
+			action()
+		}
 	}
 }

@@ -7,7 +7,7 @@ import (
 )
 type VideoPack struct {
 	Timestamp uint
-	Payload []byte
+	Payload []byte //NALU
 	IsKeyFrame bool//是否为关键帧
 	SequenceNumber  uint16 
 }
@@ -31,8 +31,7 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 	video.Timestamp = timestamp
 	video.Payload = payload
 	video.IsKeyFrame = payload[0] & naluTypeBitmask == NALU_IDR_Picture
-	r.PacketCount++
-	video.SequenceNumber = r.PacketCount
+	video.SequenceNumber = vt.PacketCount
 
 	if video.IsKeyFrame {
 		if r.FirstScreen == nil {
@@ -44,7 +43,7 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 			r.GOP = r.FirstScreen.SequenceNumber - oldNumber
 		}
 	}
-
+	vt.GetBPS(payloadLen)
 	video.NextW()
 }
 

@@ -2,10 +2,11 @@ package engine
 
 import (
 	"encoding/json"
-	"github.com/Monibuca/engine/v3/util"
 	"io/ioutil"
 	"log"
 	"time" // colorable
+
+	"github.com/Monibuca/engine/v3/util"
 
 	"github.com/BurntSushi/toml"
 	. "github.com/logrusorgru/aurora"
@@ -31,7 +32,7 @@ func Run(configFile string) (err error) {
 		Print(Red("read config file error:"), err)
 		return
 	}
-	Print(BgGreen(Black("Ⓜ starting monibuca ")), BrightBlue(Version))
+	Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
 	var cg map[string]interface{}
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
 		if cfg, ok := cg["Engine"]; ok {

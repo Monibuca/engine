@@ -17,6 +17,7 @@ type Track[T TrackPack] struct {
 }
 
 func (t *Track[T]) GetBPS(payloadLen int){
+	t.PacketCount++
 	if lastTimestamp := t.Buffer.GetAt(t.lastIndex).Timestamp;lastTimestamp > 0 && lastTimestamp != t.Buffer.Current.Timestamp {
 		t.BPS = payloadLen * 1000 / int(t.Buffer.Current.Timestamp-lastTimestamp)
 	}
