@@ -4,11 +4,24 @@ import (
 	"context"
 	"log"
 	"time"
+	. "github.com/Monibuca/engine/v3/avformat"
 )
+
+const (
+	fuaHeaderSize       = 2
+	stapaHeaderSize     = 1
+	stapaNALULengthSize = 2
+
+	naluTypeBitmask   = 0x1F
+	naluRefIdcBitmask = 0x60
+	fuaStartBitmask   = 0x80 //1000 0000
+	fuaEndBitmask     = 0x40 //0100 0000
+)
+
 type VideoPack struct {
 	Timestamp uint
 	Payload []byte //NALU
-	IsKeyFrame bool//是否为关键帧
+	NalType int
 	SequenceNumber  uint16 
 }
 type VideoTrack struct {
@@ -24,27 +37,66 @@ type VideoTrack struct {
 // Push 来自发布者推送的视频
 func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 	payloadLen := len(payload)
-	if payloadLen < 3 {
+	if payloadLen == 0 {
 		return
 	}
-	video := r.Buffer
+	video := vt.Buffer
+	video.NalType := payload[0] & naluTypeBitmask
 	video.Timestamp = timestamp
-	video.Payload = payload
-	video.IsKeyFrame = payload[0] & naluTypeBitmask == NALU_IDR_Picture
+	
+	video.IsKeyFrame = false
 	video.SequenceNumber = vt.PacketCount
 
-	if video.IsKeyFrame {
-		if r.FirstScreen == nil {
-			defer close(r.WaitPub)
-			r.FirstScreen = video.SubRing(video.Index)
-		} else {
-			oldNumber := r.FirstScreen.SequenceNumber
-			r.FirstScreen.GoTo(video.Index)
-			r.GOP = r.FirstScreen.SequenceNumber - oldNumber
+	switch video.NalType {
+	case NALU_STAPA:
+		for currOffset, naluSize := stapaHeaderSize, 0; currOffset < len(payload); currOffset += naluSize {
+			naluSize = int(binary.BigEndian.Uint16(payload[currOffset:]))
+			currOffset += stapaNALULengthSize
+			if currOffset+len(payload) < currOffset+naluSize {
+				Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, len(payload)-currOffset)
+				return
+			}
+			vt.Push(timestamp, payload[currOffset:currOffset+naluSize])
 		}
+	case NALU_FUA:
+		if len(payload) < fuaHeaderSize {
+			Printf("Payload is not large enough to be FU-A")
+			return
+		}
+		if payload[1]&fuaStartBitmask != 0 {
+			naluRefIdc := payload[0] & naluRefIdcBitmask
+			fragmentedNaluType := payload[1] & naluTypeBitmask
+			video.Payload = append([]byte{}, payload...)
+			video.Payload[fuaHeaderSize-1] = naluRefIdc | fragmentedNaluType
+		} else {
+			video.Payload = append(video.Payload, payload[fuaHeaderSize:]...)
+		}
+		if payload[1]&fuaEndBitmask != 0 {
+			vt.Push(timestamp, video.Payload[fuaHeaderSize-1:])
+		}
+	case NALU_SPS:
+		vt.SPS = payload
+	case NALU_PPS:
+		vt.PPS = payload
+	case NALU_Access_Unit_Delimiter:
+
+	case NALU_IDR_Picture:
+		if vt.FirstScreen == nil {
+			defer close(vt.WaitPub)
+			vt.FirstScreen = video.SubRing(video.Index)
+		} else {
+			vt.GOP = video.Index - vt.FirstScreen.SequenceNumber
+			vt.FirstScreen.GoTo(video.Index)
+		}
+		fallthrough
+	case NALU_Non_IDR_Picture:
+		video.Payload = payload
+		vt.GetBPS(payloadLen)
+		video.NextW()
+	case NALU_SEI:
+	default:
+		Printf("nalType not support yet:%d", video.NalType)
 	}
-	vt.GetBPS(payloadLen)
-	video.NextW()
 }
 
 
@@ -54,7 +106,7 @@ func (vt *VideoTrack) Play(ctx context.Context,callback func(VideoPack)) {
 	droped:=0
 	var action func()
 	drop := func(){
-		if ring.Current.IsKeyFrame {
+		if ring.Current.NalType == NALU_IDR_Picture {
 			action = send
 		} else {
 			droped++
