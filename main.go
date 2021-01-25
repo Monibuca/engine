@@ -9,11 +9,15 @@ import (
 	"strings"
 	"time" // colorable
 
+	"github.com/Monibuca/utils/v3"
+
 	"github.com/Monibuca/engine/v3/util"
 
 	"github.com/BurntSushi/toml"
 	. "github.com/logrusorgru/aurora"
 )
+
+const Version = "3.0.1"
 
 var (
 	config = &struct {
@@ -46,7 +50,7 @@ func InstallPlugin(opt *PluginConfig) {
 	if parts := strings.Split(opt.Dir, "@"); len(parts) > 1 {
 		opt.Version = parts[len(parts)-1]
 	}
-	Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
+	utils.Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
 }
 
 // Run 启动Monibuca引擎
@@ -54,10 +58,10 @@ func Run(configFile string) (err error) {
 	err = util.CreateShutdownScript()
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		Print(Red("read config file error:"), err)
+		utils.Print(Red("read config file error:"), err)
 		return
 	}
-	Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
+	utils.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
 	var cg map[string]interface{}
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
 		if cfg, ok := cg["Engine"]; ok {
@@ -81,7 +85,7 @@ func Run(configFile string) (err error) {
 			}
 		}
 	} else {
-		Print(Red("decode config file error:"), err)
+		utils.Print(Red("decode config file error:"), err)
 	}
 	return
 }

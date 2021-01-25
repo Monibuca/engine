@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/binary"
-	utils "github.com/Monibuca/utils/v3"
+	"github.com/Monibuca/utils/v3"
 	"github.com/Monibuca/utils/v3/codec"
 )
 
@@ -19,20 +19,19 @@ const (
 )
 
 type VideoPack struct {
-	Timestamp uint
-	Payload []byte //NALU
-	NalType int
-	SequenceNumber  uint16 
+	Timestamp uint32
+	Payload   []byte //NALU
+	NalType   byte
+	Sequence  int
 }
 type VideoTrack struct {
 	FirstScreen byte //最近的关键帧位置，首屏渲染
-	Track[VideoPack]
+	Track_Video
 	SPS     []byte
 	PPS     []byte
 	SPSInfo codec.SPSInfo
-	GOP     int //关键帧间隔
+	GOP     byte   //关键帧间隔
 	RtmpTag []byte //rtmp需要先发送一个序列帧，包含SPS和PPS
-	WaitIDR chan struct{} //等待首个关键帧
 }
 
 // Push 来自发布者推送的视频
@@ -41,12 +40,11 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 	if payloadLen == 0 {
 		return
 	}
-	vbr:=vt.Buffer
+	vbr := vt.Buffer
 	video := vbr.Current
 	video.NalType = payload[0] & naluTypeBitmask
 	video.Timestamp = timestamp
-	video.SequenceNumber = vt.PacketCount
-
+	video.Sequence = vt.PacketCount
 	switch video.NalType {
 	case codec.NALU_STAPA:
 		for currOffset, naluSize := stapaHeaderSize, 0; currOffset < len(payload); currOffset += naluSize {
@@ -76,7 +74,7 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 		}
 	case codec.NALU_SPS:
 		vt.SPS = payload
-		vt.SPSInfo,_ = codec.ParseSPS(payload)
+		vt.SPSInfo, _ = codec.ParseSPS(payload)
 	case codec.NALU_PPS:
 		vt.PPS = payload
 
@@ -85,15 +83,14 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 	case codec.NALU_IDR_Picture:
 		if vt.RtmpTag == nil {
 			vt.setRtmpTag()
-			defer close(vt.WaitIDR)
 		} else {
-			vt.GOP = vbr.Index - vbr.GetAt(vt.FirstScreen).SequenceNumber
+			vt.GOP = vbr.Index - vt.FirstScreen
 		}
 		vt.FirstScreen = vbr.Index
 		fallthrough
 	case codec.NALU_Non_IDR_Picture:
 		video.Payload = payload
-		vt.Track.GetBPS(payloadLen)
+		vt.Track_Video.GetBPS(payloadLen)
 		vbr.NextW()
 	case codec.NALU_SEI:
 	default:
@@ -101,37 +98,37 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 	}
 }
 
-func(vt *VideoTrack) setRtmpTag(){
-	lenSPS,lenPPS:= len(vt.SPS), len(vt.PPS)
+func (vt *VideoTrack) setRtmpTag() {
+	lenSPS, lenPPS := len(vt.SPS), len(vt.PPS)
 	vt.RtmpTag = append([]byte{}, codec.RTMP_AVC_HEAD...)
 	copy(vt.RtmpTag[6:], vt.SPS[1:4])
 	vt.RtmpTag = append(vt.RtmpTag, 0xE1, byte(lenSPS>>8), byte(lenSPS))
-	vt.RtmpTag = append(vt.RtmpTag,vt.SPS...)
+	vt.RtmpTag = append(vt.RtmpTag, vt.SPS...)
 	vt.RtmpTag = append(append(vt.RtmpTag, 0x01, byte(lenPPS>>8), byte(lenPPS)), vt.PPS...)
 }
 
-func (vt *VideoTrack) Play(ctx context.Context,callback func(VideoPack)) {
-	ring :=vt.Buffer.SubRing(vt.FirstScreen)
+func (vt *VideoTrack) Play(ctx context.Context, callback func(VideoPack)) {
+	ring := vt.Buffer.SubRing(vt.FirstScreen)
 	ring.Current.Wait()
-	droped:=0
-	var action,send func()
-	drop := func(){
+	droped := 0
+	var action, send func()
+	drop := func() {
 		if ring.Current.NalType == codec.NALU_IDR_Picture {
 			action = send
 		} else {
 			droped++
 		}
 	}
-	send = func(){
-		callback(ring.Current.T)
+	send = func() {
+		callback(ring.Current.VideoPack)
 		pIndex := vt.Buffer.Index
 		//s.BufferLength = pIndex - ring.Index
 		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
-		if pIndex - ring.Index > 128 {
+		if pIndex-ring.Index > 128 {
 			action = drop
 		}
 	}
-	for action =send;;ring.NextR() {
+	for action = send; ; ring.NextR() {
 		select {
 		case <-ctx.Done():
 			return
