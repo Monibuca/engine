@@ -93,6 +93,7 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 		vt.Track_Video.GetBPS(payloadLen)
 		vbr.NextW()
 	case codec.NALU_SEI:
+	case codec.NALU_Filler_Data:
 	default:
 		utils.Printf("nalType not support yet:%d", video.NalType)
 	}

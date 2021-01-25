@@ -28,8 +28,8 @@ type Subscriber struct {
 	Sign       string
 	OffsetTime uint32
 	startTime  uint32
-	vtIndex int //第几个视频轨
-	atIndex int //第几个音频轨
+	vtIndex    int //第几个视频轨
+	atIndex    int //第几个音频轨
 }
 
 // IsClosed 检查订阅者是否已经关闭
@@ -48,6 +48,7 @@ func (s *Subscriber) Close() {
 func (s *Subscriber) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.SubscriberInfo)
 }
+
 //Subscribe 开始订阅
 func (s *Subscriber) Subscribe(streamPath string) error {
 	if !config.EnableWaitStream && FindStream(streamPath) == nil {
@@ -57,5 +58,6 @@ func (s *Subscriber) Subscribe(streamPath string) error {
 	if s.Context == nil {
 		return errors.Errorf("stream not exist:%s", streamPath)
 	}
+	<-s.WaitPub
 	return nil
 }
