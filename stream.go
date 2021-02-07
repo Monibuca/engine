@@ -2,17 +2,19 @@ package engine
 
 import (
 	"context"
-	utils "github.com/Monibuca/utils/v3"
-	. "github.com/logrusorgru/aurora"
 	"sync"
 	"time"
+
+	utils "github.com/Monibuca/utils/v3"
+	. "github.com/logrusorgru/aurora"
 )
 
-var streamCollection sync.Map
+// Streams 所有的流集合
+var Streams sync.Map
 
 //FindStream 根据流路径查找流
 func FindStream(streamPath string) *Stream {
-	if s, ok := streamCollection.Load(streamPath); ok {
+	if s, ok := Streams.Load(streamPath); ok {
 		return s.(*Stream)
 	}
 	return nil
@@ -20,7 +22,7 @@ func FindStream(streamPath string) *Stream {
 
 //GetStream 根据流路径获取流，如果不存在则创建一个新的
 func GetStream(streamPath string) (result *Stream) {
-	item, loaded := streamCollection.LoadOrStore(streamPath, &Stream{
+	item, loaded := Streams.LoadOrStore(streamPath, &Stream{
 		StreamPath:  streamPath,
 		HasVideo:    true,
 		HasAudio:    true,
@@ -51,10 +53,10 @@ type Stream struct {
 	StreamPath string
 	StartTime  time.Time //流的创建时间
 	*Publisher
-	Subscribers []*Subscriber // 订阅者
+	Subscribers    []*Subscriber // 订阅者
 	VideoTracks    []*VideoTrack
 	AudioTracks    []*AudioTrack
-	WaitPub        chan struct{} //用于订阅和等待发布者
+	WaitPub        chan struct{} `json:"-"` //用于订阅和等待发布者
 	HasAudio       bool
 	HasVideo       bool
 	EnableVideo    *bool
@@ -77,7 +79,7 @@ func (r *Stream) AddAudioTrack() (at *AudioTrack) {
 func (r *Stream) Close() {
 	r.cancel()
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
-	streamCollection.Delete(r.StreamPath)
+	Streams.Delete(r.StreamPath)
 	TriggerHook(Hook{"StreamClose", r})
 }
 

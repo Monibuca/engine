@@ -22,7 +22,7 @@ type SubscriberInfo struct {
 // Subscriber 订阅者实体定义
 type Subscriber struct {
 	context.Context
-	*Stream
+	*Stream `json:"-"`
 	SubscriberInfo
 	cancel     context.CancelFunc
 	Sign       string

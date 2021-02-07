@@ -2,11 +2,15 @@ package engine
 
 import (
 	"context"
+
 	"github.com/Monibuca/utils/v3/codec"
 )
 
+type Track interface {
+	Push(uint32, []byte)
+}
 type Track_Audio struct {
-	Buffer      *Ring_Audio
+	Buffer      *Ring_Audio `json:"-"`
 	PacketCount int
 	CodecID     byte
 	BPS         int
@@ -22,7 +26,7 @@ func (t *Track_Audio) GetBPS(payloadLen int) {
 }
 
 type Track_Video struct {
-	Buffer      *Ring_Video
+	Buffer      *Ring_Video `json:"-"`
 	PacketCount int
 	CodecID     byte
 	BPS         int

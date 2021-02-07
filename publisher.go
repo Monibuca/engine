@@ -10,7 +10,7 @@ type Publisher struct {
 	context.Context
 	cancel        context.CancelFunc
 	AutoUnPublish bool //	当无人订阅时自动停止发布
-	*Stream
+	*Stream `json:"-"` 
 	Type           string //类型，用来区分不同的发布者
 }
 
