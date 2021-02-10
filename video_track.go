@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/binary"
+
 	"github.com/Monibuca/utils/v3"
 	"github.com/Monibuca/utils/v3/codec"
 )
@@ -27,11 +28,12 @@ type VideoPack struct {
 type VideoTrack struct {
 	FirstScreen byte //最近的关键帧位置，首屏渲染
 	Track_Video
-	SPS     []byte
-	PPS     []byte
-	SPSInfo codec.SPSInfo
-	GOP     byte   //关键帧间隔
-	RtmpTag []byte //rtmp需要先发送一个序列帧，包含SPS和PPS
+	SPS       []byte
+	PPS       []byte
+	SPSInfo   codec.SPSInfo
+	GOP       byte   //关键帧间隔
+	RtmpTag   []byte //rtmp需要先发送一个序列帧，包含SPS和PPS
+	WaitFirst chan struct{}
 }
 
 // Push 来自发布者推送的视频
@@ -82,11 +84,13 @@ func (vt *VideoTrack) Push(timestamp uint32, payload []byte) {
 
 	case codec.NALU_IDR_Picture:
 		if vt.RtmpTag == nil {
+			vt.FirstScreen = vbr.Index
 			vt.setRtmpTag()
+			close(vt.WaitFirst)
 		} else {
 			vt.GOP = vbr.Index - vt.FirstScreen
+			vt.FirstScreen = vbr.Index
 		}
-		vt.FirstScreen = vbr.Index
 		fallthrough
 	case codec.NALU_Non_IDR_Picture:
 		video.Payload = payload
@@ -109,6 +113,11 @@ func (vt *VideoTrack) setRtmpTag() {
 }
 
 func (vt *VideoTrack) Play(ctx context.Context, callback func(VideoPack)) {
+	select {
+	case <-vt.WaitFirst:
+	case <-ctx.Done():
+		return
+	}
 	ring := vt.Buffer.SubRing(vt.FirstScreen)
 	ring.Current.Wait()
 	droped := 0

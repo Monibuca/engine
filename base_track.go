@@ -47,6 +47,11 @@ type TrackCP struct {
 }
 
 func (tcp *TrackCP) Play(ctx context.Context, cba func(AudioPack), cbv func(VideoPack)) {
+	select {
+	case <-tcp.Video.WaitFirst:
+	case <-ctx.Done():
+		return
+	}
 	vr := tcp.Video.Buffer.SubRing(tcp.Video.FirstScreen)
 	ar := tcp.Audio.Buffer.SubRing(tcp.Audio.Buffer.Index)
 	vr.Current.Wait()

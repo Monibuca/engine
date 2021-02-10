@@ -28,7 +28,6 @@ func GetStream(streamPath string) (result *Stream) {
 		HasAudio:    true,
 		EnableAudio: &config.EnableAudio,
 		EnableVideo: &config.EnableVideo,
-		WaitPub:     make(chan struct{}),
 	})
 	result = item.(*Stream)
 	if !loaded {
@@ -56,7 +55,6 @@ type Stream struct {
 	Subscribers    []*Subscriber // 订阅者
 	VideoTracks    []*VideoTrack
 	AudioTracks    []*AudioTrack
-	WaitPub        chan struct{} `json:"-"` //用于订阅和等待发布者
 	HasAudio       bool
 	HasVideo       bool
 	EnableVideo    *bool
@@ -66,6 +64,7 @@ type Stream struct {
 
 func (r *Stream) AddVideoTrack() (vt *VideoTrack) {
 	vt = new(VideoTrack)
+	vt.WaitFirst = make(chan struct{})
 	vt.Buffer = NewRing_Video()
 	r.VideoTracks = append(r.VideoTracks, vt)
 	return
@@ -80,7 +79,7 @@ func (r *Stream) Close() {
 	r.cancel()
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 	Streams.Delete(r.StreamPath)
-	TriggerHook(Hook{"StreamClose", r})
+	TriggerHook(Hook{HOOK_STREAMCLOSE, r})
 }
 
 //Subscribe 订阅流
@@ -93,7 +92,7 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		r.Subscribers = append(r.Subscribers, s)
 		r.subscribeMutex.Unlock()
 		utils.Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-		TriggerHook(Hook{"Subscribe", s})
+		TriggerHook(Hook{HOOK_SUBSCRIBE, s})
 	}
 }
 
@@ -104,7 +103,7 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 		r.Subscribers = DeleteSliceItem_Subscriber(r.Subscribers, s)
 		r.subscribeMutex.Unlock()
 		utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-		TriggerHook(Hook{"UnSubscribe", s})
+		TriggerHook(Hook{HOOK_UNSUBSCRIBE, s})
 		if len(r.Subscribers) == 0 && (r.Publisher == nil || r.Publisher.AutoUnPublish) {
 			r.Close()
 		}

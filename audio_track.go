@@ -16,7 +16,6 @@ type AudioTrack struct {
 	SoundSize   byte   //1bit
 	SoundType   byte   //1bit
 	RtmpTag     []byte //rtmp协议需要先发这个帧
-	ASC         []byte //audio special configure
 }
 
 // Push 来自发布者推送的音频

@@ -6,26 +6,35 @@ import (
 	"sync"
 	"time"
 )
+
 type Hook struct {
-	Name string
+	Name    string
 	Payload interface{}
 }
+
+const (
+	HOOK_SUBSCRIBE   = "Subscribe"
+	HOOK_UNSUBSCRIBE = "UnSubscibe"
+	HOOK_STREAMCLOSE = "StreamClose"
+	HOOK_PUBLISH     = "Publish"
+)
+
 var Hooks = NewRing_Hook()
 
-func AddHook(name string,channel chan interface{}) {
-	for hooks:= Hooks.SubRing(Hooks.Index);;hooks.GoNext(){
+func AddHook(name string, channel chan interface{}) {
+	for hooks := Hooks.SubRing(Hooks.Index); ; hooks.GoNext() {
 		hooks.Current.Wait()
 		if name == hooks.Current.Name {
-			channel<-hooks.Current.Payload
+			channel <- hooks.Current.Payload
 		}
 	}
 }
 
-func AddHookWithContext(name string,channel chan interface{},ctx context.Context) {
-	for hooks:= Hooks.SubRing(Hooks.Index);ctx.Err()==nil;hooks.GoNext(){
+func AddHookWithContext(name string, channel chan interface{}, ctx context.Context) {
+	for hooks := Hooks.SubRing(Hooks.Index); ctx.Err() == nil; hooks.GoNext() {
 		hooks.Current.Wait()
-		if name == hooks.Current.Name && ctx.Err()==nil{
-			channel<-hooks.Current.Payload
+		if name == hooks.Current.Name && ctx.Err() == nil {
+			channel <- hooks.Current.Payload
 		}
 	}
 }
@@ -34,7 +43,6 @@ func TriggerHook(hook Hook) {
 	Hooks.Current.Hook = hook
 	Hooks.NextW()
 }
-
 
 type RingItem_Hook struct {
 	Hook
@@ -46,20 +54,22 @@ type RingItem_Hook struct {
 // Ring 环形缓冲，使用数组实现
 type Ring_Hook struct {
 	Current *RingItem_Hook
-	buffer []RingItem_Hook
-	Index  byte
+	buffer  []RingItem_Hook
+	Index   byte
 }
-func (r *Ring_Hook) SubRing(index byte) *Ring_Hook{
-	result:= &Ring_Hook{
-		buffer:r.buffer,
+
+func (r *Ring_Hook) SubRing(index byte) *Ring_Hook {
+	result := &Ring_Hook{
+		buffer: r.buffer,
 	}
 	result.GoTo(index)
 	return result
 }
+
 // NewRing 创建Ring
 func NewRing_Hook() (r *Ring_Hook) {
 	r = &Ring_Hook{
-		buffer : make([]RingItem_Hook, 256),
+		buffer: make([]RingItem_Hook, 256),
 	}
 	r.GoTo(0)
 	r.Current.Add(1)
@@ -92,13 +102,13 @@ func (r *Ring_Hook) GetLast() *RingItem_Hook {
 
 // GoNext 移动到下一个位置
 func (r *Ring_Hook) GoNext() {
-	r.Index = r.Index+1
+	r.Index = r.Index + 1
 	r.Current = &r.buffer[r.Index]
 }
 
 // GoBack 移动到上一个位置
 func (r *Ring_Hook) GoBack() {
-	r.Index = r.Index-1
+	r.Index = r.Index - 1
 	r.Current = &r.buffer[r.Index]
 }
 
@@ -112,7 +122,7 @@ func (r *Ring_Hook) NextW() {
 }
 
 // NextR 读下一个
-func (r *Ring_Hook) NextR(){
+func (r *Ring_Hook) NextR() {
 	r.Current.Wait()
 	r.GoNext()
 }
@@ -129,8 +139,8 @@ func (r *Ring_Hook) GetBuffer() *bytes.Buffer {
 // Timeout 发布者是否超时了
 func (r *Ring_Hook) Timeout(t time.Duration) bool {
 	// 如果设置为0则表示永不超时
-	if t==0 {
+	if t == 0 {
 		return false
 	}
-	return time.Since(r.Current.UpdateTime) >t
+	return time.Since(r.Current.UpdateTime) > t
 }

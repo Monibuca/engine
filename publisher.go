@@ -47,6 +47,6 @@ func (p *Publisher) Publish(streamPath string) bool {
 	p.Publisher = p
 	p.StartTime = time.Now()
 	//触发钩子
-	TriggerHook(Hook{"Publish", p.Stream})
+	TriggerHook(Hook{HOOK_PUBLISH, p.Stream})
 	return true
 }

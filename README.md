@@ -57,7 +57,7 @@ rec_video = func(msg *Chunk) {
             nalus = nalus[nalulen+nalulenSize:]
         }
     }
-    close(stream.WaitPub)
+    close(vt.WaitFirst)
 }
 ```
 在填充数据之前，需要获取到SPS和PPS，然后设置好，因为订阅者需要先发送这个数据

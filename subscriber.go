@@ -58,6 +58,5 @@ func (s *Subscriber) Subscribe(streamPath string) error {
 	if s.Context == nil {
 		return errors.Errorf("stream not exist:%s", streamPath)
 	}
-	<-s.WaitPub
 	return nil
 }
