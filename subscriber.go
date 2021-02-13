@@ -47,6 +47,11 @@ func (s *Subscriber) Close() {
 
 //Subscribe 开始订阅
 func (s *Subscriber) Subscribe(streamPath string) (err error) {
+	return s.SubscribeWithContext(streamPath, nil)
+}
+
+// SubscribeWithContext 带额外取消功能的订阅
+func (s *Subscriber) SubscribeWithContext(streamPath string, ctx context.Context) (err error) {
 	if !config.EnableWaitStream && FindStream(streamPath) == nil {
 		return errors.Errorf("Stream not found:%s", streamPath)
 	}
@@ -55,11 +60,17 @@ func (s *Subscriber) Subscribe(streamPath string) (err error) {
 		return errors.Errorf("stream not exist:%s", streamPath)
 	}
 	defer s.UnSubscribe(s)
+	var done <-chan struct{}
+	if ctx != nil {
+		done = ctx.Done()
+	}
 	select {
 	//等待发布者首屏数据，如果发布者尚为发布，则会等待，否则就会往下执行
 	case <-s.WaitPub:
 	case <-s.Context.Done():
 		return s.Err()
+	case <-done:
+		return ctx.Err()
 	}
 	if s.MetaData != nil {
 		if err = s.MetaData(s.Stream); err != nil {
@@ -119,7 +130,7 @@ func (s *Subscriber) sendAv(packet *avformat.AVPacket, t uint32) {
 	}
 }
 func (s *Subscriber) send(packet *Ring) {
-	
+
 	s.sendAv(&packet.AVPacket, packet.Timestamp-s.startTime)
 }
 func (s *Subscriber) checkDrop(packet *Ring) bool {
