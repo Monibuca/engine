@@ -8,10 +8,12 @@ import (
 // Publisher 发布者实体定义
 type Publisher struct {
 	context.Context
-	cancel        context.CancelFunc
-	AutoUnPublish bool //	当无人订阅时自动停止发布
-	*Stream       `json:"-"`
-	Type          string //类型，用来区分不同的发布者
+	cancel           context.CancelFunc
+	AutoUnPublish    bool //	当无人订阅时自动停止发布
+	*Stream          `json:"-"`
+	Type             string      //类型，用来区分不同的发布者
+	OriginVideoTrack *VideoTrack //原始视频轨
+	OriginAudioTrack *AudioTrack //原始音频轨
 }
 
 // Close 关闭发布者
@@ -23,11 +25,17 @@ func (p *Publisher) Close() {
 
 // Dispose 释放RingBuffer的锁，防止订阅者一直阻塞读取
 func (p *Publisher) Dispose() {
+	p.OriginVideoTrack.Buffer.Current.Done()
+	p.OriginAudioTrack.Buffer.Current.Done()
 	for _, vt := range p.Stream.VideoTracks {
-		vt.Buffer.Current.Done()
+		if vt != p.OriginVideoTrack {
+			vt.Buffer.Current.Done()
+		}
 	}
 	for _, at := range p.Stream.AudioTracks {
-		at.Buffer.Current.Done()
+		if at != p.OriginAudioTrack {
+			at.Buffer.Current.Done()
+		}
 	}
 }
 

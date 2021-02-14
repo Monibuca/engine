@@ -21,15 +21,15 @@ const Version = "3.0.1"
 
 var (
 	config = &struct {
-		EnableWaitStream bool
-		EnableAudio      bool
-		EnableVideo      bool
-		PublishTimeout   time.Duration
-	}{true, true, true, time.Minute}
+		EnableAudio    bool
+		EnableVideo    bool
+		PublishTimeout time.Duration
+	}{true, true, time.Minute}
 	// ConfigRaw 配置信息的原始数据
-	ConfigRaw []byte
-	StartTime time.Time                        //启动时间
-	Plugins   = make(map[string]*PluginConfig) // Plugins 所有的插件配置
+	ConfigRaw     []byte
+	StartTime     time.Time                        //启动时间
+	Plugins       = make(map[string]*PluginConfig) // Plugins 所有的插件配置
+	HasTranscoder bool
 )
 
 //PluginConfig 插件配置定义

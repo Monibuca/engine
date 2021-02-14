@@ -24,22 +24,12 @@ func FindStream(streamPath string) *Stream {
 func GetStream(streamPath string) (result *Stream) {
 	item, loaded := Streams.LoadOrStore(streamPath, &Stream{
 		StreamPath:  streamPath,
-		HasVideo:    true,
-		HasAudio:    true,
-		EnableAudio: &config.EnableAudio,
-		EnableVideo: &config.EnableVideo,
+		AudioTracks: make(map[string]*AudioTrack),
+		VideoTracks: make(map[string]*VideoTrack),
 	})
 	result = item.(*Stream)
 	if !loaded {
 		result.Context, result.cancel = context.WithCancel(context.Background())
-		if config.EnableVideo {
-			result.EnableVideo = &result.HasVideo
-		}
-		if config.EnableAudio {
-			result.EnableAudio = &result.HasAudio
-		}
-		result.AddVideoTrack()
-		result.AddAudioTrack()
 		utils.Print(Green("Stream create:"), BrightCyan(streamPath))
 	}
 	return
@@ -53,28 +43,33 @@ type Stream struct {
 	StartTime  time.Time //流的创建时间
 	*Publisher
 	Subscribers    []*Subscriber // 订阅者
-	VideoTracks    []*VideoTrack
-	AudioTracks    []*AudioTrack
-	HasAudio       bool
-	HasVideo       bool
-	EnableVideo    *bool
-	EnableAudio    *bool
+	VideoTracks    map[string]*VideoTrack
+	AudioTracks    map[string]*AudioTrack
 	subscribeMutex sync.Mutex
+	audioRW        sync.RWMutex
+	videoRW        sync.RWMutex
 }
 
-func (r *Stream) AddVideoTrack() (vt *VideoTrack) {
-	vt = new(VideoTrack)
-	vt.WaitFirst = make(chan struct{})
-	vt.Buffer = NewRing_Video()
-	r.VideoTracks = append(r.VideoTracks, vt)
-	return
+func (r *Stream) AddVideoTrack(codec string, vt *VideoTrack) *VideoTrack {
+	if vt == nil {
+		vt = NewVideoTrack()
+	}
+	r.videoRW.Lock()
+	r.VideoTracks[codec] = vt
+	r.videoRW.Unlock()
+	return vt
 }
-func (r *Stream) AddAudioTrack() (at *AudioTrack) {
-	at = new(AudioTrack)
-	at.Buffer = NewRing_Audio()
-	r.AudioTracks = append(r.AudioTracks, at)
-	return
+
+func (r *Stream) AddAudioTrack(codec string, at *AudioTrack) *AudioTrack {
+	if at == nil {
+		at = NewAudioTrack()
+	}
+	r.audioRW.Lock()
+	r.AudioTracks[codec] = at
+	r.audioRW.Unlock()
+	return at
 }
+
 func (r *Stream) Close() {
 	r.cancel()
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
@@ -86,7 +81,7 @@ func (r *Stream) Close() {
 func (r *Stream) Subscribe(s *Subscriber) {
 	if s.Stream = r; r.Err() == nil {
 		s.SubscribeTime = time.Now()
-		utils.Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(r.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
+		utils.Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
 		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
 		r.Subscribers = append(r.Subscribers, s)
@@ -116,10 +111,4 @@ func DeleteSliceItem_Subscriber(slice []*Subscriber, item *Subscriber) []*Subscr
 		}
 	}
 	return slice
-}
-func (r *Stream) PushVideo(ts uint32, payload []byte) {
-	r.VideoTracks[0].Push(ts, payload)
-}
-func (r *Stream) PushAudio(ts uint32, payload []byte) {
-	r.AudioTracks[0].Push(ts, payload)
 }

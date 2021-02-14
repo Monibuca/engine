@@ -11,12 +11,17 @@ type Hook struct {
 	Name    string
 	Payload interface{}
 }
+type TransCodeReq struct {
+	*Subscriber
+	RequestCodec string
+}
 
 const (
-	HOOK_SUBSCRIBE   = "Subscribe"
-	HOOK_UNSUBSCRIBE = "UnSubscibe"
-	HOOK_STREAMCLOSE = "StreamClose"
-	HOOK_PUBLISH     = "Publish"
+	HOOK_SUBSCRIBE          = "Subscribe"
+	HOOK_UNSUBSCRIBE        = "UnSubscibe"
+	HOOK_STREAMCLOSE        = "StreamClose"
+	HOOK_PUBLISH            = "Publish"
+	HOOK_REQUEST_TRANSAUDIO = "RequestTransAudio"
 )
 
 var Hooks = NewRing_Hook()
