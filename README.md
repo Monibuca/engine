@@ -65,11 +65,11 @@ rec_video = func(msg *Chunk) {
 
 # 订阅插件如何订阅流
 
-
 ```go
-var subscriber engine.Subscriber
-subscriber.Type = "RTMP"
-subscriber.ID = fmt.Sprintf("%s|%d", conn.RemoteAddr().String(), nc.streamID)
+subscriber := engine.Subscriber{
+    Type: "RTMP",
+    ID:   fmt.Sprintf("%s|%d", conn.RemoteAddr().String(), nc.streamID),
+}
 if err = subscriber.Subscribe(streamPath); err == nil {
     streams[nc.streamID] = &subscriber
     err = nc.SendMessage(SEND_CHUNK_SIZE_MESSAGE, uint32(nc.writeChunkSize))
@@ -77,50 +77,40 @@ if err = subscriber.Subscribe(streamPath); err == nil {
     err = nc.SendMessage(SEND_STREAM_BEGIN_MESSAGE, nil)
     err = nc.SendMessage(SEND_PLAY_RESPONSE_MESSAGE, newPlayResponseMessageData(nc.streamID, NetStream_Play_Reset, Level_Status))
     err = nc.SendMessage(SEND_PLAY_RESPONSE_MESSAGE, newPlayResponseMessageData(nc.streamID, NetStream_Play_Start, Level_Status))
-    vt, at := subscriber.VideoTracks[0], subscriber.AudioTracks[0]
-    err = nc.SendMessage(SEND_FULL_VDIEO_MESSAGE, &AVPack{Payload: vt.RtmpTag})
-    if at.SoundFormat == 10 {
-        err = nc.SendMessage(SEND_FULL_AUDIO_MESSAGE, &AVPack{Payload: at.RtmpTag})
-    }
-    var lastAudioTime, lastVideoTime uint32
-    go (&engine.TrackCP{at, vt}).Play(subscriber.Context, func(pack engine.AudioPack) {
-        if lastAudioTime == 0 {
-            lastAudioTime = pack.Timestamp
-        }
-        t := pack.Timestamp - lastAudioTime
-        lastAudioTime = pack.Timestamp
-        l := len(pack.Payload) + 1
-        if at.SoundFormat == 10 {
-            l++
-        }
-        payload := utils.GetSlice(l)
-        defer utils.RecycleSlice(payload)
-        payload[0] = at.RtmpTag[0]
-        if at.SoundFormat == 10 {
-            payload[1] = 1
-        }
-        copy(payload[2:], pack.Payload)
-        err = nc.SendMessage(SEND_AUDIO_MESSAGE, &AVPack{Timestamp: t, Payload: payload})
-    }, func(pack engine.VideoPack) {
-        if lastVideoTime == 0 {
+    vt, at := subscriber.GetVideoTrack("h264"), subscriber.OriginAudioTrack
+    if vt != nil {
+        var lastVideoTime uint32
+        err = nc.SendMessage(SEND_FULL_VDIEO_MESSAGE, &AVPack{Payload: vt.RtmpTag})
+        subscriber.OnVideo = func(pack engine.VideoPack) {
+            if lastVideoTime == 0 {
+                lastVideoTime = pack.Timestamp
+            }
+            t := pack.Timestamp - lastVideoTime
             lastVideoTime = pack.Timestamp
+            payload := codec.Nalu2RTMPTag(pack.Payload)
+            defer utils.RecycleSlice(payload)
+            err = nc.SendMessage(SEND_VIDEO_MESSAGE, &AVPack{Timestamp: t, Payload: payload})
         }
-        t := pack.Timestamp - lastVideoTime
-        lastVideoTime = pack.Timestamp
-        payload := utils.GetSlice(9 + len(pack.Payload))
-        defer utils.RecycleSlice(payload)
-        if pack.NalType == codec.NALU_IDR_Picture {
-            payload[0] = 0x17
-        } else {
-            payload[0] = 0x27
+    }
+    if at != nil {
+        var lastAudioTime uint32
+        var aac byte
+        if at.SoundFormat == 10 {
+            aac = at.RtmpTag[0]
+            err = nc.SendMessage(SEND_FULL_AUDIO_MESSAGE, &AVPack{Payload: at.RtmpTag})
         }
-        payload[1] = 0x01
-        utils.BigEndian.PutUint32(payload[5:], uint32(len(pack.Payload)))
-        copy(payload[9:], pack.Payload)
-        err = nc.SendMessage(SEND_VIDEO_MESSAGE, &AVPack{Timestamp: t, Payload: payload})
-    })
+        subscriber.OnAudio = func(pack engine.AudioPack) {
+            if lastAudioTime == 0 {
+                lastAudioTime = pack.Timestamp
+            }
+            t := pack.Timestamp - lastAudioTime
+            lastAudioTime = pack.Timestamp
+            payload := codec.Audio2RTMPTag(aac, pack.Payload)
+            defer utils.RecycleSlice(payload)
+            err = nc.SendMessage(SEND_AUDIO_MESSAGE, &AVPack{Timestamp: t, Payload: payload})
+        }
+    }
+    go subscriber.Play(at, vt)
 }
 ```
-- 在发送数据前，需要先发送音视频对序列帧
-- 这里使用了TrackCP类将一对音视频Track组合在一起，然后调用Play函数传入两个回调函数，一个接受音频一个接受视频
-- 有些协议音视频是分开发送的，就可以直接调用Track的Play即可
+- 在发送数据前，需要先发送音视频的序列帧

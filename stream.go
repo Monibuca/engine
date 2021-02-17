@@ -23,9 +23,7 @@ func FindStream(streamPath string) *Stream {
 //GetStream 根据流路径获取流，如果不存在则创建一个新的
 func GetStream(streamPath string) (result *Stream) {
 	item, loaded := Streams.LoadOrStore(streamPath, &Stream{
-		StreamPath:  streamPath,
-		AudioTracks: make(map[string]*AudioTrack),
-		VideoTracks: make(map[string]*VideoTrack),
+		StreamPath: streamPath,
 	})
 	result = item.(*Stream)
 	if !loaded {
@@ -35,6 +33,16 @@ func GetStream(streamPath string) (result *Stream) {
 	return
 }
 
+type TrackWaiter struct {
+	Track
+	*sync.Cond
+}
+
+func (tw *TrackWaiter) Ok(t Track) {
+	tw.Track = t
+	tw.Broadcast()
+}
+
 // Stream 流定义
 type Stream struct {
 	context.Context
@@ -42,36 +50,68 @@ type Stream struct {
 	StreamPath string
 	StartTime  time.Time //流的创建时间
 	*Publisher
-	Subscribers    []*Subscriber // 订阅者
-	VideoTracks    map[string]*VideoTrack
-	AudioTracks    map[string]*AudioTrack
-	subscribeMutex sync.Mutex
-	audioRW        sync.RWMutex
-	videoRW        sync.RWMutex
+	Subscribers      []*Subscriber // 订阅者
+	VideoTracks      sync.Map
+	AudioTracks      sync.Map
+	OriginVideoTrack *VideoTrack //原始视频轨
+	OriginAudioTrack *AudioTrack //原始音频轨
+	subscribeMutex   sync.Mutex
 }
 
-func (r *Stream) AddVideoTrack(codec string, vt *VideoTrack) *VideoTrack {
-	if vt == nil {
-		vt = NewVideoTrack()
+func (r *Stream) SetOriginVT(vt *VideoTrack) {
+	r.OriginVideoTrack = vt
+	switch vt.CodecID {
+	case 7:
+		r.AddVideoTrack("h264", vt)
 	}
-	r.videoRW.Lock()
-	r.VideoTracks[codec] = vt
-	r.videoRW.Unlock()
+}
+func (r *Stream) SetOriginAT(at *AudioTrack) {
+	r.OriginAudioTrack = at
+	switch at.SoundFormat {
+	case 10:
+		r.AddAudioTrack("aac", at)
+	case 7:
+		r.AddAudioTrack("pcma", at)
+	case 8:
+		r.AddAudioTrack("pcmu", at)
+	}
+}
+func (r *Stream) AddVideoTrack(codec string, vt *VideoTrack) *VideoTrack {
+	if actual, loaded := r.VideoTracks.LoadOrStore(codec, &TrackWaiter{vt, sync.NewCond(new(sync.Mutex))}); loaded {
+		actual.(*TrackWaiter).Ok(vt)
+	}
 	return vt
 }
 
 func (r *Stream) AddAudioTrack(codec string, at *AudioTrack) *AudioTrack {
-	if at == nil {
-		at = NewAudioTrack()
+	if actual, loaded := r.AudioTracks.LoadOrStore(codec, &TrackWaiter{at, sync.NewCond(new(sync.Mutex))}); loaded {
+		actual.(*TrackWaiter).Ok(at)
 	}
-	r.audioRW.Lock()
-	r.AudioTracks[codec] = at
-	r.audioRW.Unlock()
 	return at
 }
 
 func (r *Stream) Close() {
 	r.cancel()
+	if r.OriginVideoTrack != nil {
+		r.OriginVideoTrack.Buffer.Current.Done()
+	}
+	if r.OriginAudioTrack != nil {
+		r.OriginAudioTrack.Buffer.Current.Done()
+	}
+	r.VideoTracks.Range(func(k, v interface{}) bool {
+		v.(*TrackWaiter).Broadcast()
+		if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*VideoTrack) != r.OriginVideoTrack {
+			v.(*TrackWaiter).Track.(*VideoTrack).Buffer.Current.Done()
+		}
+		return true
+	})
+	r.AudioTracks.Range(func(k, v interface{}) bool {
+		v.(*TrackWaiter).Broadcast()
+		if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*AudioTrack) != r.OriginAudioTrack {
+			v.(*TrackWaiter).Track.(*AudioTrack).Buffer.Current.Done()
+		}
+		return true
+	})
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 	Streams.Delete(r.StreamPath)
 	TriggerHook(Hook{HOOK_STREAMCLOSE, r})
@@ -94,21 +134,24 @@ func (r *Stream) Subscribe(s *Subscriber) {
 //UnSubscribe 取消订阅流
 func (r *Stream) UnSubscribe(s *Subscriber) {
 	if r.Err() == nil {
+		var deleted bool
 		r.subscribeMutex.Lock()
-		r.Subscribers = DeleteSliceItem_Subscriber(r.Subscribers, s)
+		r.Subscribers, deleted = DeleteSliceItem_Subscriber(r.Subscribers, s)
 		r.subscribeMutex.Unlock()
-		utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-		TriggerHook(Hook{HOOK_UNSUBSCRIBE, s})
-		if len(r.Subscribers) == 0 && (r.Publisher == nil || r.Publisher.AutoUnPublish) {
-			r.Close()
+		if deleted {
+			utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
+			TriggerHook(Hook{HOOK_UNSUBSCRIBE, s})
+			if len(r.Subscribers) == 0 && (r.Publisher == nil || r.Publisher.AutoUnPublish) {
+				r.Close()
+			}
 		}
 	}
 }
-func DeleteSliceItem_Subscriber(slice []*Subscriber, item *Subscriber) []*Subscriber {
+func DeleteSliceItem_Subscriber(slice []*Subscriber, item *Subscriber) ([]*Subscriber, bool) {
 	for i, val := range slice {
 		if val == item {
-			return append(slice[:i], slice[i+1:]...)
+			return append(slice[:i], slice[i+1:]...), true
 		}
 	}
-	return slice
+	return slice, false
 }

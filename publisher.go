@@ -12,30 +12,12 @@ type Publisher struct {
 	AutoUnPublish    bool //	当无人订阅时自动停止发布
 	*Stream          `json:"-"`
 	Type             string      //类型，用来区分不同的发布者
-	OriginVideoTrack *VideoTrack //原始视频轨
-	OriginAudioTrack *AudioTrack //原始音频轨
 }
 
 // Close 关闭发布者
 func (p *Publisher) Close() {
 	if p.Running() {
 		p.Stream.Close()
-	}
-}
-
-// Dispose 释放RingBuffer的锁，防止订阅者一直阻塞读取
-func (p *Publisher) Dispose() {
-	p.OriginVideoTrack.Buffer.Current.Done()
-	p.OriginAudioTrack.Buffer.Current.Done()
-	for _, vt := range p.Stream.VideoTracks {
-		if vt != p.OriginVideoTrack {
-			vt.Buffer.Current.Done()
-		}
-	}
-	for _, at := range p.Stream.AudioTracks {
-		if at != p.OriginAudioTrack {
-			at.Buffer.Current.Done()
-		}
 	}
 }
 

@@ -26,20 +26,20 @@ const (
 
 var Hooks = NewRing_Hook()
 
-func AddHook(name string, channel chan interface{}) {
+func AddHook(name string, callback func(interface{})) {
 	for hooks := Hooks.SubRing(Hooks.Index); ; hooks.GoNext() {
 		hooks.Current.Wait()
 		if name == hooks.Current.Name {
-			channel <- hooks.Current.Payload
+			go callback(hooks.Current.Payload)
 		}
 	}
 }
 
-func AddHookWithContext(name string, channel chan interface{}, ctx context.Context) {
+func AddHookWithContext(ctx context.Context, name string, callback func(interface{})) {
 	for hooks := Hooks.SubRing(Hooks.Index); ctx.Err() == nil; hooks.GoNext() {
 		hooks.Current.Wait()
 		if name == hooks.Current.Name && ctx.Err() == nil {
-			channel <- hooks.Current.Payload
+			go callback(hooks.Current.Payload)
 		}
 	}
 }
