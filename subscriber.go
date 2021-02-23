@@ -45,12 +45,16 @@ func (s *Subscriber) WaitVideoTrack(codec string) *VideoTrack {
 		return nil
 	}
 	waiter, ok := s.VideoTracks.LoadOrStore(codec, &TrackWaiter{nil, sync.NewCond(new(sync.Mutex))})
+	tw := waiter.(*TrackWaiter)
 	if !ok {
-		waiter.(*TrackWaiter).L.Lock()
-		waiter.(*TrackWaiter).Wait()
-		waiter.(*TrackWaiter).L.Unlock()
+		tw.L.Lock()
+		tw.Wait()
+		tw.L.Unlock()
 	}
-	return waiter.(*TrackWaiter).Track.(*VideoTrack)
+	if tw.Track == nil {
+		return nil
+	}
+	return tw.Track.(*VideoTrack)
 }
 func (s *Subscriber) WaitAudioTrack(codecs ...string) *AudioTrack {
 	if !config.EnableAudio {
@@ -81,7 +85,11 @@ func (s *Subscriber) WaitAudioTrack(codecs ...string) *AudioTrack {
 			})
 		}(at.(*TrackWaiter))
 	}
-	return (<-c).Track.(*AudioTrack)
+	tw := <-c
+	if tw.Track == nil {
+		return nil
+	}
+	return tw.Track.(*AudioTrack)
 }
 func (s *Subscriber) GetVideoTrack(codec string) *VideoTrack {
 	if !config.EnableVideo {
@@ -139,13 +147,13 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		ctx2 = context.TODO()
 	}
 	select {
-	case <-vt.WaitFirst: //等待获取到第一个关键帧
+	case <-vt.WaitIDR.Done(): //等待获取到第一个关键帧
 	case <-s.Context.Done():
 		return
 	case <-ctx2.Done(): //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.Buffer.SubRing(vt.FirstScreen) //从关键帧开始读取，首屏秒开
+	vr := vt.Buffer.SubRing(vt.IDRIndex) //从关键帧开始读取，首屏秒开
 	vr.Current.Wait()                       //等到RingBuffer可读
 	ar := at.Buffer.SubRing(at.Buffer.Index)
 	ar.Current.Wait()
@@ -208,13 +216,13 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 		ctx2 = context.TODO()
 	}
 	select {
-	case <-vt.WaitFirst:
+	case <-vt.WaitIDR.Done():
 	case <-s.Context.Done():
 		return
 	case <-ctx2.Done(): //可能等不到关键帧就退出了
 		return
 	}
-	ring := vt.Buffer.SubRing(vt.FirstScreen)
+	ring := vt.Buffer.SubRing(vt.IDRIndex)
 	ring.Current.Wait()
 	droped := 0
 	var action, send func()

@@ -1,7 +1,9 @@
 package engine
 
+import "github.com/pion/rtp"
+
 type Track interface {
-	Push(uint32, []byte)
+	PushRTP(rtp.Packet)
 }
 type Track_Audio struct {
 	Buffer      *Ring_Audio `json:"-"`
