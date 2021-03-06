@@ -16,19 +16,20 @@ type AudioTrack struct {
 	SoundFormat byte   //4bit
 	SoundRate   int    //2bit
 	SoundSize   byte   //1bit
-	SoundType   byte   //1bit
+	Channels    byte   //1bit
 	RtmpTag     []byte //rtmp协议需要先发这个帧
 }
 
 func (at *AudioPack) ToRTMPTag(aac byte) []byte {
 	audio := at.Payload
 	l := len(audio) + 1
-	if aac != 0 {
-		l++
+	isAAC := 0
+	if aac>>4 == 10 {
+		isAAC = 1
 	}
-	payload := utils.GetSlice(l)
+	payload := utils.GetSlice(l + isAAC)
 	payload[0] = aac
-	if aac != 0 {
+	if isAAC == 1 {
 		payload[1] = 1
 		copy(payload[2:], audio)
 	} else {
@@ -71,7 +72,7 @@ func (at *AudioTrack) SetASC(asc []byte) {
 	// 3 AAC SSR 	ISO/IEC 14496-3 subpart 4
 	// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
 	at.SoundRate = codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)]
-	at.SoundType = (config2 >> 3) & 0x0F //声道
+	at.Channels = (config2 >> 3) & 0x0F //声道
 	//frameLengthFlag = (config2 >> 2) & 0x01
 	//dependsOnCoreCoder = (config2 >> 1) & 0x01
 	//extensionFlag = config2 & 0x01

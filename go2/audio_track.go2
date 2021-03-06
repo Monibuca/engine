@@ -13,7 +13,7 @@ type AudioTrack struct {
 	SoundFormat byte //4bit
 	SoundRate   int  //2bit
 	SoundSize   byte //1bit
-	SoundType   byte //1bit
+	Channels   byte //1bit
 	ASC []byte //audio special configure
 }
 // Push 来自发布者推送的音频
