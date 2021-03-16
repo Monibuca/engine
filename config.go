@@ -1,11 +1,11 @@
 package engine
 
 import (
+	"embed"
 	"path/filepath"
 	"runtime"
 	"strings"
 
-	"github.com/Monibuca/engine/v2/util"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -25,7 +25,7 @@ type PluginConfig struct {
 	Name      string                       //插件名称
 	Type      byte                         //类型
 	Config    interface{}                  //插件配置
-	UIDir     string                       //界面目录
+	UIFile    *embed.FS                    //界面目录
 	Version   string                       //插件版本
 	Dir       string                       //插件代码路径
 	Run       func()                       //插件启动函数
@@ -37,10 +37,7 @@ func InstallPlugin(opt *PluginConfig) {
 	Plugins[opt.Name] = opt
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	opt.Dir = filepath.Dir(pluginFilePath)
-	ui := filepath.Join(opt.Dir, "ui", "dist")
-	if util.Exist(ui) {
-		opt.UIDir = ui
-	}
+
 	if parts := strings.Split(opt.Dir, "@"); len(parts) > 1 {
 		opt.Version = parts[len(parts)-1]
 	}
