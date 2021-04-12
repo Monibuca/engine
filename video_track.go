@@ -76,6 +76,9 @@ func NewVideoTrack() *VideoTrack {
 	result.Buffer = NewRing_Video()
 	result.WaitIDR, cancel = context.WithCancel(context.Background())
 	result.revIDR = func() {
+		if result.RtmpTag == nil {
+			return
+		}
 		result.IDRIndex = result.Buffer.Index
 		cancel()
 		result.revIDR = func() {

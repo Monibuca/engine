@@ -8,16 +8,25 @@ import (
 // Publisher 发布者实体定义
 type Publisher struct {
 	context.Context
-	cancel           context.CancelFunc
-	AutoUnPublish    bool //	当无人订阅时自动停止发布
-	*Stream          `json:"-"`
-	Type             string      //类型，用来区分不同的发布者
+	cancel        context.CancelFunc
+	AutoUnPublish bool //	当无人订阅时自动停止发布
+	*Stream       `json:"-"`
+	Type          string      //类型，用来区分不同的发布者
+	timeout       *time.Timer //更新时间用来做超时处理
 }
 
 // Close 关闭发布者
 func (p *Publisher) Close() {
 	if p.Running() {
 		p.Stream.Close()
+	}
+}
+
+func (p *Publisher) Update() {
+	if p.timeout != nil {
+		p.timeout.Reset(config.PublishTimeout)
+	} else {
+		p.timeout = time.AfterFunc(config.PublishTimeout, p.Close)
 	}
 }
 
