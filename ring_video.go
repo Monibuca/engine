@@ -35,9 +35,6 @@ func NewRing_Video() (r *Ring_Video) {
 	r.Current.Add(1)
 	return
 }
-func (r *Ring_Video) offset(v byte) byte {
-	return r.Index + v
-}
 
 // GoTo 移动到指定索引处
 func (r *Ring_Video) GoTo(index byte) {

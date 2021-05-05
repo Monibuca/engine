@@ -63,6 +63,8 @@ func (r *Stream) SetOriginVT(vt *VideoTrack) {
 	switch vt.CodecID {
 	case 7:
 		r.AddVideoTrack("h264", vt)
+	case 12:
+		r.AddVideoTrack("h265", vt)
 	}
 }
 func (r *Stream) SetOriginAT(at *AudioTrack) {
@@ -92,26 +94,26 @@ func (r *Stream) AddAudioTrack(codec string, at *AudioTrack) *AudioTrack {
 
 func (r *Stream) Close() {
 	r.cancel()
-	if r.OriginVideoTrack != nil {
-		r.OriginVideoTrack.Buffer.Current.Done()
-	}
-	if r.OriginAudioTrack != nil {
-		r.OriginAudioTrack.Buffer.Current.Done()
-	}
-	r.VideoTracks.Range(func(k, v interface{}) bool {
-		v.(*TrackWaiter).Broadcast()
-		if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*VideoTrack) != r.OriginVideoTrack {
-			v.(*TrackWaiter).Track.(*VideoTrack).Buffer.Current.Done()
-		}
-		return true
-	})
-	r.AudioTracks.Range(func(k, v interface{}) bool {
-		v.(*TrackWaiter).Broadcast()
-		if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*AudioTrack) != r.OriginAudioTrack {
-			v.(*TrackWaiter).Track.(*AudioTrack).Buffer.Current.Done()
-		}
-		return true
-	})
+	// if r.OriginVideoTrack != nil {
+	// 	r.OriginVideoTrack.Buffer.Current.Done()
+	// }
+	// if r.OriginAudioTrack != nil {
+	// 	r.OriginAudioTrack.Buffer.Current.Done()
+	// }
+	// r.VideoTracks.Range(func(k, v interface{}) bool {
+	// 	v.(*TrackWaiter).Broadcast()
+	// 	if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*VideoTrack) != r.OriginVideoTrack {
+	// 		v.(*TrackWaiter).Track.(*VideoTrack).Buffer.Current.Done()
+	// 	}
+	// 	return true
+	// })
+	// r.AudioTracks.Range(func(k, v interface{}) bool {
+	// 	v.(*TrackWaiter).Broadcast()
+	// 	if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*AudioTrack) != r.OriginAudioTrack {
+	// 		v.(*TrackWaiter).Track.(*AudioTrack).Buffer.Current.Done()
+	// 	}
+	// 	return true
+	// })
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 	Streams.Delete(r.StreamPath)
 	TriggerHook(Hook{HOOK_STREAMCLOSE, r})

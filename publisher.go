@@ -45,6 +45,7 @@ func (p *Publisher) Publish(streamPath string) bool {
 	p.Context, p.cancel = context.WithCancel(p.Stream)
 	p.Publisher = p
 	p.StartTime = time.Now()
+	p.Update()
 	//触发钩子
 	TriggerHook(Hook{HOOK_PUBLISH, p.Stream})
 	return true
