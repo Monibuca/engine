@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,20 +17,23 @@ type RingItem_Video struct {
 // Ring 环形缓冲，使用数组实现
 type Ring_Video struct {
 	Current *RingItem_Video
-	buffer []RingItem_Video
-	Index  byte
+	buffer  []RingItem_Video
+	Index   byte
+	Flag    int32 // 0:不在写入，1：正在写入，2：已销毁
 }
-func (r *Ring_Video) SubRing(index byte) *Ring_Video{
-	result:= &Ring_Video{
-		buffer:r.buffer,
+
+func (r *Ring_Video) SubRing(index byte) *Ring_Video {
+	result := &Ring_Video{
+		buffer: r.buffer,
 	}
 	result.GoTo(index)
 	return result
 }
+
 // NewRing 创建Ring
 func NewRing_Video() (r *Ring_Video) {
 	r = &Ring_Video{
-		buffer : make([]RingItem_Video, 256),
+		buffer: make([]RingItem_Video, 256),
 	}
 	r.GoTo(0)
 	r.Current.Add(1)
@@ -59,13 +63,13 @@ func (r *Ring_Video) GetLast() *RingItem_Video {
 
 // GoNext 移动到下一个位置
 func (r *Ring_Video) GoNext() {
-	r.Index = r.Index+1
+	r.Index = r.Index + 1
 	r.Current = &r.buffer[r.Index]
 }
 
 // GoBack 移动到上一个位置
 func (r *Ring_Video) GoBack() {
-	r.Index = r.Index-1
+	r.Index = r.Index - 1
 	r.Current = &r.buffer[r.Index]
 }
 
@@ -73,13 +77,27 @@ func (r *Ring_Video) GoBack() {
 func (r *Ring_Video) NextW() {
 	item := r.Current
 	item.UpdateTime = time.Now()
-	r.GoNext()
-	r.Current.Add(1)
-	item.Done()
+	if atomic.CompareAndSwapInt32(&r.Flag, 0, 1) {
+		r.GoNext()
+		r.Current.Add(1)
+		item.Done()
+		if !atomic.CompareAndSwapInt32(&r.Flag, 1, 0) {
+			r.Current.Done()
+		}
+	}
+}
+
+func (r *Ring_Video) Dispose() {
+	if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
+		r.Current.Done()
+	} else if atomic.CompareAndSwapInt32(&r.Flag, 1, 2) {
+	} else if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
+		r.Current.Done()
+	}
 }
 
 // NextR 读下一个
-func (r *Ring_Video) NextR(){
+func (r *Ring_Video) NextR() {
 	r.GoNext()
 	r.Current.Wait()
 }
@@ -96,8 +114,8 @@ func (r *Ring_Video) GetBuffer() *bytes.Buffer {
 // Timeout 发布者是否超时了
 func (r *Ring_Video) Timeout(t time.Duration) bool {
 	// 如果设置为0则表示永不超时
-	if t==0 {
+	if t == 0 {
 		return false
 	}
-	return time.Since(r.Current.UpdateTime) >t
+	return time.Since(r.Current.UpdateTime) > t
 }

@@ -100,20 +100,20 @@ func (r *Stream) Close() {
 	// if r.OriginAudioTrack != nil {
 	// 	r.OriginAudioTrack.Buffer.Current.Done()
 	// }
-	// r.VideoTracks.Range(func(k, v interface{}) bool {
-	// 	v.(*TrackWaiter).Broadcast()
-	// 	if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*VideoTrack) != r.OriginVideoTrack {
-	// 		v.(*TrackWaiter).Track.(*VideoTrack).Buffer.Current.Done()
-	// 	}
-	// 	return true
-	// })
-	// r.AudioTracks.Range(func(k, v interface{}) bool {
-	// 	v.(*TrackWaiter).Broadcast()
-	// 	if v.(*TrackWaiter).Track != nil && v.(*TrackWaiter).Track.(*AudioTrack) != r.OriginAudioTrack {
-	// 		v.(*TrackWaiter).Track.(*AudioTrack).Buffer.Current.Done()
-	// 	}
-	// 	return true
-	// })
+	r.VideoTracks.Range(func(k, v interface{}) bool {
+		v.(*TrackWaiter).Broadcast()
+		if v.(*TrackWaiter).Track != nil {
+			v.(*TrackWaiter).Track.Dispose()
+		}
+		return true
+	})
+	r.AudioTracks.Range(func(k, v interface{}) bool {
+		v.(*TrackWaiter).Broadcast()
+		if v.(*TrackWaiter).Track != nil {
+			v.(*TrackWaiter).Track.Dispose()
+		}
+		return true
+	})
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 	Streams.Delete(r.StreamPath)
 	TriggerHook(Hook{HOOK_STREAMCLOSE, r})

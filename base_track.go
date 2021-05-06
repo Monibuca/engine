@@ -7,6 +7,7 @@ type Track interface {
 	GetBPS(int)
 	Dispose()
 }
+
 // 一定要在写入Track的协程中调用该函数，这个函数的作用是防止订阅者无限等待
 func DisposeTracks(tracks ...Track) {
 	for _, track := range tracks {
@@ -32,7 +33,7 @@ func (t *Track_Audio) GetBPS(payloadLen int) {
 	t.lastIndex = t.Buffer.Index
 }
 func (t *Track_Audio) Dispose() {
-	t.Buffer.Current.Done()
+	t.Buffer.Dispose()
 }
 
 type Track_Video struct {
@@ -51,5 +52,5 @@ func (t *Track_Video) GetBPS(payloadLen int) {
 	t.lastIndex = t.Buffer.Index
 }
 func (t *Track_Video) Dispose() {
-	t.Buffer.Current.Done()
+	t.Buffer.Dispose()
 }
