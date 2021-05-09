@@ -19,6 +19,7 @@ func DisposeTracks(tracks ...Track) {
 
 type Track_Audio struct {
 	Buffer      *Ring_Audio `json:"-"`
+	Stream      *Stream     `json:"-"`
 	PacketCount int
 	CodecID     byte
 	BPS         int
@@ -38,6 +39,7 @@ func (t *Track_Audio) Dispose() {
 
 type Track_Video struct {
 	Buffer      *Ring_Video `json:"-"`
+	Stream      *Stream     `json:"-"`
 	PacketCount int
 	CodecID     byte
 	BPS         int

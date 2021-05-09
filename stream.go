@@ -79,6 +79,7 @@ func (r *Stream) SetOriginAT(at *AudioTrack) {
 	}
 }
 func (r *Stream) AddVideoTrack(codec string, vt *VideoTrack) *VideoTrack {
+	vt.Stream = r
 	if actual, loaded := r.VideoTracks.LoadOrStore(codec, &TrackWaiter{vt, sync.NewCond(new(sync.Mutex))}); loaded {
 		actual.(*TrackWaiter).Ok(vt)
 	}
@@ -86,6 +87,7 @@ func (r *Stream) AddVideoTrack(codec string, vt *VideoTrack) *VideoTrack {
 }
 
 func (r *Stream) AddAudioTrack(codec string, at *AudioTrack) *AudioTrack {
+	at.Stream = r
 	if actual, loaded := r.AudioTracks.LoadOrStore(codec, &TrackWaiter{at, sync.NewCond(new(sync.Mutex))}); loaded {
 		actual.(*TrackWaiter).Ok(at)
 	}

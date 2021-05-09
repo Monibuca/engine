@@ -40,6 +40,9 @@ func (at *AudioPack) ToRTMPTag(aac byte) []byte {
 
 // Push 来自发布者推送的音频
 func (at *AudioTrack) Push(timestamp uint32, payload []byte) {
+	if at.Stream != nil {
+		at.Stream.Update()
+	}
 	payloadLen := len(payload)
 	if payloadLen < 4 {
 		return

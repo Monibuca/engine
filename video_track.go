@@ -92,6 +92,9 @@ func NewVideoTrack() *VideoTrack {
 
 // Push 来自发布者推送的视频
 func (vt *VideoTrack) Push(pack VideoPack) {
+	if vt.Stream != nil {
+		vt.Stream.Update()
+	}
 	payload := pack.Payload
 	payloadLen := len(payload)
 	if payloadLen == 0 {
