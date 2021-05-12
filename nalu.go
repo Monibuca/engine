@@ -41,7 +41,7 @@ func (r *NALU) writePicture(ts uint32, head, payload []byte) {
 	r.buffer = append(r.buffer, payload...)
 }
 func (r *NALU) WriteNALU(ts uint32, payload []byte) {
-	if len(payload) == 0 {
+	if len(payload) == 0 || payload == nil || r.VideoTag == nil || r.VideoTag.Payload == nil {
 		return
 	}	
 	nalType := payload[0] & naluTypeBitmask
