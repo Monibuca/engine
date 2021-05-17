@@ -303,6 +303,9 @@ func (r *Stream) setH264Info(video *Ring) {
 }
 func (r *Stream) WriteSPS(sps []byte) {
 	lenSPS := len(sps)
+	if lenSPS < 4 {
+		return
+	}
 	r.SPS = sps
 	if r.VideoTag == nil {
 		r.VideoTag = NewAVPacket(FLV_TAG_TYPE_VIDEO)
@@ -315,6 +318,9 @@ func (r *Stream) WriteSPS(sps []byte) {
 	r.VideoTag.Payload = append(append(r.VideoTag.Payload[:10], 0xE1, byte(lenSPS>>8), byte(lenSPS)), sps...)
 }
 func (r *Stream) WritePPS(pps []byte) {
+	if r.VideoTag == nil || r.VideoTag.Payload == nil {
+		return
+	}
 	lenPPS := len(pps)
 	r.PPS = pps
 	r.VideoTag.Payload = append(append(r.VideoTag.Payload, 0x01, byte(lenPPS>>8), byte(lenPPS)), pps...)
