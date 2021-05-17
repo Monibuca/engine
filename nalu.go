@@ -25,7 +25,7 @@ type NALU struct {
 }
 
 func (r *NALU) writePicture(ts uint32, head, payload []byte) {
-	if r.VideoTag == nil {
+	if payload == nil || len(payload) < 2 || r.VideoTag == nil || r.VideoTag.Payload == nil {
 		return
 	}
 	if payload[1]&fuaStartBitmask != 0 {
@@ -41,7 +41,7 @@ func (r *NALU) writePicture(ts uint32, head, payload []byte) {
 	r.buffer = append(r.buffer, payload...)
 }
 func (r *NALU) WriteNALU(ts uint32, payload []byte) {
-	if len(payload) == 0 || payload == nil || r.VideoTag == nil || r.VideoTag.Payload == nil {
+	if len(payload) == 0 || payload == nil {
 		return
 	}	
 	nalType := payload[0] & naluTypeBitmask
@@ -50,7 +50,7 @@ func (r *NALU) WriteNALU(ts uint32, payload []byte) {
 		for currOffset, naluSize := stapaHeaderSize, 0; currOffset < len(payload); currOffset += naluSize {
 			naluSize = int(binary.BigEndian.Uint16(payload[currOffset:]))
 			currOffset += stapaNALULengthSize
-			if currOffset+len(payload) < currOffset+naluSize {
+			if currOffset+len(payload) < currOffset+naluSize  || currOffset+naluSize > len(payload) {
 				Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, len(payload)-currOffset)
 				return
 			}
