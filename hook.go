@@ -25,7 +25,7 @@ const (
 )
 
 var Hooks = NewRing_Hook()
-
+var hookMutex sync.Mutex
 func AddHook(name string, callback func(interface{})) {
 	for hooks := Hooks.SubRing(Hooks.Index); ; hooks.GoNext() {
 		hooks.Current.Wait()
@@ -46,7 +46,9 @@ func AddHookWithContext(ctx context.Context, name string, callback func(interfac
 
 func TriggerHook(hook Hook) {
 	Hooks.Current.Hook = hook
+	hookMutex.Lock()
 	Hooks.NextW()
+	hookMutex.Unlock()
 }
 
 type RingItem_Hook struct {
@@ -79,9 +81,6 @@ func NewRing_Hook() (r *Ring_Hook) {
 	r.GoTo(0)
 	r.Current.Add(1)
 	return
-}
-func (r *Ring_Hook) offset(v byte) byte {
-	return r.Index + v
 }
 
 // GoTo 移动到指定索引处

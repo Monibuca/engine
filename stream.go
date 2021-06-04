@@ -46,10 +46,11 @@ func (tw *TrackWaiter) Ok(t Track) {
 // Stream 流定义
 type Stream struct {
 	context.Context
-	cancel     context.CancelFunc
-	StreamPath string
-	StartTime  time.Time //流的创建时间
-	*Publisher
+	cancel           context.CancelFunc
+	StreamPath       string
+	Type             string    //流类型，来自发布者
+	StartTime        time.Time //流的创建时间
+	*Publisher       `json:"-"`
 	Subscribers      []*Subscriber // 订阅者
 	VideoTracks      sync.Map
 	AudioTracks      sync.Map

@@ -23,7 +23,6 @@ type Subscriber struct {
 	Delay           uint32
 	SubscribeTime   time.Time
 	Sign            string
-	OffsetTime      uint32
 	OnAudio         func(pack AudioPack) `json:"-"`
 	OnVideo         func(pack VideoPack) `json:"-"`
 }

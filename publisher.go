@@ -10,9 +10,9 @@ type Publisher struct {
 	context.Context
 	cancel        context.CancelFunc
 	AutoUnPublish bool //	当无人订阅时自动停止发布
-	*Stream       `json:"-"`
-	Type          string      //类型，用来区分不同的发布者
-	timeout       *time.Timer //更新时间用来做超时处理
+	*Stream
+	Type    string      //类型，用来区分不同的发布者
+	timeout *time.Timer //更新时间用来做超时处理
 }
 
 // Close 关闭发布者
@@ -44,6 +44,7 @@ func (p *Publisher) Publish(streamPath string) bool {
 	}
 	p.Context, p.cancel = context.WithCancel(p.Stream)
 	p.Publisher = p
+	p.Stream.Type = p.Type
 	p.StartTime = time.Now()
 	p.Update()
 	//触发钩子
