@@ -2,128 +2,54 @@ package engine
 
 import (
 	"context"
+	"net/url"
 	"sync"
 	"time"
 
-	"github.com/Monibuca/utils/v3/codec"
 	"github.com/pkg/errors"
 )
 
 // Subscriber 订阅者实体定义
 type Subscriber struct {
-	context.Context `json:"-"`
-	cancel          context.CancelFunc
-	Ctx2            context.Context `json:"-"`
-	*Stream         `json:"-"`
-	ID              string
-	TotalDrop       int //总丢帧
-	TotalPacket     int
-	Type            string
-	BufferLength    int
-	Delay           uint32
-	SubscribeTime   time.Time
-	Sign            string
-	OnAudio         func(pack AudioPack) `json:"-"`
-	OnVideo         func(pack VideoPack) `json:"-"`
+	context.Context  `json:"-"`
+	cancel           context.CancelFunc
+	Ctx2             context.Context `json:"-"`
+	*Stream          `json:"-"`
+	ID               string
+	TotalDrop        int //总丢帧
+	TotalPacket      int
+	Type             string
+	BufferLength     int
+	Delay            uint32
+	SubscribeTime    time.Time
+	SubscribeArgs    url.Values
+	OnAudio          func(pack AudioPack) `json:"-"`
+	OnVideo          func(pack VideoPack) `json:"-"`
+	ByteStreamFormat bool
+	closeOnce        sync.Once
 }
 
-// IsClosed 检查订阅者是否已经关闭
-func (s *Subscriber) IsClosed() bool {
-	return s.Context != nil && s.Err() != nil
+func (s *Subscriber) close() {
+	s.UnSubscribe(s)
+	s.cancel()
 }
 
 // Close 关闭订阅者
 func (s *Subscriber) Close() {
-	if s.cancel != nil {
-		s.UnSubscribe(s)
-		s.cancel()
-	}
-}
-func (s *Subscriber) WaitVideoTrack(codec string) *VideoTrack {
-	if !config.EnableVideo {
-		return nil
-	}
-	waiter, ok := s.VideoTracks.LoadOrStore(codec, &TrackWaiter{nil, sync.NewCond(new(sync.Mutex))})
-	tw := waiter.(*TrackWaiter)
-	if !ok {
-		tw.L.Lock()
-		tw.Wait()
-		tw.L.Unlock()
-	}
-	if tw.Track == nil {
-		return nil
-	}
-	return tw.Track.(*VideoTrack)
-}
-func (s *Subscriber) WaitAudioTrack(codecs ...string) *AudioTrack {
-	if !config.EnableAudio {
-		return nil
-	}
-
-	for _, codec := range codecs {
-		if at, ok := s.AudioTracks.Load(codec); ok && at.(*TrackWaiter).Track != nil {
-			return at.(*TrackWaiter).Track.(*AudioTrack)
-		}
-	}
-	if HasTranscoder && s.OriginAudioTrack != nil {
-		at := s.AddAudioTrack(codecs[0], NewAudioTrack())
-		at.SoundFormat = codec.Codec2SoundFormat[codecs[0]]
-		TriggerHook(Hook{HOOK_REQUEST_TRANSAUDIO, &TransCodeReq{s, codecs[0]}})
-		return at
-	}
-	var once sync.Once
-	c := make(chan *TrackWaiter)
-	for _, codec := range codecs {
-		at, _ := s.AudioTracks.LoadOrStore(codec, &TrackWaiter{nil, sync.NewCond(new(sync.Mutex))})
-		go func(tw *TrackWaiter) {
-			tw.L.Lock()
-			tw.Wait()
-			tw.L.Unlock()
-			once.Do(func() {
-				c <- tw
-			})
-		}(at.(*TrackWaiter))
-	}
-	tw := <-c
-	if tw.Track == nil {
-		return nil
-	}
-	return tw.Track.(*AudioTrack)
-}
-func (s *Subscriber) GetVideoTrack(codec string) *VideoTrack {
-	if !config.EnableVideo {
-		return nil
-	}
-	if waiter, ok := s.VideoTracks.Load(codec); ok && waiter.(*TrackWaiter).Track != nil {
-		return waiter.(*TrackWaiter).Track.(*VideoTrack)
-	}
-	return nil
-}
-func (s *Subscriber) GetAudioTrack(codecs ...string) (at *AudioTrack) {
-	if !config.EnableAudio {
-		return nil
-	}
-	for _, codec := range codecs {
-		if at, ok := s.AudioTracks.Load(codec); ok && at.(*TrackWaiter).Track != nil {
-			return at.(*TrackWaiter).Track.(*AudioTrack)
-		}
-	}
-	if HasTranscoder && s.OriginAudioTrack != nil {
-		at = s.AddAudioTrack(codecs[0], NewAudioTrack())
-		at.SoundFormat = codec.Codec2SoundFormat[codecs[0]]
-		TriggerHook(Hook{HOOK_REQUEST_TRANSAUDIO, &TransCodeReq{s, codecs[0]}})
-	}
-	return
+	s.closeOnce.Do(s.close)
 }
 
 //Subscribe 开始订阅 将Subscriber与Stream关联
 func (s *Subscriber) Subscribe(streamPath string) error {
-	if FindStream(streamPath) == nil {
+	u, _ := url.Parse(streamPath)
+	s.SubscribeArgs, _ = url.ParseQuery(u.RawQuery)
+	streamPath = u.Path
+	if stream := FindStream(streamPath); stream == nil {
 		return errors.Errorf("Stream not found:%s", streamPath)
-	}
-	GetStream(streamPath).Subscribe(s)
-	if s.Context == nil {
-		return errors.Errorf("stream not exist:%s", streamPath)
+	} else {
+		if stream.Subscribe(s); s.Context == nil {
+			return errors.Errorf("stream not exist:%s", streamPath)
+		}
 	}
 	return nil
 }
@@ -153,7 +79,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		return
 	}
 	vr := vt.Buffer.SubRing(vt.IDRIndex) //从关键帧开始读取，首屏秒开
-	vr.Current.Wait()                       //等到RingBuffer可读
+	vr.Current.Wait()                    //等到RingBuffer可读
 	ar := at.Buffer.SubRing(at.Buffer.Index)
 	ar.Current.Wait()
 	dropping := false //是否处于丢帧中
@@ -164,10 +90,12 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 				if vt.Buffer.Index-vr.Index > 128 {
 					dropping = true
 				}
-			} else if vr.Current.NalType == codec.NALU_IDR_Picture {
+			} else if vr.Current.IDR {
 				dropping = false
 			}
-			vr.NextR()
+			if !vr.NextR() {
+				return
+			}
 		} else {
 			if !dropping {
 				s.OnAudio(ar.Current.AudioPack)
@@ -175,7 +103,9 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 					dropping = true
 				}
 			}
-			ar.NextR()
+			if !ar.NextR() {
+				return
+			}
 		}
 	}
 }
@@ -204,7 +134,8 @@ func (s *Subscriber) PlayAudio(at *AudioTrack) {
 	if ctx2 == nil {
 		ctx2 = context.TODO()
 	}
-	for action = send; ctx2.Err() == nil && s.Context.Err() == nil; ring.NextR() {
+	action = send
+	for running := true; ctx2.Err() == nil && s.Context.Err() == nil && running; running = ring.NextR() {
 		action()
 	}
 }
@@ -226,7 +157,7 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 	droped := 0
 	var action, send func()
 	drop := func() {
-		if ring.Current.NalType == codec.NALU_IDR_Picture {
+		if ring.Current.IDR {
 			action = send
 		} else {
 			droped++
@@ -241,7 +172,8 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 			action = drop
 		}
 	}
-	for action = send; ctx2.Err() == nil && s.Context.Err() == nil; ring.NextR() {
+	action = send
+	for running := true; ctx2.Err() == nil && s.Context.Err() == nil && running; running = ring.NextR() {
 		action()
 	}
 }

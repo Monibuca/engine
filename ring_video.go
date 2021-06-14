@@ -81,6 +81,7 @@ func (r *Ring_Video) NextW() {
 		r.GoNext()
 		r.Current.Add(1)
 		item.Done()
+		//Flag不为1代表被Dispose了，但尚未处理Done
 		if !atomic.CompareAndSwapInt32(&r.Flag, 1, 0) {
 			r.Current.Done()
 		}
@@ -91,20 +92,23 @@ func (r *Ring_Video) Dispose() {
 	if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
 		r.Current.Done()
 	} else if atomic.CompareAndSwapInt32(&r.Flag, 1, 2) {
+		//当前是1代表正在写入，此时变成2，但是Done的任务得交给NextW来处理
 	} else if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
 		r.Current.Done()
 	}
 }
 
 // NextR 读下一个
-func (r *Ring_Video) NextR() {
+func (r *Ring_Video) NextR() bool{
 	r.GoNext()
 	r.Current.Wait()
+	return r.Flag != 2 // 2代表已经销毁
 }
 
 func (r *Ring_Video) GetBuffer() *bytes.Buffer {
 	if r.Current.Buffer == nil {
-		r.Current.Buffer = bytes.NewBuffer([]byte{})
+		r.Current.Payload = []byte{}
+		r.Current.Buffer = bytes.NewBuffer(r.Current.Payload)
 	} else {
 		r.Current.Reset()
 	}

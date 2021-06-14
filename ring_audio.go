@@ -97,14 +97,16 @@ func (r *Ring_Audio) Dispose() {
 }
 
 // NextR 读下一个
-func (r *Ring_Audio) NextR() {
+func (r *Ring_Audio) NextR() bool {
 	r.GoNext()
 	r.Current.Wait()
+	return r.Flag != 2 // 2代表已经销毁
 }
 
 func (r *Ring_Audio) GetBuffer() *bytes.Buffer {
 	if r.Current.Buffer == nil {
-		r.Current.Buffer = bytes.NewBuffer([]byte{})
+		r.Current.Payload = []byte{}
+		r.Current.Buffer = bytes.NewBuffer(r.Current.Payload)
 	} else {
 		r.Current.Reset()
 	}

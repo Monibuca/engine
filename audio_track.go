@@ -1,74 +1,138 @@
 package engine
 
 import (
-	"github.com/Monibuca/utils/v3"
+	"io"
+
 	"github.com/Monibuca/utils/v3/codec"
-	"github.com/pion/rtp"
 )
 
 type AudioPack struct {
 	Timestamp      uint32
 	Payload        []byte
+	Raw            []byte
 	SequenceNumber uint16
 }
 type AudioTrack struct {
 	Track_Audio
-	SoundFormat byte   //4bit
-	SoundRate   int    //2bit
-	SoundSize   byte   //1bit
-	Channels    byte   //1bit
-	RtmpTag     []byte //rtmp协议需要先发这个帧
+	SoundRate       int    //2bit
+	SoundSize       byte   //1bit
+	Channels        byte   //1bit
+	ExtraData       []byte `json:"-"` //rtmp协议需要先发这个帧
+	PushByteStream  func(pack AudioPack)
+	PushRaw         func(pack AudioPack)
+	WriteByteStream func(writer io.Writer, pack AudioPack) //使用函数写入，避免申请内存
 }
 
-func (at *AudioPack) ToRTMPTag(aac byte) []byte {
-	audio := at.Payload
-	l := len(audio) + 1
-	isAAC := 0
-	if aac>>4 == 10 {
-		isAAC = 1
+func (at *AudioTrack) pushByteStream(pack AudioPack) {
+	at.CodecID = pack.Payload[0] >> 4
+	at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
+		writer.Write(pack.Payload)
 	}
-	payload := utils.GetSlice(l + isAAC)
-	payload[0] = aac
-	if isAAC == 1 {
-		payload[1] = 1
-		copy(payload[2:], audio)
-	} else {
-		copy(payload[1:], audio)
+	switch at.CodecID {
+	case 10:
+		at.Stream.AudioTracks.AddTrack("aac", at)
+	case 7:
+		at.Stream.AudioTracks.AddTrack("pcma", at)
+	case 8:
+		at.Stream.AudioTracks.AddTrack("pcmu", at)
 	}
-	return payload
+	switch at.CodecID {
+	case 10:
+		if pack.Payload[1] != 0 {
+			return
+		} else {
+			config1, config2 := pack.Payload[2], pack.Payload[3]
+			//audioObjectType = (config1 & 0xF8) >> 3
+			// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
+			// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
+			// 3 AAC SSR 	ISO/IEC 14496-3 subpart 4
+			// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
+			at.SoundRate = codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)]
+			at.Channels = ((config2 >> 3) & 0x0F) //声道
+			//frameLengthFlag = (config2 >> 2) & 0x01
+			//dependsOnCoreCoder = (config2 >> 1) & 0x01
+			//extensionFlag = config2 & 0x01
+			at.ExtraData = pack.Payload
+			at.PushByteStream = func(pack AudioPack) {
+				pack.Raw = pack.Payload[2:]
+				at.push(pack)
+			}
+		}
+	default:
+		at.SoundRate = codec.SoundRate[(pack.Payload[0]&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
+		at.SoundSize = (pack.Payload[0] & 0x02) >> 1              // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
+		at.Channels = pack.Payload[0]&0x01 + 1
+		at.ExtraData = pack.Payload[:1]
+		at.PushByteStream = func(pack AudioPack) {
+			payloadLen := len(pack.Payload)
+			if payloadLen < 4 {
+				return
+			}
+			at.GetBPS(payloadLen)
+			pack.Raw = pack.Payload[1:]
+			at.push(pack)
+		}
+		at.PushByteStream(pack)
+	}
+
+}
+func (at *AudioTrack) pushRaw(pack AudioPack) {
+	switch at.CodecID {
+	case 10:
+		at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
+			writer.Write([]byte{at.ExtraData[0], 1})
+			writer.Write(pack.Raw)
+		}
+	default:
+		at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
+			writer.Write([]byte{at.ExtraData[0]})
+			writer.Write(pack.Raw)
+		}
+	}
+	at.PushRaw = at.push
+	at.push(pack)
 }
 
 // Push 来自发布者推送的音频
-func (at *AudioTrack) Push(timestamp uint32, payload []byte) {
+func (at *AudioTrack) push(pack AudioPack) {
 	if at.Stream != nil {
 		at.Stream.Update()
 	}
-	payloadLen := len(payload)
-	if payloadLen < 4 {
-		return
+	abr := at.Buffer
+	audio := abr.Current
+	audio.AudioPack = pack
+	if at.Stream.prePayload > 0 && len(pack.Payload) == 0 {
+		buffer := abr.GetBuffer()
+		at.WriteByteStream(buffer, pack)
+		audio.AudioPack = pack
+		audio.AudioPack.Payload = buffer.Bytes()
+	} else {
+		audio.AudioPack = pack
 	}
-	audio := at.Buffer
-	audio.Current.Timestamp = timestamp
-	audio.Current.Payload = payload
-	at.Track_Audio.GetBPS(payloadLen)
-	audio.NextW()
+	abr.NextW()
 }
-func (at *AudioTrack) PushRTP(pack rtp.Packet) {
-	t := pack.Timestamp / 90
-	for _, payload := range codec.ParseRTPAAC(pack.Payload) {
-		at.Push(t, payload)
+
+func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
+	at = &AudioTrack{}
+	at.PushByteStream = at.pushByteStream
+	at.PushRaw = at.pushRaw
+	at.Stream = s
+	at.Buffer = NewRing_Audio()
+	switch codec {
+	case 10:
+		s.AudioTracks.AddTrack("aac", at)
+	case 7:
+		s.AudioTracks.AddTrack("pcma", at)
+	case 8:
+		s.AudioTracks.AddTrack("pcmu", at)
 	}
-}
-func NewAudioTrack() *AudioTrack {
-	var result AudioTrack
-	result.Buffer = NewRing_Audio()
-	return &result
+	return
 }
 func (at *AudioTrack) SetASC(asc []byte) {
-	at.RtmpTag = append([]byte{0xAF, 0}, asc...)
+	at.ExtraData = append([]byte{0xAF, 0}, asc...)
 	config1 := asc[0]
 	config2 := asc[1]
-	at.SoundFormat = 10
+	at.CodecID = 10
 	//audioObjectType = (config1 & 0xF8) >> 3
 	// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
 	// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
