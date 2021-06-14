@@ -43,6 +43,11 @@ func (vp VideoPack) Clone() VideoPack {
 	return vp
 }
 
+func (vp VideoPack) Copy(ts uint32) VideoPack {
+	vp.Timestamp = vp.Timestamp - ts
+	return vp
+}
+
 type VideoTrack struct {
 	IDRIndex byte //最近的关键帧位置，首屏渲染
 	Track_Video

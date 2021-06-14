@@ -12,6 +12,12 @@ type AudioPack struct {
 	Raw            []byte
 	SequenceNumber uint16
 }
+
+func (ap AudioPack) Copy(ts uint32) AudioPack {
+	ap.Timestamp = ap.Timestamp - ts
+	return ap
+}
+
 type AudioTrack struct {
 	Track_Audio
 	SoundRate       int    //2bit
@@ -22,6 +28,7 @@ type AudioTrack struct {
 	PushRaw         func(pack AudioPack)
 	WriteByteStream func(writer io.Writer, pack AudioPack) //使用函数写入，避免申请内存
 }
+
 
 func (at *AudioTrack) pushByteStream(pack AudioPack) {
 	at.CodecID = pack.Payload[0] >> 4

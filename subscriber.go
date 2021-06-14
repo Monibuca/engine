@@ -83,10 +83,11 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	ar := at.Buffer.SubRing(at.Buffer.Index)
 	ar.Current.Wait()
 	dropping := false //是否处于丢帧中
+	startTimestamp := vr.Current.Timestamp
 	for ctx2.Err() == nil && s.Context.Err() == nil {
 		if ar.Current.Timestamp > vr.Current.Timestamp || ar.Current.Timestamp == 0 {
 			if !dropping {
-				s.OnVideo(vr.Current.VideoPack)
+				s.OnVideo(vr.Current.VideoPack.Copy(startTimestamp))
 				if vt.Buffer.Index-vr.Index > 128 {
 					dropping = true
 				}
@@ -98,7 +99,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 			}
 		} else {
 			if !dropping {
-				s.OnAudio(ar.Current.AudioPack)
+				s.OnAudio(ar.Current.AudioPack.Copy(startTimestamp))
 				if at.Buffer.Index-ar.Index > 128 {
 					dropping = true
 				}
@@ -112,6 +113,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 func (s *Subscriber) PlayAudio(at *AudioTrack) {
 	ring := at.Buffer.SubRing(at.Buffer.Index)
 	ring.Current.Wait()
+	startTimestamp := ring.Current.Timestamp
 	droped := 0
 	var action, send func()
 	drop := func() {
@@ -122,7 +124,7 @@ func (s *Subscriber) PlayAudio(at *AudioTrack) {
 		}
 	}
 	send = func() {
-		s.OnAudio(ring.Current.AudioPack)
+		s.OnAudio(ring.Current.AudioPack.Copy(startTimestamp))
 
 		//s.BufferLength = pIndex - ring.Index
 		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
@@ -154,6 +156,7 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 	}
 	ring := vt.Buffer.SubRing(vt.IDRIndex)
 	ring.Current.Wait()
+	startTimestamp := ring.Current.Timestamp
 	droped := 0
 	var action, send func()
 	drop := func() {
@@ -164,7 +167,7 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 		}
 	}
 	send = func() {
-		s.OnVideo(ring.Current.VideoPack)
+		s.OnVideo(ring.Current.VideoPack.Copy(startTimestamp))
 		pIndex := vt.Buffer.Index
 		//s.BufferLength = pIndex - ring.Index
 		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
