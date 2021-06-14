@@ -15,11 +15,11 @@ const (
 	stapaHeaderSize     = 1
 	stapaNALULengthSize = 2
 
-	naluTypeBitmask      = 0x1F
+	naluTypeBitmask      = 0b0001_1111
 	naluTypeBitmask_hevc = 0x7E
 	naluRefIdcBitmask    = 0x60
-	fuaStartBitmask      = 0x80 //1000 0000
-	fuaEndBitmask        = 0x40 //0100 0000
+	fuaStartBitmask      = 0b1000_0000
+	fuaEndBitmask        = 0b0100_0000
 )
 
 type TSSlice []uint32
@@ -119,6 +119,9 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 			vt.PushNalu = func(pack VideoPack) {
 				// 等待接收SPS和PPS数据
 				for _, nalu := range pack.NALUs {
+					if len(nalu) == 0 {
+						continue
+					}
 					switch nalu[0] & naluTypeBitmask {
 					case codec.NALU_SPS:
 						info.SequenceParameterSetNALUnit = nalu
@@ -134,13 +137,18 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 						Payload: codec.BuildH264SeqHeaderFromSpsPps(info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit),
 						NALUs:   [][]byte{info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit},
 					}
-					fuaBuffer := bytes.NewBuffer([]byte{})
+					var fuaBuffer *bytes.Buffer
 					//已完成SPS和PPS 组装，重置push函数，接收视频数据
 					vt.PushNalu = func(pack VideoPack) {
 						var nonIDRs [][]byte
 						for _, nalu := range pack.NALUs {
+							if len(nalu) == 0 {
+								continue
+							}
 							naluType := nalu[0] & naluTypeBitmask
 							switch naluType {
+							case codec.NALU_SPS:
+							case codec.NALU_PPS:
 							case codec.NALU_STAPA:
 								var nalus [][]byte
 								for currOffset, naluSize := stapaHeaderSize, 0; currOffset < len(nalu); currOffset += naluSize {
@@ -161,14 +169,15 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 									return
 								}
 								if nalu[1]&fuaStartBitmask != 0 {
+									fuaBuffer = bytes.NewBuffer([]byte{})
 									naluRefIdc := nalu[0] & naluRefIdcBitmask
 									fragmentedNaluType := nalu[1] & naluTypeBitmask
 									nalu[fuaHeaderSize-1] = naluRefIdc | fragmentedNaluType
 									fuaBuffer.Write(nalu)
 								} else if nalu[1]&fuaEndBitmask != 0 {
 									p := pack.Clone()
+									fuaBuffer.Write(nalu[fuaHeaderSize:])
 									p.NALUs = [][]byte{fuaBuffer.Bytes()[fuaHeaderSize-1:]}
-									fuaBuffer = bytes.NewBuffer([]byte{})
 									vt.PushNalu(p)
 								} else {
 									fuaBuffer.Write(nalu[fuaHeaderSize:])
@@ -200,6 +209,9 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 		vt.PushNalu = func(pack VideoPack) {
 			// 等待接收SPS和PPS数据
 			for _, nalu := range pack.NALUs {
+				if len(nalu) == 0 {
+					continue
+				}
 				switch nalu[0] & naluTypeBitmask_hevc >> 1 {
 				case codec.NAL_UNIT_VPS:
 					vps = nalu
@@ -219,11 +231,34 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 					Payload: extraData,
 					NALUs:   [][]byte{vps, sps, pps},
 				}
+				var fuaBuffer *bytes.Buffer
 				vt.PushNalu = func(pack VideoPack) {
 					var nonIDRs [][]byte
 					for _, nalu := range pack.NALUs {
 						naluType := nalu[0] & naluTypeBitmask_hevc >> 1
+						if len(nalu) == 0 {
+							continue
+						}
 						switch naluType {
+						case codec.NAL_UNIT_UNSPECIFIED_49:
+							if len(nalu) < 3 {
+								continue
+							}
+							S := nalu[3]&fuaStartBitmask != 0
+							E := nalu[3]&fuaEndBitmask != 0
+							naluType = nalu[3] & 0b00111111
+							if S {
+								fuaBuffer = bytes.NewBuffer([]byte{})
+								nalu[0] = nalu[0]&0b10000001 | (naluType << 1)
+								fuaBuffer.Write(nalu[:2])
+								fuaBuffer.Write(nalu[3:])
+							} else if E {
+								fuaBuffer.Write(nalu[3:])
+								pack.NALUs = [][]byte{fuaBuffer.Bytes()}
+								vt.PushNalu(pack)
+							} else {
+								fuaBuffer.Write(nalu[3:])
+							}
 						case codec.NAL_UNIT_CODED_SLICE_BLA,
 							codec.NAL_UNIT_CODED_SLICE_BLANT,
 							codec.NAL_UNIT_CODED_SLICE_BLA_N_LP,

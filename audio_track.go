@@ -143,4 +143,5 @@ func (at *AudioTrack) SetASC(asc []byte) {
 	//frameLengthFlag = (config2 >> 2) & 0x01
 	//dependsOnCoreCoder = (config2 >> 1) & 0x01
 	//extensionFlag = config2 & 0x01
+	at.Stream.AudioTracks.AddTrack("aac", at)
 }
