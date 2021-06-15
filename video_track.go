@@ -11,8 +11,6 @@ import (
 )
 
 const (
-	fuaHeaderSize       = 2
-	stapaHeaderSize     = 1
 	stapaNALULengthSize = 2
 
 	naluTypeBitmask      = 0b0001_1111
@@ -143,9 +141,13 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 						NALUs:   [][]byte{info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit},
 					}
 					var fuaBuffer *bytes.Buffer
+					var mSync = false
 					//已完成SPS和PPS 组装，重置push函数，接收视频数据
 					vt.PushNalu = func(pack VideoPack) {
 						var nonIDRs [][]byte
+						fuaHeaderSize := 2
+						stapaHeaderSize := 1
+						mTAP16LengthSize := 4
 						for _, nalu := range pack.NALUs {
 							if len(nalu) == 0 {
 								continue
@@ -154,6 +156,9 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 							switch naluType {
 							case codec.NALU_SPS:
 							case codec.NALU_PPS:
+							case codec.NALU_STAPB:
+								stapaHeaderSize = 3
+								fallthrough
 							case codec.NALU_STAPA:
 								var nalus [][]byte
 								for currOffset, naluSize := stapaHeaderSize, 0; currOffset < len(nalu); currOffset += naluSize {
@@ -168,24 +173,49 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 								p := pack.Clone()
 								p.NALUs = nalus
 								vt.PushNalu(p)
+							case codec.MTAP24:
+								mTAP16LengthSize = 5
+								fallthrough
+							case codec.MTAP16:
+								for currOffset, naluSize := 3, 0; currOffset < len(nalu); currOffset += naluSize {
+									naluSize = int(binary.BigEndian.Uint16(nalu[currOffset:]))
+									currOffset += mTAP16LengthSize
+									if currOffset+len(nalu) < currOffset+naluSize {
+										utils.Printf("MTAP16 declared size(%d) is larger then buffer(%d)", naluSize, len(nalu)-currOffset)
+										return
+									}
+									ts := binary.BigEndian.Uint16(nalu[currOffset+3:])
+									if mTAP16LengthSize == 5 {
+										ts = (ts << 8) | uint16(nalu[currOffset+5])
+									}
+									p := pack.Clone()
+									p.Timestamp = uint32(ts)
+									p.NALUs = [][]byte{nalu[currOffset : currOffset+naluSize]}
+									vt.PushNalu(p)
+								}
+							case codec.NALU_FUB:
+								fuaHeaderSize = 4
+								fallthrough
 							case codec.NALU_FUA:
 								if len(nalu) < fuaHeaderSize {
 									utils.Printf("Payload is not large enough to be FU-A")
 									return
 								}
-								if nalu[1]&fuaStartBitmask != 0 {
+								S := nalu[1]&fuaStartBitmask != 0
+								E := nalu[1]&fuaEndBitmask != 0
+								if S {
 									fuaBuffer = bytes.NewBuffer([]byte{})
 									naluRefIdc := nalu[0] & naluRefIdcBitmask
 									fragmentedNaluType := nalu[1] & naluTypeBitmask
 									nalu[fuaHeaderSize-1] = naluRefIdc | fragmentedNaluType
 									fuaBuffer.Write(nalu)
-								} else if nalu[1]&fuaEndBitmask != 0 {
+									mSync = true
+								}
+								fuaBuffer.Write(nalu[fuaHeaderSize:])
+								if E && mSync {
 									p := pack.Clone()
-									fuaBuffer.Write(nalu[fuaHeaderSize:])
 									p.NALUs = [][]byte{fuaBuffer.Bytes()[fuaHeaderSize-1:]}
 									vt.PushNalu(p)
-								} else {
-									fuaBuffer.Write(nalu[fuaHeaderSize:])
 								}
 							case codec.NALU_Access_Unit_Delimiter:
 							case codec.NALU_IDR_Picture:
