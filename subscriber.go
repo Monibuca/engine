@@ -30,8 +30,12 @@ type Subscriber struct {
 }
 
 func (s *Subscriber) close() {
-	s.UnSubscribe(s)
-	s.cancel()
+	if s.Stream != nil {
+		s.UnSubscribe(s)
+	}
+	if s.cancel != nil {
+		s.cancel()
+	}
 }
 
 // Close 关闭订阅者
