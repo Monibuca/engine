@@ -92,7 +92,7 @@ func (at *AudioTrack) pushRaw(pack AudioPack) {
 		}
 	default:
 		at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
-			writer.Write([]byte{at.ExtraData[0]})
+			writer.Write(at.ExtraData[:1])
 			writer.Write(pack.Raw)
 		}
 	}
