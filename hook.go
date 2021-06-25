@@ -26,10 +26,10 @@ const (
 
 var Hooks = NewRing_Hook()
 var hookMutex sync.Mutex
+
 func AddHook(name string, callback func(interface{})) {
 	for hooks := Hooks.SubRing(Hooks.Index); ; hooks.GoNext() {
-		hooks.Current.Wait()
-		if name == hooks.Current.Name {
+		if hooks.Current.Wait(); name == hooks.Current.Name {
 			go callback(hooks.Current.Payload)
 		}
 	}
@@ -37,16 +37,15 @@ func AddHook(name string, callback func(interface{})) {
 
 func AddHookWithContext(ctx context.Context, name string, callback func(interface{})) {
 	for hooks := Hooks.SubRing(Hooks.Index); ctx.Err() == nil; hooks.GoNext() {
-		hooks.Current.Wait()
-		if name == hooks.Current.Name && ctx.Err() == nil {
+		if hooks.Current.Wait(); name == hooks.Current.Name && ctx.Err() == nil {
 			go callback(hooks.Current.Payload)
 		}
 	}
 }
 
 func TriggerHook(hook Hook) {
-	Hooks.Current.Hook = hook
 	hookMutex.Lock()
+	Hooks.Current.Hook = hook
 	Hooks.NextW()
 	hookMutex.Unlock()
 }
