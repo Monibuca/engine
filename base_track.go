@@ -57,6 +57,9 @@ type TrackWaiter struct {
 	*sync.Cond `json:"-"`
 }
 
+func (tw *TrackWaiter) MarshalJSON() ([]byte, error) {
+	return json.Marshal(tw.Track)
+}
 func (tw *TrackWaiter) Ok(t Track) {
 	tw.Track = t
 	tw.Broadcast()
@@ -81,6 +84,7 @@ type Tracks struct {
 	sync.RWMutex
 	context.Context `json:"-"`
 }
+
 func (ts *Tracks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ts.m)
 }
