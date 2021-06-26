@@ -51,19 +51,19 @@ func FindStream(streamPath string) *Stream {
 
 // Stream 流定义
 type Stream struct {
-	context.Context
-	StreamPath     string
-	Type           string        //流类型，来自发布者
-	StartTime      time.Time     //流的创建时间
-	Subscribers    []*Subscriber // 订阅者
-	VideoTracks    Tracks
-	AudioTracks    Tracks
-	AutoUnPublish  bool              //	当无人订阅时自动停止发布
-	Transcoding    map[string]string //转码配置，key：目标编码，value：发布者提供的编码
-	subscribeMutex sync.Mutex
-	timeout        *time.Timer //更新时间用来做超时处理
-	Close          func()      `json:"-"`
-	prePayload     uint32      //需要预拼装ByteStream格式的数据的订阅者数量
+	context.Context `json:"-"`
+	StreamPath      string
+	Type            string        //流类型，来自发布者
+	StartTime       time.Time     //流的创建时间
+	Subscribers     []*Subscriber // 订阅者
+	VideoTracks     Tracks
+	AudioTracks     Tracks
+	AutoUnPublish   bool              //	当无人订阅时自动停止发布
+	Transcoding     map[string]string //转码配置，key：目标编码，value：发布者提供的编码
+	subscribeMutex  sync.Mutex
+	timeout         *time.Timer //更新时间用来做超时处理
+	Close           func()      `json:"-"`
+	prePayload      uint32      //需要预拼装ByteStream格式的数据的订阅者数量
 }
 
 func (r *Stream) Update() {

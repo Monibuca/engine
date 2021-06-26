@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 )
@@ -78,9 +79,11 @@ func (tw *TrackWaiter) Wait(c chan<- Track) {
 type Tracks struct {
 	m map[string]*TrackWaiter
 	sync.RWMutex
-	context.Context
+	context.Context `json:"-"`
 }
-
+func (ts *Tracks) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ts.m)
+}
 func (ts *Tracks) Codecs() (result []string) {
 	ts.RLock()
 	defer ts.RUnlock()

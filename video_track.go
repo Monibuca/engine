@@ -54,9 +54,9 @@ type VideoTrack struct {
 	ExtraData       *VideoPack      `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS)
 	WaitIDR         context.Context `json:"-"`
 	revIDR          func()
-	PushByteStream  func(pack VideoPack)
-	PushNalu        func(pack VideoPack)
-	WriteByteStream func(writer io.Writer, pack VideoPack) //使用函数写入，避免申请内存
+	PushByteStream  func(pack VideoPack)                   `json:"-"`
+	PushNalu        func(pack VideoPack)                   `json:"-"`
+	WriteByteStream func(writer io.Writer, pack VideoPack) `json:"-"` //使用函数写入，避免申请内存
 	UsingDonlField  bool
 }
 
