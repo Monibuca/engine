@@ -120,6 +120,7 @@ func (at *AudioTrack) push(pack AudioPack) {
 
 func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at = &AudioTrack{}
+	at.CodecID = codec
 	at.PushByteStream = at.pushByteStream
 	at.PushRaw = at.pushRaw
 	at.Stream = s
