@@ -74,7 +74,6 @@ func (at *AudioTrack) pushByteStream(pack AudioPack) {
 			if payloadLen < 4 {
 				return
 			}
-			at.GetBPS(payloadLen)
 			pack.Raw = pack.Payload[1:]
 			at.push(pack)
 		}
@@ -114,6 +113,12 @@ func (at *AudioTrack) push(pack AudioPack) {
 		audio.AudioPack.Payload = buffer.Bytes()
 	} else {
 		audio.AudioPack = pack
+	}
+	at.bytes += len(pack.Raw)
+	at.GetBPS()
+	if audio.Timestamp-at.ts > 1000 {
+		at.bytes = 0
+		at.ts = audio.Timestamp
 	}
 	abr.NextW()
 }

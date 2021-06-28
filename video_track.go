@@ -259,9 +259,11 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 							p := pack.Clone()
 							p.IDR = true
 							p.NALUs = [][]byte{nalu}
+							vt.bytes += len(nalu)
 							vt.push(p)
 						case codec.NALU_Non_IDR_Picture:
 							nonIDRs = append(nonIDRs, nalu)
+							vt.bytes += len(nalu)
 						case codec.NALU_SEI:
 						case codec.NALU_Filler_Data:
 						default:
@@ -465,7 +467,7 @@ func (vt *VideoTrack) pushByteStream(pack VideoPack) {
 			if len(pack.Payload) < 4 {
 				return
 			}
-			vt.GetBPS(len(pack.Payload))
+			vt.bytes += len(pack.Payload)
 			pack.IDR = pack.Payload[0]>>4 == 1
 			pack.CompositionTime = utils.BigEndian.Uint24(pack.Payload[2:])
 			nalus := pack.Payload[5:]
@@ -496,9 +498,12 @@ func (vt *VideoTrack) push(pack VideoPack) {
 	} else {
 		video.VideoPack = pack
 	}
+	vt.GetBPS()
 	video.Sequence = vt.PacketCount
 	if pack.IDR {
 		vt.revIDR()
+		vt.ts = video.Timestamp
+		vt.bytes = 0
 	}
 	vbr.NextW()
 }

@@ -8,7 +8,7 @@ import (
 )
 
 type Track interface {
-	GetBPS(int)
+	GetBPS()
 	Dispose()
 }
 
@@ -18,15 +18,15 @@ type Track_Audio struct {
 	PacketCount int
 	CodecID     byte
 	BPS         int
-	lastIndex   byte
+	bytes       int    // GOP内的数据大小
+	ts          uint32 // GOP起始时间戳
 }
 
-func (t *Track_Audio) GetBPS(payloadLen int) {
+func (t *Track_Audio) GetBPS() {
 	t.PacketCount++
-	if lastTimestamp := t.Buffer.GetAt(t.lastIndex).Timestamp; lastTimestamp > 0 && lastTimestamp != t.Buffer.Current.Timestamp {
-		t.BPS = payloadLen * 1000 / int(t.Buffer.Current.Timestamp-lastTimestamp)
+	if t.Buffer.Current.Timestamp != t.ts {
+		t.BPS = t.bytes * 1000 / int(t.Buffer.Current.Timestamp-t.ts)
 	}
-	t.lastIndex = t.Buffer.Index
 }
 func (t *Track_Audio) Dispose() {
 	t.Buffer.Dispose()
@@ -38,122 +38,153 @@ type Track_Video struct {
 	PacketCount int
 	CodecID     byte
 	BPS         int
-	lastIndex   byte
+	bytes       int    // GOP内的数据大小
+	ts          uint32 // GOP起始时间戳
 }
 
-func (t *Track_Video) GetBPS(payloadLen int) {
+func (t *Track_Video) GetBPS() {
 	t.PacketCount++
-	if lastTimestamp := t.Buffer.GetAt(t.lastIndex).Timestamp; lastTimestamp > 0 && lastTimestamp != t.Buffer.Current.Timestamp {
-		t.BPS = payloadLen * 1000 / int(t.Buffer.Current.Timestamp-lastTimestamp)
+	if t.Buffer.Current.Timestamp != t.ts {
+		t.BPS = t.bytes * 1000 / int(t.Buffer.Current.Timestamp-t.ts)
 	}
-	t.lastIndex = t.Buffer.Index
 }
 func (t *Track_Video) Dispose() {
 	t.Buffer.Dispose()
 }
 
-type TrackWaiter struct {
-	Track
-	*sync.Cond `json:"-"`
-}
-
-func (tw *TrackWaiter) MarshalJSON() ([]byte, error) {
-	return json.Marshal(tw.Track)
-}
-func (tw *TrackWaiter) Ok(t Track) {
-	tw.Track = t
-	tw.Broadcast()
-}
-func (tw *TrackWaiter) Dispose() {
-	if tw.Cond != nil {
-		tw.Broadcast()
-	}
-	if tw.Track != nil {
-		tw.Track.Dispose()
-	}
-}
-func (tw *TrackWaiter) Wait(c chan<- Track) {
-	tw.L.Lock()
-	tw.Cond.Wait()
-	tw.L.Unlock()
-	c <- tw.Track
-}
-
 type Tracks struct {
-	m map[string]*TrackWaiter
+	TrackRing *Ring_Track
+	m         map[string]Track
+	context.Context
 	sync.RWMutex
-	context.Context `json:"-"`
 }
 
 func (ts *Tracks) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ts.m)
-}
-func (ts *Tracks) Codecs() (result []string) {
 	ts.RLock()
 	defer ts.RUnlock()
-	for codec := range ts.m {
-		result = append(result, codec)
-	}
-	return
+	return json.Marshal(ts.m)
 }
 
 func (ts *Tracks) Init() {
-	ts.m = make(map[string]*TrackWaiter)
+	ts.TrackRing = NewRing_Track()
+	ts.m = make(map[string]Track)
 	ts.Context, _ = context.WithTimeout(context.Background(), time.Second*5)
 }
 
 func (ts *Tracks) Dispose() {
-	ts.RLock()
-	defer ts.RUnlock()
-	for _, t := range ts.m {
-		t.Dispose()
+	var i byte
+	for i = 0; i < ts.TrackRing.Index; i++ {
+		ts.TrackRing.GetAt(i).Dispose()
 	}
+	ts.TrackRing.disposed = true
+	ts.TrackRing.Current.Done()
 }
 func (ts *Tracks) AddTrack(codec string, t Track) {
 	ts.Lock()
-	if tw, ok := ts.m[codec]; ok {
-		ts.Unlock()
-		tw.Ok(t)
-	} else {
-		ts.m[codec] = &TrackWaiter{Track: t}
-		ts.Unlock()
+	defer ts.Unlock()
+	if _, ok := ts.m[codec]; !ok {
+		ts.m[codec] = t
+		ts.TrackRing.NextW(codec, t)
 	}
 }
-func (ts *Tracks) GetTrack(codec string) (tw *TrackWaiter, ok bool) {
-	ts.Lock()
-	if tw, ok = ts.m[codec]; ok {
-		ts.Unlock()
-		ok = tw.Track != nil
-	} else {
-		tw = &TrackWaiter{Cond: sync.NewCond(new(sync.Mutex))}
-		ts.m[codec] = tw
-		ts.Unlock()
-	}
-	return
-}
+
 func (ts *Tracks) WaitTrack(codecs ...string) Track {
-	if len(codecs) == 0 {
-		codecs = ts.Codecs()
-	}
-	var tws []*TrackWaiter
-	for _, codec := range codecs {
-		if tw, ok := ts.GetTrack(codec); ok {
-			return tw.Track
+	ring := ts.TrackRing.SubRing(0)
+	if ts.Context.Err() == nil { //在等待时间范围内
+		wait := make(chan *RingItem_Track)
+		if len(codecs) == 0 { //任意编码需求，只取第一个
+			go func() {
+				ring.Current.Wait()
+				wait <- ring.Current
+			}()
 		} else {
-			tws = append(tws, tw)
+			go func() {
+				for ring.Current.Wait(); !ts.TrackRing.disposed; ring.NextR() {
+					wait <- ring.Current
+				}
+			}()
+		}
+		select {
+		case t := <-wait:
+			return t.Track
+		case <-ts.Context.Done():
+			return nil
+		}
+	} else { //进入不等待状态
+		if len(codecs) == 0 {
+			return ring.Current.Track
+		} else {
+			for ; ring.Index < ts.TrackRing.Index; ring.GoNext() {
+				for _, codec := range codecs {
+					if ring.Current.Codec == codec {
+						return ring.Current.Track
+					}
+				}
+			}
+			return nil
 		}
 	}
-	if ts.Err() != nil {
-		return nil
+}
+
+type RingItem_Track struct {
+	Track
+	Codec string
+	sync.WaitGroup
+}
+
+// Ring 环形缓冲，使用数组实现
+type Ring_Track struct {
+	Current  *RingItem_Track
+	buffer   []RingItem_Track
+	Index    byte
+	disposed bool
+}
+
+func (r *Ring_Track) SubRing(index byte) *Ring_Track {
+	result := &Ring_Track{
+		buffer: r.buffer,
 	}
-	c := make(chan Track, len(tws))
-	for _, tw := range tws {
-		go tw.Wait(c)
+	result.GoTo(index)
+	return result
+}
+
+// NewRing 创建Ring
+func NewRing_Track() (r *Ring_Track) {
+	buffer := make([]RingItem_Track, 256)
+	r = &Ring_Track{
+		buffer:  buffer,
+		Current: &buffer[0],
 	}
-	select {
-	case <-ts.Done():
-		return nil
-	case t := <-c:
-		return t
-	}
+	r.Current.Add(1)
+	return
+}
+func (r *Ring_Track) GetAt(index byte) *RingItem_Track {
+	return &r.buffer[index]
+}
+
+// GoTo 移动到指定索引处
+func (r *Ring_Track) GoTo(index byte) {
+	r.Index = index
+	r.Current = &r.buffer[index]
+}
+
+// GoNext 移动到下一个位置
+func (r *Ring_Track) GoNext() {
+	r.Index = r.Index + 1
+	r.Current = &r.buffer[r.Index]
+}
+
+// NextW 写下一个
+func (r *Ring_Track) NextW(codec string, track Track) {
+	item := r.Current
+	item.Track = track
+	r.GoNext()
+	r.Current.Add(1)
+	item.Done()
+}
+
+// NextR 读下一个
+func (r *Ring_Track) NextR() {
+	r.Current.Wait()
+	r.GoNext()
 }
