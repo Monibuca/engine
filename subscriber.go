@@ -71,116 +71,127 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		s.PlayVideo(vt)
 		return
 	}
-	ctx2 := s.Ctx2
-	if ctx2 == nil {
-		ctx2 = context.TODO()
+	var extraExit <-chan struct{}
+	if s.Ctx2 != nil {
+		extraExit = s.Ctx2.Done()
 	}
+	streamExit := s.Context.Done()
 	select {
 	case <-vt.WaitIDR.Done(): //等待获取到第一个关键帧
-	case <-s.Context.Done():
+	case <-streamExit: //可能等不到关键帧就退出了
 		return
-	case <-ctx2.Done(): //可能等不到关键帧就退出了
+	case <-extraExit: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.Buffer.SubRing(vt.IDRIndex) //从关键帧开始读取，首屏秒开
-	vr.Current.Wait()                    //等到RingBuffer可读
-	ar := at.Buffer.SubRing(at.Buffer.Index)
-	ar.Current.Wait()
+	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	ar := at.Clone()
 	dropping := false //是否处于丢帧中
-	startTimestamp := vr.Current.Timestamp
-	for ctx2.Err() == nil && s.Context.Err() == nil {
-		if ar.Current.Timestamp > vr.Current.Timestamp || ar.Current.Timestamp == 0 {
-			if !dropping {
-				s.OnVideo(vr.Current.VideoPack.Copy(startTimestamp))
-				if vt.Buffer.Index-vr.Index > 128 {
-					dropping = true
+	vp := vr.Read().(*VideoPack)
+	ap := ar.Read().(*AudioPack)
+	startTimestamp := vp.Timestamp
+	for vt.Flag != 2 {
+		select {
+		case <-extraExit:
+			return
+		case <-streamExit:
+			return
+		default:
+			if ap.Timestamp > vp.Timestamp || ap.Timestamp == 0 {
+				if !dropping {
+					s.OnVideo(vp.Copy(startTimestamp))
+					if vt.CurrentValue().(AVPack).Since(vp.Timestamp) > 1000 {
+						dropping = true
+					}
+				} else if vp.IDR {
+					dropping = false
 				}
-			} else if vr.Current.IDR {
-				dropping = false
-			}
-			if !vr.NextR() {
-				return
-			}
-		} else {
-			if !dropping {
-				s.OnAudio(ar.Current.AudioPack.Copy(startTimestamp))
-				if at.Buffer.Index-ar.Index > 128 {
-					dropping = true
+				vr.MoveNext()
+				vp = vr.Read().(*VideoPack)
+			} else {
+				if !dropping {
+					s.OnAudio(ap.Copy(startTimestamp))
+					if at.CurrentValue().(AVPack).Since(ap.Timestamp) > 1000 {
+						dropping = true
+					}
 				}
-			}
-			if !ar.NextR() {
-				return
+				ar.MoveNext()
+				ap = ar.Read().(*AudioPack)
 			}
 		}
 	}
 }
 func (s *Subscriber) PlayAudio(at *AudioTrack) {
-	ring := at.Buffer.SubRing(at.Buffer.Index)
-	ring.Current.Wait()
-	startTimestamp := ring.Current.Timestamp
+	streamExit := s.Context.Done()
+	ar := at.Clone()
+	ap := ar.Read().(*AudioPack)
+	startTimestamp := ap.Timestamp
 	droped := 0
 	var action, send func()
 	drop := func() {
-		if at.Buffer.Index-ring.Index < 10 {
+		if at.CurrentValue().(AVPack).Distance(ap.Sequence) < 4 {
 			action = send
 		} else {
 			droped++
 		}
 	}
 	send = func() {
-		s.OnAudio(ring.Current.AudioPack.Copy(startTimestamp))
-
-		//s.BufferLength = pIndex - ring.Index
-		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
-		if at.Buffer.Index-ring.Index > 128 {
+		if s.OnAudio(ap.Copy(startTimestamp)); at.CurrentValue().(AVPack).Since(ap.Timestamp) > 1000 {
 			action = drop
 		}
 	}
-	ctx2 := s.Ctx2
-	if ctx2 == nil {
-		ctx2 = context.TODO()
+	var extraExit <-chan struct{}
+	if s.Ctx2 != nil {
+		extraExit = s.Ctx2.Done()
 	}
-	action = send
-	for running := true; ctx2.Err() == nil && s.Context.Err() == nil && running; running = ring.NextR() {
-		action()
+	for action = send; at.Flag != 2; ap = ar.Read().(*AudioPack) {
+		select {
+		case <-extraExit:
+			return
+		case <-streamExit:
+			return
+		default:
+			action()
+			ar.MoveNext()
+		}
 	}
 }
 
 func (s *Subscriber) PlayVideo(vt *VideoTrack) {
-	ctx2 := s.Ctx2
-	if ctx2 == nil {
-		ctx2 = context.TODO()
+	var extraExit <-chan struct{}
+	if s.Ctx2 != nil {
+		extraExit = s.Ctx2.Done()
 	}
+	streamExit := s.Context.Done()
 	select {
 	case <-vt.WaitIDR.Done():
-	case <-s.Context.Done():
+	case <-streamExit:
 		return
-	case <-ctx2.Done(): //可能等不到关键帧就退出了
+	case <-extraExit: //可能等不到关键帧就退出了
 		return
 	}
-	ring := vt.Buffer.SubRing(vt.IDRIndex)
-	ring.Current.Wait()
-	startTimestamp := ring.Current.Timestamp
-	droped := 0
+	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	vp := vr.Read().(*VideoPack)
+	startTimestamp := vp.Timestamp
 	var action, send func()
 	drop := func() {
-		if ring.Current.IDR {
+		if vp.IDR {
 			action = send
-		} else {
-			droped++
 		}
 	}
 	send = func() {
-		s.OnVideo(ring.Current.VideoPack.Copy(startTimestamp))
-		pIndex := vt.Buffer.Index
-		//s.BufferLength = pIndex - ring.Index
-		//s.Delay = s.AVRing.Timestamp - packet.Timestamp
-		if pIndex-ring.Index > 128 {
+		if s.OnVideo(vp.Copy(startTimestamp)); vt.CurrentValue().(AVPack).Since(vp.Timestamp) > 1000 {
 			action = drop
 		}
 	}
-	action = send
-	for running := true; ctx2.Err() == nil && s.Context.Err() == nil && running; running = ring.NextR() {
-		action()
+	for action = send; vt.Flag != 2; vp = vr.Read().(*VideoPack) {
+		select {
+		case <-extraExit:
+			return
+		case <-streamExit:
+			return
+		default:
+			action()
+			vr.MoveNext()
+		}
 	}
 }

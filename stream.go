@@ -94,7 +94,7 @@ func (r *Stream) Publish() bool {
 			r.AudioTracks.Dispose()
 			utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 			Streams.Delete(r.StreamPath)
-			TriggerHook(Hook{HOOK_STREAMCLOSE, r})
+			TriggerHook(HOOK_STREAMCLOSE, r)
 		})
 	}
 	r.StartTime = time.Now()
@@ -102,7 +102,7 @@ func (r *Stream) Publish() bool {
 	utils.Print(Green("Stream publish:"), BrightCyan(r.StreamPath))
 	r.timeout = time.AfterFunc(config.PublishTimeout, r.Close)
 	//触发钩子
-	TriggerHook(Hook{HOOK_PUBLISH, r})
+	TriggerHook(HOOK_PUBLISH, r)
 	return true
 }
 
@@ -140,7 +140,7 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		r.Subscribers = append(r.Subscribers, s)
 		r.subscribeMutex.Unlock()
 		utils.Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-		TriggerHook(Hook{HOOK_SUBSCRIBE, s})
+		TriggerHook(HOOK_SUBSCRIBE, s)
 	}
 }
 
@@ -156,7 +156,7 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 		r.subscribeMutex.Unlock()
 		if deleted {
 			utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-			TriggerHook(Hook{HOOK_UNSUBSCRIBE, s})
+			TriggerHook(HOOK_UNSUBSCRIBE, s)
 			if len(r.Subscribers) == 0 && r.AutoUnPublish {
 				r.Close()
 			}

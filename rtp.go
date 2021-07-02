@@ -1,11 +1,17 @@
 package engine
 
 import (
-	"sort"
-
 	"github.com/Monibuca/utils/v3/codec"
 	"github.com/pion/rtp"
 )
+
+type TSSlice []uint32
+
+func (s TSSlice) Len() int { return len(s) }
+
+func (s TSSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+func (s TSSlice) Less(i, j int) bool { return s[i] < s[j] }
 
 type RTPPublisher struct {
 	rtp.Packet
@@ -42,64 +48,30 @@ func (v *RTPVideo) push(payload []byte) {
 		return
 	}
 	t := v.Timestamp / 90
-	if t < vt.Buffer.GetLast().Timestamp {
+	if t < vt.Prev().Value.(*VideoPack).Timestamp {
 		if vt.WaitIDR.Err() == nil {
 			return
 		}
 		//有B帧
-		var tmpVT VideoTrack
-		tmpVT.Buffer = NewRing_Video()
+		tmpVT := v.Stream.NewVideoTrack(0)
+		tmpVT.CodecID = v.CodecID
 		tmpVT.revIDR = func() {
-			tmpVT.IDRIndex = tmpVT.Buffer.Index
-		}
-		// tmpVT.pushRTP = func(p rtp.Packet) {
-		// 	tmpVT.Push(VideoPack{Timestamp:p.Timestamp/90,Payload:p.Payload})
-		// }
-		gopBuffer := tmpVT.Buffer //缓存一个GOP用来计算dts
-		var gopFirst byte
-		var tsSlice TSSlice
-		for i := vt.IDRIndex; vt.Buffer.Index != i; i++ {
-			t := vt.Buffer.GetAt(i)
-			c := gopBuffer.Current
-			c.VideoPack = t.VideoPack.Clone()
-			tsSlice = append(tsSlice, gopBuffer.Current.Timestamp)
-			gopBuffer.NextW()
+			if tmpVT.lastIDR != nil {
+				//TODO: 排序
+			}
+			tmpVT.IDRing = tmpVT.Ring
+			tmpVT.lastIDR = tmpVT.CurrentValue().(*VideoPack)
 		}
 		v.Push = func(payload []byte) {
 			if err := v.Unmarshal(payload); err != nil {
 				return
 			}
-			t := v.Timestamp / 90
-			c := gopBuffer.Current
-			vp := VideoPack{Timestamp: t, NALUs: [][]byte{v.Payload}}
-			tmpVT.PushNalu(vp)
-			if c != gopBuffer.Current {
-				if c.IDR {
-					sort.Sort(tsSlice) //排序后相当于DTS列表
-					var offset uint32
-					for i := 0; i < len(tsSlice); i++ {
-						j := gopFirst + byte(i)
-						f := gopBuffer.GetAt(j)
-						if f.Timestamp+offset < tsSlice[i] {
-							offset = tsSlice[i] - f.Timestamp
-						}
-					}
-					for i := 0; i < len(tsSlice); i++ {
-						f := gopBuffer.GetAt(gopFirst + byte(i))
-						f.CompositionTime = f.Timestamp + offset - tsSlice[i]
-						f.Timestamp = tsSlice[i]
-						vt.PushNalu(f.VideoPack)
-					}
-					gopFirst = gopBuffer.Index - 1
-					tsSlice = nil
-				}
-				tsSlice = append(tsSlice, t)
-			}
+			tmpVT.PushNalu(VideoPack{BasePack: BasePack{Timestamp: v.Timestamp / 90}, NALUs: [][]byte{v.Payload}})
 		}
 		v.Push(payload)
 		return
 	}
-	vt.PushNalu(VideoPack{Timestamp: t, NALUs: [][]byte{v.Payload}})
+	vt.PushNalu(VideoPack{BasePack: BasePack{Timestamp: t}, NALUs: [][]byte{v.Payload}})
 }
 func (v *RTPAudio) push(payload []byte) {
 	at := v.AudioTrack
@@ -113,7 +85,7 @@ func (v *RTPAudio) push(payload []byte) {
 				return
 			}
 			for _, payload = range codec.ParseRTPAAC(v.Payload) {
-				at.PushRaw(AudioPack{Timestamp: v.Timestamp / 90, Raw: payload})
+				at.PushRaw(AudioPack{BasePack: BasePack{Timestamp: v.Timestamp / 8}, Raw: payload})
 			}
 		}
 	case 7, 8:
@@ -121,7 +93,7 @@ func (v *RTPAudio) push(payload []byte) {
 			if err := v.Unmarshal(payload); err != nil {
 				return
 			}
-			at.PushRaw(AudioPack{Timestamp: v.Timestamp / 8, Raw: v.Payload})
+			at.PushRaw(AudioPack{BasePack: BasePack{Timestamp: v.Timestamp / 8}, Raw: v.Payload})
 		}
 	}
 }

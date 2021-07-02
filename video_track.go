@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"container/ring"
 	"context"
 	"encoding/binary"
 	"io"
@@ -20,21 +21,11 @@ const (
 	fuaEndBitmask        = 0b0100_0000
 )
 
-type TSSlice []uint32
-
-func (s TSSlice) Len() int { return len(s) }
-
-func (s TSSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-func (s TSSlice) Less(i, j int) bool { return s[i] < s[j] }
-
 type VideoPack struct {
-	Timestamp       uint32
+	BasePack
 	CompositionTime uint32
-	Payload         []byte
 	NALUs           [][]byte
 	IDR             bool // 是否关键帧
-	Sequence        int
 }
 
 func (vp VideoPack) Clone() VideoPack {
@@ -42,15 +33,16 @@ func (vp VideoPack) Clone() VideoPack {
 }
 
 func (vp VideoPack) Copy(ts uint32) VideoPack {
-	vp.Timestamp = vp.Timestamp - ts
+	vp.Timestamp = vp.Since(ts)
 	return vp
 }
 
 type VideoTrack struct {
-	IDRIndex byte //最近的关键帧位置，首屏渲染
-	Track_Video
+	IDRing  *ring.Ring //最近的关键帧位置，首屏渲染
+	lastIDR *VideoPack
+	Track_Base
 	SPSInfo         codec.SPSInfo
-	GOP             byte            //关键帧间隔
+	GOP             int             //关键帧间隔
 	ExtraData       *VideoPack      `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS)
 	WaitIDR         context.Context `json:"-"`
 	revIDR          func()
@@ -64,11 +56,22 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	var cancel context.CancelFunc
 	vt = &VideoTrack{
 		revIDR: func() {
-			vt.IDRIndex = vt.Buffer.Index
+			vt.IDRing = vt.Ring
+			vt.lastIDR = vt.CurrentValue().(*VideoPack)
 			cancel()
 			vt.revIDR = func() {
-				vt.GOP = vt.Buffer.Index - vt.IDRIndex
-				vt.IDRIndex = vt.Buffer.Index
+				current := vt.CurrentValue().(*VideoPack)
+				vt.GOP = current.Distance(vt.lastIDR.Sequence)
+				if l := vt.Ring.Len(); vt.IDRing.Value != vt.lastIDR {
+					//缓冲环不够大，导致IDR被覆盖
+					vt.Link(NewRingBuffer(vt.GOP - l + 5).Ring) // 扩大缓冲环
+				} else if vt.GOP < l-5 {
+					vt.Unlink(l - vt.GOP - 5) //缩小缓冲环节省内存
+				}
+				vt.IDRing = vt.Ring
+				vt.lastIDR = current
+				vt.ts = current.Timestamp
+				vt.bytes = 0
 			}
 		},
 	}
@@ -76,7 +79,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	vt.PushNalu = vt.pushNalu
 	vt.Stream = s
 	vt.CodecID = codec
-	vt.Buffer = NewRing_Video()
+	vt.Init(256)
 	vt.WaitIDR, cancel = context.WithCancel(context.Background())
 	switch codec {
 	case 7:
@@ -136,9 +139,9 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 				}
 				if info.SequenceParameterSetNALUnit != nil && info.PictureParameterSetNALUnit != nil {
 					vt.ExtraData = &VideoPack{
-						Payload: codec.BuildH264SeqHeaderFromSpsPps(info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit),
-						NALUs:   [][]byte{info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit},
+						NALUs: [][]byte{info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit},
 					}
+					vt.ExtraData.Payload = codec.BuildH264SeqHeaderFromSpsPps(info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit)
 				}
 				if vt.ExtraData == nil {
 					return
@@ -301,9 +304,11 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 					return
 				}
 				vt.ExtraData = &VideoPack{
-					Payload: extraData,
-					NALUs:   [][]byte{vps, sps, pps},
+					NALUs: [][]byte{vps, sps, pps},
 				}
+				vt.ExtraData.Payload = extraData
+			}
+			if vt.ExtraData != nil {
 				var fuaBuffer *bytes.Buffer
 				vt.PushNalu = func(pack VideoPack) {
 					var nonIDRs [][]byte
@@ -488,22 +493,15 @@ func (vt *VideoTrack) push(pack VideoPack) {
 	if vt.Stream != nil {
 		vt.Stream.Update()
 	}
-	vbr := vt.Buffer
-	video := vbr.Current
 	if vt.Stream.prePayload > 0 && len(pack.Payload) == 0 {
-		buffer := vbr.GetBuffer()
+		buffer := bytes.NewBuffer([]byte{})
 		vt.WriteByteStream(buffer, pack)
-		video.VideoPack = pack
-		video.VideoPack.Payload = buffer.Bytes()
-	} else {
-		video.VideoPack = pack
+		pack.Payload = buffer.Bytes()
 	}
 	vt.GetBPS()
-	video.Sequence = vt.PacketCount
+	pack.Sequence = vt.PacketCount
 	if pack.IDR {
-		vt.revIDR()
-		vt.ts = video.Timestamp
-		vt.bytes = 0
+		defer vt.revIDR()
 	}
-	vbr.NextW()
+	vt.Write(&pack)
 }

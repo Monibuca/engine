@@ -1,25 +1,25 @@
 package engine
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/Monibuca/utils/v3/codec"
 )
 
 type AudioPack struct {
-	Timestamp      uint32
-	Payload        []byte
+	BasePack
 	Raw            []byte
 	SequenceNumber uint16
 }
 
 func (ap AudioPack) Copy(ts uint32) AudioPack {
-	ap.Timestamp = ap.Timestamp - ts
+	ap.Timestamp = ap.Since(ts)
 	return ap
 }
 
 type AudioTrack struct {
-	Track_Audio
+	Track_Base
 	SoundRate       int                                    //2bit
 	SoundSize       byte                                   //1bit
 	Channels        byte                                   //1bit
@@ -103,24 +103,19 @@ func (at *AudioTrack) push(pack AudioPack) {
 	if at.Stream != nil {
 		at.Stream.Update()
 	}
-	abr := at.Buffer
-	audio := abr.Current
-	audio.AudioPack = pack
 	if at.Stream.prePayload > 0 && len(pack.Payload) == 0 {
-		buffer := abr.GetBuffer()
+		buffer := bytes.NewBuffer([]byte{})
 		at.WriteByteStream(buffer, pack)
-		audio.AudioPack = pack
-		audio.AudioPack.Payload = buffer.Bytes()
-	} else {
-		audio.AudioPack = pack
+		pack.Payload = buffer.Bytes()
 	}
 	at.bytes += len(pack.Raw)
 	at.GetBPS()
-	if audio.Timestamp-at.ts > 1000 {
+	pack.Sequence = at.PacketCount
+	if pack.Since(at.ts) > 1000 {
 		at.bytes = 0
-		at.ts = audio.Timestamp
+		at.ts = pack.Timestamp
 	}
-	abr.NextW()
+	at.Write(&pack)
 }
 
 func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
@@ -129,7 +124,7 @@ func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at.PushByteStream = at.pushByteStream
 	at.PushRaw = at.pushRaw
 	at.Stream = s
-	at.Buffer = NewRing_Audio()
+	at.Init(8)
 	switch codec {
 	case 10:
 		s.AudioTracks.AddTrack("aac", at)
