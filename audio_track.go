@@ -10,7 +10,6 @@ import (
 type AudioPack struct {
 	BasePack
 	Raw            []byte
-	SequenceNumber uint16
 }
 
 func (ap AudioPack) Copy(ts uint32) AudioPack {

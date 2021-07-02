@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"sort"
+
 	"github.com/Monibuca/utils/v3/codec"
 	"github.com/pion/rtp"
 )
@@ -52,21 +54,33 @@ func (v *RTPVideo) push(payload []byte) {
 		if vt.WaitIDR.Err() == nil {
 			return
 		}
+		var ts TSSlice
 		//有B帧
 		tmpVT := v.Stream.NewVideoTrack(0)
 		tmpVT.CodecID = v.CodecID
 		tmpVT.revIDR = func() {
-			if tmpVT.lastIDR != nil {
-				//TODO: 排序
+			l := len(ts)
+			sort.Sort(ts)
+			start := tmpVT.Move(-l)
+			for i := 0; i < l; i++ {
+				vp := start.Value.(*VideoPack)
+				pts := vp.Timestamp
+				vp.Timestamp = ts[i]
+				vp.CompositionTime = pts - ts[i]
+				vt.push(*vp)
+				start = start.Next()
 			}
-			tmpVT.IDRing = tmpVT.Ring
-			tmpVT.lastIDR = tmpVT.CurrentValue().(*VideoPack)
+			ts = nil
 		}
 		v.Push = func(payload []byte) {
 			if err := v.Unmarshal(payload); err != nil {
 				return
 			}
-			tmpVT.PushNalu(VideoPack{BasePack: BasePack{Timestamp: v.Timestamp / 90}, NALUs: [][]byte{v.Payload}})
+			r := tmpVT.Ring
+			t := v.Timestamp / 90
+			if tmpVT.PushNalu(VideoPack{BasePack: BasePack{Timestamp: t}, NALUs: [][]byte{v.Payload}}); r != tmpVT.Ring {
+				ts = append(ts, t)
+			}
 		}
 		v.Push(payload)
 		return
