@@ -261,7 +261,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 						case codec.NALU_Access_Unit_Delimiter:
 						case codec.NALU_IDR_Picture:
 							vt.bytes += len(nalu)
-							pack := vt.CurrentValue().(*VideoPack)
+							pack := vt.current()
 							pack.IDR = true
 							pack.Timestamp = ts
 							pack.CompositionTime = cts
@@ -281,7 +281,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							utils.Printf("nalType not support yet:%d", naluType)
 						}
 						if len(nonIDRs) > 0 {
-							pack := vt.CurrentValue().(*VideoPack)
+							pack := vt.current()
 							pack.IDR = false
 							pack.Timestamp = ts
 							pack.CompositionTime = cts
@@ -429,17 +429,28 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							codec.NAL_UNIT_CODED_SLICE_IDR,
 							codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 							codec.NAL_UNIT_CODED_SLICE_CRA:
-							vt.push(&VideoPack{
-								NALUs: [][]byte{nalu}, IDR: true, BasePack: BasePack{Timestamp: ts}, CompositionTime: cts,
-							})
+							pack := vt.current()
+							pack.IDR = true
+							pack.Timestamp = ts
+							pack.CompositionTime = cts
+							if cap(pack.NALUs) > 0 {
+								pack.NALUs = pack.NALUs[:1]
+								pack.NALUs[0] = nalu
+							} else {
+								pack.NALUs = [][]byte{nalu}
+							}
+							vt.push(pack)
 						case 0, 1, 2, 3, 4, 5, 6, 7, 9:
 							nonIDRs = append(nonIDRs, nalu)
 						}
 					}
 					if len(nonIDRs) > 0 {
-						vt.push(&VideoPack{
-							NALUs: nonIDRs, BasePack: BasePack{Timestamp: ts}, CompositionTime: cts,
-						})
+						pack := vt.current()
+						pack.IDR = false
+						pack.Timestamp = ts
+						pack.CompositionTime = cts
+						pack.NALUs = nonIDRs
+						vt.push(pack)
 					}
 				}
 			}
@@ -447,7 +458,9 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 	}
 	vt.PushNalu(ts, cts, nalus...)
 }
-
+func (vt *VideoTrack) current() *VideoPack {
+	return vt.CurrentValue().(*VideoPack)
+}
 func (vt *VideoTrack) pushByteStream(ts uint32, payload []byte) {
 	if payload[1] != 0 {
 		return

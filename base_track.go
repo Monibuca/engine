@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"container/ring"
 	"context"
 	"encoding/json"
 	"sync"
@@ -60,6 +61,7 @@ type Tracks struct {
 	m map[string]Track
 	context.Context
 	sync.RWMutex
+	head *ring.Ring
 }
 
 func (ts *Tracks) MarshalJSON() ([]byte, error) {
@@ -70,6 +72,7 @@ func (ts *Tracks) MarshalJSON() ([]byte, error) {
 
 func (ts *Tracks) Init() {
 	ts.RingDisposable.Init(8)
+	ts.head = ts.Ring
 	ts.m = make(map[string]Track)
 	ts.Context, _ = context.WithTimeout(context.Background(), time.Second*5)
 }
@@ -92,7 +95,7 @@ func (ts *Tracks) AddTrack(codec string, t Track) {
 }
 
 func (ts *Tracks) WaitTrack(codecs ...string) Track {
-	ring := ts.Clone()
+	ring := ts.SubRing(ts.head)
 	if ts.Context.Err() == nil { //在等待时间范围内
 		wait := make(chan string)
 		if len(codecs) == 0 { //任意编码需求，只取第一个
@@ -125,7 +128,7 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 		ts.RLock()
 		defer ts.RUnlock()
 		if len(codecs) == 0 {
-			return ts.m[ring.CurrentValue().(string)]
+			return ts.m[ring.Read().(string)]
 		} else {
 			for _, codec := range codecs {
 				if t, ok := ts.m[codec]; ok {
