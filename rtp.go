@@ -50,7 +50,7 @@ func (v *RTPVideo) push(payload []byte) {
 		return
 	}
 	t := v.Timestamp / 90
-	if t < vt.Prev().Value.(*VideoPack).Timestamp {
+	if t < vt.Prev().Value.(*RingItem).Value.(*VideoPack).Timestamp {
 		if vt.WaitIDR.Err() == nil {
 			return
 		}
@@ -63,7 +63,7 @@ func (v *RTPVideo) push(payload []byte) {
 			sort.Sort(ts)
 			start := tmpVT.Move(-l)
 			for i := 0; i < l; i++ {
-				vp := start.Value.(*VideoPack)
+				vp := start.Value.(*RingItem).Value.(*VideoPack)
 				pts := vp.Timestamp
 				vp.Timestamp = ts[i]
 				vp.CompositionTime = pts - ts[i]
