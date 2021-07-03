@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"sync"
@@ -20,7 +21,8 @@ type AVPack interface {
 type BasePack struct {
 	Timestamp uint32
 	Sequence  int
-	Payload   []byte
+	*bytes.Buffer
+	Payload []byte
 }
 
 func (p *BasePack) Since(ts uint32) uint32 {

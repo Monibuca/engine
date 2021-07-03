@@ -5,7 +5,6 @@ import (
 	"container/ring"
 	"context"
 	"encoding/binary"
-	"io"
 
 	"github.com/Monibuca/utils/v3"
 	"github.com/Monibuca/utils/v3/codec"
@@ -28,10 +27,6 @@ type VideoPack struct {
 	IDR             bool // 是否关键帧
 }
 
-func (vp VideoPack) Clone() VideoPack {
-	return vp
-}
-
 func (vp VideoPack) Copy(ts uint32) VideoPack {
 	vp.Timestamp = vp.Since(ts)
 	return vp
@@ -46,12 +41,19 @@ type VideoTrack struct {
 	ExtraData       *VideoPack      `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS)
 	WaitIDR         context.Context `json:"-"`
 	revIDR          func()
-	PushByteStream  func(pack VideoPack)                   `json:"-"`
-	PushNalu        func(pack VideoPack)                   `json:"-"`
-	WriteByteStream func(writer io.Writer, pack VideoPack) `json:"-"` //使用函数写入，避免申请内存
+	PushByteStream  func(ts uint32, payload []byte)              `json:"-"`
+	PushNalu        func(ts uint32, cts uint32, nalus ...[]byte) `json:"-"`
 	UsingDonlField  bool
+	writeByteStream func(pack *VideoPack)
 }
 
+func (vt *VideoTrack) initVideoRing(v interface{}) {
+	pack := new(VideoPack)
+	if vt.writeByteStream != nil {
+		pack.Buffer = bytes.NewBuffer([]byte{})
+	}
+	v.(*RingItem).Value = pack
+}
 func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	var cancel context.CancelFunc
 	vt = &VideoTrack{
@@ -64,7 +66,9 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 				vt.GOP = current.Distance(vt.lastIDR.Sequence)
 				if l := vt.Ring.Len(); vt.IDRing.Value != vt.lastIDR {
 					//缓冲环不够大，导致IDR被覆盖
-					vt.Link(NewRingBuffer(vt.GOP - l + 5).Ring) // 扩大缓冲环
+					exRing := NewRingBuffer(vt.GOP - l + 5).Ring
+					exRing.Do(vt.initVideoRing)
+					vt.Link(exRing) // 扩大缓冲环
 				} else if vt.GOP < l-5 {
 					vt.Unlink(l - vt.GOP - 5) //缩小缓冲环节省内存
 				}
@@ -80,6 +84,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	vt.Stream = s
 	vt.CodecID = codec
 	vt.Init(256)
+	vt.Do(vt.initVideoRing)
 	vt.WaitIDR, cancel = context.WithCancel(context.Background())
 	switch codec {
 	case 7:
@@ -90,40 +95,43 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	return
 }
 
-func (vt *VideoTrack) PushAnnexB(pack VideoPack) {
-	pack.NALUs = codec.SplitH264(pack.Payload)
-	pack.Payload = nil
-	vt.PushNalu(pack)
+func (vt *VideoTrack) PushAnnexB(ts uint32, cts uint32, payload []byte) {
+	vt.PushNalu(ts, cts, codec.SplitH264(payload)...)
 }
 
-func (vt *VideoTrack) pushNalu(pack VideoPack) {
+func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
+	idrBit := 0x10 | vt.CodecID
+	nIdrBit := 0x20 | vt.CodecID
+	tmp := make([]byte, 4)
 	// 缓冲中只包含Nalu数据所以写入rtmp格式时需要按照ByteStream格式写入
-	vt.WriteByteStream = func(writer io.Writer, pack VideoPack) {
-		tmp := utils.GetSlice(4)
-		defer utils.RecycleSlice(tmp)
+	vt.writeByteStream = func(pack *VideoPack) {
+		pack.Reset()
 		if pack.IDR {
-			tmp[0] = 0x10 | vt.CodecID
+			tmp[0] = idrBit
 		} else {
-			tmp[0] = 0x20 | vt.CodecID
+			tmp[0] = nIdrBit
 		}
 		tmp[1] = 1
-		writer.Write(tmp[:2])
-		cts := pack.CompositionTime
-		utils.BigEndian.PutUint24(tmp, cts)
-		writer.Write(tmp[:3])
+		pack.Write(tmp[:2])
+		utils.BigEndian.PutUint24(tmp, pack.CompositionTime)
+		pack.Write(tmp[:3])
 		for _, nalu := range pack.NALUs {
 			utils.BigEndian.PutUint32(tmp, uint32(len(nalu)))
-			writer.Write(tmp)
-			writer.Write(nalu)
+			pack.Write(tmp)
+			pack.Write(nalu)
 		}
+		pack.Payload = pack.Bytes()
 	}
+	vt.Do(func(v interface{}) {
+		v.(*RingItem).Value.(*VideoPack).Buffer = bytes.NewBuffer([]byte{})
+	})
 	switch vt.CodecID {
 	case 7:
 		{
 			var info codec.AVCDecoderConfigurationRecord
-			vt.PushNalu = func(pack VideoPack) {
+			vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 				// 等待接收SPS和PPS数据
-				for _, nalu := range pack.NALUs {
+				for _, nalu := range nalus {
 					if len(nalu) == 0 {
 						continue
 					}
@@ -149,12 +157,12 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 				var fuaBuffer *bytes.Buffer
 				var mSync = false
 				//已完成SPS和PPS 组装，重置push函数，接收视频数据
-				vt.PushNalu = func(pack VideoPack) {
+				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs [][]byte
 					fuaHeaderSize := 2
 					stapaHeaderSize := 1
 					mTAP16LengthSize := 4
-					for _, nalu := range pack.NALUs {
+					for _, nalu := range nalus {
 						if len(nalu) == 0 {
 							continue
 						}
@@ -176,9 +184,7 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 								}
 								nalus = append(nalus, nalu[currOffset:currOffset+naluSize])
 							}
-							p := pack.Clone()
-							p.NALUs = nalus
-							vt.PushNalu(p)
+							vt.PushNalu(ts, cts, nalus...)
 						case codec.MTAP24:
 							mTAP16LengthSize = 5
 							fallthrough
@@ -194,10 +200,7 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 								if mTAP16LengthSize == 5 {
 									ts = (ts << 8) | uint16(nalu[currOffset+5])
 								}
-								p := pack.Clone()
-								p.Timestamp = uint32(ts)
-								p.NALUs = [][]byte{nalu[currOffset : currOffset+naluSize]}
-								vt.PushNalu(p)
+								vt.PushNalu(uint32(ts), 0, nalu[currOffset:currOffset+naluSize])
 							}
 							/*
 								0                   1                   2                   3
@@ -253,17 +256,22 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 							}
 							fuaBuffer.Write(nalu[fuaHeaderSize:])
 							if E && mSync {
-								p := pack.Clone()
-								p.NALUs = [][]byte{fuaBuffer.Bytes()[fuaHeaderSize-1:]}
-								vt.PushNalu(p)
+								vt.PushNalu(ts, cts, fuaBuffer.Bytes()[fuaHeaderSize-1:])
 							}
 						case codec.NALU_Access_Unit_Delimiter:
 						case codec.NALU_IDR_Picture:
-							p := pack.Clone()
-							p.IDR = true
-							p.NALUs = [][]byte{nalu}
 							vt.bytes += len(nalu)
-							vt.push(p)
+							pack := vt.CurrentValue().(*VideoPack)
+							pack.IDR = true
+							pack.Timestamp = ts
+							pack.CompositionTime = cts
+							if cap(pack.NALUs) > 0 {
+								pack.NALUs = pack.NALUs[:1]
+								pack.NALUs[0] = nalu
+							} else {
+								pack.NALUs = [][]byte{nalu}
+							}
+							vt.push(pack)
 						case codec.NALU_Non_IDR_Picture:
 							nonIDRs = append(nonIDRs, nalu)
 							vt.bytes += len(nalu)
@@ -273,6 +281,10 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 							utils.Printf("nalType not support yet:%d", naluType)
 						}
 						if len(nonIDRs) > 0 {
+							pack := vt.CurrentValue().(*VideoPack)
+							pack.IDR = false
+							pack.Timestamp = ts
+							pack.CompositionTime = cts
 							pack.NALUs = nonIDRs
 							vt.push(pack)
 						}
@@ -282,9 +294,9 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 		}
 	case 12:
 		var vps, sps, pps []byte
-		vt.PushNalu = func(pack VideoPack) {
+		vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 			// 等待接收SPS和PPS数据
-			for _, nalu := range pack.NALUs {
+			for _, nalu := range nalus {
 				if len(nalu) == 0 {
 					continue
 				}
@@ -310,9 +322,9 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 			}
 			if vt.ExtraData != nil {
 				var fuaBuffer *bytes.Buffer
-				vt.PushNalu = func(pack VideoPack) {
+				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs [][]byte
-					for _, nalu := range pack.NALUs {
+					for _, nalu := range nalus {
 						/*
 						   0               1
 						   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
@@ -369,9 +381,7 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 									currOffset += 1
 								}
 							}
-							p := pack.Clone()
-							p.NALUs = nalus
-							vt.PushNalu(p)
+							vt.PushNalu(ts, cts, nalus...)
 
 							// 4.4.3. Fragmentation Units (p29)
 							/*
@@ -411,8 +421,7 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 							}
 							fuaBuffer.Write(nalu[offset:])
 							if E {
-								pack.NALUs = [][]byte{fuaBuffer.Bytes()}
-								vt.PushNalu(pack)
+								vt.PushNalu(ts, cts, fuaBuffer.Bytes())
 							}
 						case codec.NAL_UNIT_CODED_SLICE_BLA,
 							codec.NAL_UNIT_CODED_SLICE_BLANT,
@@ -420,63 +429,66 @@ func (vt *VideoTrack) pushNalu(pack VideoPack) {
 							codec.NAL_UNIT_CODED_SLICE_IDR,
 							codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 							codec.NAL_UNIT_CODED_SLICE_CRA:
-							p := pack.Clone()
-							p.IDR = true
-							p.NALUs = [][]byte{nalu}
-							vt.push(p)
+							vt.push(&VideoPack{
+								NALUs: [][]byte{nalu}, IDR: true, BasePack: BasePack{Timestamp: ts}, CompositionTime: cts,
+							})
 						case 0, 1, 2, 3, 4, 5, 6, 7, 9:
 							nonIDRs = append(nonIDRs, nalu)
 						}
 					}
 					if len(nonIDRs) > 0 {
-						pack.NALUs = nonIDRs
-						vt.push(pack)
+						vt.push(&VideoPack{
+							NALUs: nonIDRs, BasePack: BasePack{Timestamp: ts}, CompositionTime: cts,
+						})
 					}
 				}
 			}
 		}
 	}
-	vt.PushNalu(pack)
+	vt.PushNalu(ts, cts, nalus...)
 }
 
-func (vt *VideoTrack) pushByteStream(pack VideoPack) {
-	if pack.Payload[1] != 0 {
+func (vt *VideoTrack) pushByteStream(ts uint32, payload []byte) {
+	if payload[1] != 0 {
 		return
 	} else {
-		vt.CodecID = pack.Payload[0] & 0x0F
+		vt.CodecID = payload[0] & 0x0F
 		var nalulenSize int
 		switch vt.CodecID {
 		case 7:
 			var info codec.AVCDecoderConfigurationRecord
-			if _, err := info.Unmarshal(pack.Payload[5:]); err == nil {
+			if _, err := info.Unmarshal(payload[5:]); err == nil {
 				vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)
-				pack.NALUs = append(pack.NALUs, info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit)
 				nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
-				vt.ExtraData = &pack
+				vt.ExtraData = &VideoPack{
+					NALUs: [][]byte{info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit},
+				}
+				vt.ExtraData.Payload = payload
 				vt.Stream.VideoTracks.AddTrack("h264", vt)
 			}
 		case 12:
-			if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(pack.Payload); err == nil {
-				pack.NALUs = append(pack.NALUs, vps, sps, pps)
+			if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload); err == nil {
 				vt.SPSInfo, _ = codec.ParseSPS(sps)
-				nalulenSize = int(pack.Payload[26]) & 0x03
-				vt.ExtraData = &pack
+				nalulenSize = int(payload[26]) & 0x03
+				vt.ExtraData = &VideoPack{
+					NALUs: [][]byte{vps, sps, pps},
+				}
+				vt.ExtraData.Payload = payload
 				vt.Stream.VideoTracks.AddTrack("h265", vt)
 			}
 		}
-		vt.WriteByteStream = func(writer io.Writer, pack VideoPack) {
-			writer.Write(pack.Payload)
-		}
 		// 已完成序列帧组装，重置Push函数，从Payload中提取Nalu供非bytestream格式使用
-		vt.PushByteStream = func(pack VideoPack) {
-			if len(pack.Payload) < 4 {
+		vt.PushByteStream = func(ts uint32, payload []byte) {
+			pack := vt.CurrentValue().(*VideoPack)
+			if len(payload) < 4 {
 				return
 			}
-			vt.bytes += len(pack.Payload)
-			pack.IDR = pack.Payload[0]>>4 == 1
-			pack.CompositionTime = utils.BigEndian.Uint24(pack.Payload[2:])
-			nalus := pack.Payload[5:]
-			for len(nalus) > nalulenSize {
+			vt.bytes += len(payload)
+			pack.Timestamp = ts
+			pack.Sequence = vt.PacketCount
+			pack.Payload = payload
+			pack.CompositionTime = utils.BigEndian.Uint24(payload[2:])
+			for nalus := payload[5:]; len(nalus) > nalulenSize; {
 				nalulen := 0
 				for i := 0; i < nalulenSize; i++ {
 					nalulen += int(nalus[i]) << (8 * (nalulenSize - i - 1))
@@ -489,19 +501,17 @@ func (vt *VideoTrack) pushByteStream(pack VideoPack) {
 	}
 }
 
-func (vt *VideoTrack) push(pack VideoPack) {
+func (vt *VideoTrack) push(pack *VideoPack) {
 	if vt.Stream != nil {
 		vt.Stream.Update()
 	}
-	if vt.Stream.prePayload > 0 && len(pack.Payload) == 0 {
-		buffer := bytes.NewBuffer([]byte{})
-		vt.WriteByteStream(buffer, pack)
-		pack.Payload = buffer.Bytes()
+	if vt.writeByteStream != nil {
+		vt.writeByteStream(pack)
 	}
 	vt.GetBPS()
 	pack.Sequence = vt.PacketCount
 	if pack.IDR {
 		defer vt.revIDR()
 	}
-	vt.Write(&pack)
+	vt.Step()
 }

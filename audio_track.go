@@ -2,14 +2,13 @@ package engine
 
 import (
 	"bytes"
-	"io"
 
 	"github.com/Monibuca/utils/v3/codec"
 )
 
 type AudioPack struct {
 	BasePack
-	Raw            []byte
+	Raw []byte
 }
 
 func (ap AudioPack) Copy(ts uint32) AudioPack {
@@ -19,20 +18,17 @@ func (ap AudioPack) Copy(ts uint32) AudioPack {
 
 type AudioTrack struct {
 	Track_Base
-	SoundRate       int                                    //2bit
-	SoundSize       byte                                   //1bit
-	Channels        byte                                   //1bit
-	ExtraData       []byte                                 `json:"-"` //rtmp协议需要先发这个帧
-	PushByteStream  func(pack AudioPack)                   `json:"-"`
-	PushRaw         func(pack AudioPack)                   `json:"-"`
-	WriteByteStream func(writer io.Writer, pack AudioPack) `json:"-"` //使用函数写入，避免申请内存
+	SoundRate       int                             //2bit
+	SoundSize       byte                            //1bit
+	Channels        byte                            //1bit
+	ExtraData       []byte                          `json:"-"` //rtmp协议需要先发这个帧
+	PushByteStream  func(ts uint32, payload []byte) `json:"-"`
+	PushRaw         func(ts uint32, payload []byte) `json:"-"`
+	writeByteStream func(pack *AudioPack)           //使用函数写入，避免申请内存
 }
 
-func (at *AudioTrack) pushByteStream(pack AudioPack) {
-	at.CodecID = pack.Payload[0] >> 4
-	at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
-		writer.Write(pack.Payload)
-	}
+func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
+	at.CodecID = payload[0] >> 4
 	switch at.CodecID {
 	case 10:
 		at.Stream.AudioTracks.AddTrack("aac", at)
@@ -43,10 +39,10 @@ func (at *AudioTrack) pushByteStream(pack AudioPack) {
 	}
 	switch at.CodecID {
 	case 10:
-		if pack.Payload[1] != 0 {
+		if payload[1] != 0 {
 			return
 		} else {
-			config1, config2 := pack.Payload[2], pack.Payload[3]
+			config1, config2 := payload[2], payload[3]
 			//audioObjectType = (config1 & 0xF8) >> 3
 			// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
 			// 2 AAC LC 	ISO/IEC 14496-3 subpart 4
@@ -57,55 +53,74 @@ func (at *AudioTrack) pushByteStream(pack AudioPack) {
 			//frameLengthFlag = (config2 >> 2) & 0x01
 			//dependsOnCoreCoder = (config2 >> 1) & 0x01
 			//extensionFlag = config2 & 0x01
-			at.ExtraData = pack.Payload
-			at.PushByteStream = func(pack AudioPack) {
-				pack.Raw = pack.Payload[2:]
+			at.ExtraData = payload
+			at.PushByteStream = func(ts uint32, payload []byte) {
+				pack := at.current()
+				pack.Raw = payload[2:]
+				pack.Timestamp = ts
+				pack.Payload = payload
 				at.push(pack)
 			}
 		}
 	default:
-		at.SoundRate = codec.SoundRate[(pack.Payload[0]&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
-		at.SoundSize = (pack.Payload[0] & 0x02) >> 1              // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
-		at.Channels = pack.Payload[0]&0x01 + 1
-		at.ExtraData = pack.Payload[:1]
-		at.PushByteStream = func(pack AudioPack) {
-			payloadLen := len(pack.Payload)
+		at.SoundRate = codec.SoundRate[(payload[0]&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
+		at.SoundSize = (payload[0] & 0x02) >> 1              // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
+		at.Channels = payload[0]&0x01 + 1
+		at.ExtraData = payload[:1]
+		at.PushByteStream = func(ts uint32, payload []byte) {
+			pack := at.current()
+			payloadLen := len(payload)
 			if payloadLen < 4 {
 				return
 			}
-			pack.Raw = pack.Payload[1:]
+			pack.Raw = payload[1:]
+			pack.Timestamp = ts
+			pack.Payload = payload
 			at.push(pack)
 		}
-		at.PushByteStream(pack)
+		at.PushByteStream(ts, payload)
 	}
 
 }
-func (at *AudioTrack) pushRaw(pack AudioPack) {
+func (at *AudioTrack) current() *AudioPack {
+	return at.CurrentValue().(*AudioPack)
+}
+func (at *AudioTrack) pushRaw(ts uint32, payload []byte) {
 	switch at.CodecID {
 	case 10:
-		at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
-			writer.Write([]byte{at.ExtraData[0], 1})
-			writer.Write(pack.Raw)
+		at.writeByteStream = func(pack *AudioPack) {
+			pack.Reset()
+			pack.Write([]byte{at.ExtraData[0], 1})
+			pack.Write(pack.Raw)
+			pack.Payload = pack.Bytes()
 		}
 	default:
-		at.WriteByteStream = func(writer io.Writer, pack AudioPack) {
-			writer.Write(at.ExtraData[:1])
-			writer.Write(pack.Raw)
+		at.writeByteStream = func(pack *AudioPack) {
+			pack.Reset()
+			pack.WriteByte(at.ExtraData[0])
+			pack.Write(pack.Raw)
+			pack.Payload = pack.Bytes()
 		}
 	}
-	at.PushRaw = at.push
-	at.push(pack)
+	at.Do(func(v interface{}) {
+		v.(*RingItem).Value.(*AudioPack).Buffer = bytes.NewBuffer([]byte{})
+	})
+	at.PushRaw = func(ts uint32, payload []byte) {
+		pack := at.CurrentValue().(*AudioPack)
+		pack.Timestamp = ts
+		pack.Raw = payload
+		at.push(pack)
+	}
+	at.PushRaw(ts, payload)
 }
 
 // Push 来自发布者推送的音频
-func (at *AudioTrack) push(pack AudioPack) {
+func (at *AudioTrack) push(pack *AudioPack) {
 	if at.Stream != nil {
 		at.Stream.Update()
 	}
-	if at.Stream.prePayload > 0 && len(pack.Payload) == 0 {
-		buffer := bytes.NewBuffer([]byte{})
-		at.WriteByteStream(buffer, pack)
-		pack.Payload = buffer.Bytes()
+	if at.writeByteStream != nil {
+		at.writeByteStream(pack)
 	}
 	at.bytes += len(pack.Raw)
 	at.GetBPS()
@@ -114,7 +129,7 @@ func (at *AudioTrack) push(pack AudioPack) {
 		at.bytes = 0
 		at.ts = pack.Timestamp
 	}
-	at.Write(&pack)
+	at.Step()
 }
 
 func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
@@ -124,6 +139,9 @@ func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at.PushRaw = at.pushRaw
 	at.Stream = s
 	at.Init(8)
+	at.Do(func(v interface{}) {
+		v.(*RingItem).Value = new(AudioPack)
+	})
 	switch codec {
 	case 10:
 		s.AudioTracks.AddTrack("aac", at)

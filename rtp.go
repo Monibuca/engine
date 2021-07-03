@@ -67,7 +67,7 @@ func (v *RTPVideo) push(payload []byte) {
 				pts := vp.Timestamp
 				vp.Timestamp = ts[i]
 				vp.CompositionTime = pts - ts[i]
-				vt.push(*vp)
+				vt.push(vp)
 				start = start.Next()
 			}
 			ts = nil
@@ -78,14 +78,14 @@ func (v *RTPVideo) push(payload []byte) {
 			}
 			r := tmpVT.Ring
 			t := v.Timestamp / 90
-			if tmpVT.PushNalu(VideoPack{BasePack: BasePack{Timestamp: t}, NALUs: [][]byte{v.Payload}}); r != tmpVT.Ring {
+			if tmpVT.PushNalu(t, 0, v.Payload); r != tmpVT.Ring {
 				ts = append(ts, t)
 			}
 		}
 		v.Push(payload)
 		return
 	}
-	vt.PushNalu(VideoPack{BasePack: BasePack{Timestamp: t}, NALUs: [][]byte{v.Payload}})
+	vt.PushNalu(t, 0, v.Payload)
 }
 func (v *RTPAudio) push(payload []byte) {
 	at := v.AudioTrack
@@ -99,7 +99,7 @@ func (v *RTPAudio) push(payload []byte) {
 				return
 			}
 			for _, payload = range codec.ParseRTPAAC(v.Payload) {
-				at.PushRaw(AudioPack{BasePack: BasePack{Timestamp: v.Timestamp / 8}, Raw: payload})
+				at.PushRaw(v.Timestamp/8, payload)
 			}
 		}
 	case 7, 8:
@@ -107,7 +107,7 @@ func (v *RTPAudio) push(payload []byte) {
 			if err := v.Unmarshal(payload); err != nil {
 				return
 			}
-			at.PushRaw(AudioPack{BasePack: BasePack{Timestamp: v.Timestamp / 8}, Raw: v.Payload})
+			at.PushRaw(v.Timestamp/8, v.Payload)
 		}
 	}
 }
