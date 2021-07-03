@@ -48,6 +48,7 @@ func (r *RingBuffer) Init(n int) {
 	for x := r.Ring; x.Value == nil; x = x.Next() {
 		x.Value = new(RingItem)
 	}
+	r.Current().Add(1)
 }
 
 func (rb RingBuffer) Clone() *RingBuffer {
