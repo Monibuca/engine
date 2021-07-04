@@ -85,7 +85,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	}
 	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
 	ar := at.Clone()
-	dropping := false //是否处于丢帧中
+	// dropping := false //是否处于丢帧中
 	vp := vr.Read().(*VideoPack)
 	ap := ar.Read().(*AudioPack)
 	startTimestamp := vp.Timestamp
@@ -97,23 +97,25 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 			return
 		default:
 			if ap.Timestamp > vp.Timestamp || ap.Timestamp == 0 {
-				if !dropping {
-					s.OnVideo(vp.Copy(startTimestamp))
-					if vt.CurrentValue().(AVPack).Since(vp.Timestamp) > 1000 {
-						dropping = true
-					}
-				} else if vp.IDR {
-					dropping = false
-				}
+				s.OnVideo(vp.Copy(startTimestamp))
+				// if !dropping {
+				// 	s.OnVideo(vp.Copy(startTimestamp))
+				// 	if vt.lastTs - vp.Timestamp > 1000 {
+				// 		dropping = true
+				// 	}
+				// } else if vp.IDR {
+				// 	dropping = false
+				// }
 				vr.MoveNext()
 				vp = vr.Read().(*VideoPack)
 			} else {
-				if !dropping {
-					s.OnAudio(ap.Copy(startTimestamp))
-					if at.CurrentValue().(AVPack).Since(ap.Timestamp) > 1000 {
-						dropping = true
-					}
-				}
+				s.OnAudio(ap.Copy(startTimestamp))
+				// if !dropping {
+				// 	s.OnAudio(ap.Copy(startTimestamp))
+				// 	if at.CurrentValue().(AVPack).Since(ap.Timestamp) > 1000 {
+				// 		dropping = true
+				// 	}
+				// }
 				ar.MoveNext()
 				ap = ar.Read().(*AudioPack)
 			}
@@ -128,14 +130,14 @@ func (s *Subscriber) PlayAudio(at *AudioTrack) {
 	droped := 0
 	var action, send func()
 	drop := func() {
-		if at.CurrentValue().(AVPack).Distance(ap.Sequence) < 4 {
+		if at.current().Sequence-ap.Sequence < 4 {
 			action = send
 		} else {
 			droped++
 		}
 	}
 	send = func() {
-		if s.OnAudio(ap.Copy(startTimestamp)); at.CurrentValue().(AVPack).Since(ap.Timestamp) > 1000 {
+		if s.OnAudio(ap.Copy(startTimestamp)); at.lastTs -ap.Timestamp > 1000 {
 			action = drop
 		}
 	}
@@ -179,7 +181,7 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 		}
 	}
 	send = func() {
-		if s.OnVideo(vp.Copy(startTimestamp)); vt.CurrentValue().(AVPack).Since(vp.Timestamp) > 1000 {
+		if s.OnVideo(vp.Copy(startTimestamp)); vt.lastTs - vp.Timestamp > 1000 {
 			action = drop
 		}
 	}

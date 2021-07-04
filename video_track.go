@@ -33,8 +33,7 @@ func (vp VideoPack) Copy(ts uint32) VideoPack {
 }
 
 type VideoTrack struct {
-	IDRing  *ring.Ring //最近的关键帧位置，首屏渲染
-	lastIDR *VideoPack
+	IDRing *ring.Ring //最近的关键帧位置，首屏渲染
 	Track_Base
 	SPSInfo         codec.SPSInfo
 	GOP             int             //关键帧间隔
@@ -59,21 +58,25 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	vt = &VideoTrack{
 		revIDR: func() {
 			vt.IDRing = vt.Ring
-			vt.lastIDR = vt.CurrentValue().(*VideoPack)
 			cancel()
+			idrSequence := vt.current().Sequence
+			l := vt.Ring.Len()
 			vt.revIDR = func() {
-				current := vt.CurrentValue().(*VideoPack)
-				vt.GOP = current.Distance(vt.lastIDR.Sequence)
-				if l := vt.Ring.Len(); vt.IDRing.Value != vt.lastIDR {
+				current := vt.current()
+				if vt.GOP = current.Sequence - idrSequence; vt.GOP > l-1 {
 					//缓冲环不够大，导致IDR被覆盖
 					exRing := NewRingBuffer(vt.GOP - l + 5).Ring
 					exRing.Do(vt.initVideoRing)
 					vt.Link(exRing) // 扩大缓冲环
+					l = vt.Ring.Len()
+					utils.Printf("%s ring grow to %d", s.StreamPath, l)
 				} else if vt.GOP < l-5 {
 					vt.Unlink(l - vt.GOP - 5) //缩小缓冲环节省内存
+					l = vt.Ring.Len()
+					utils.Printf("%s ring atrophy to %d", s.StreamPath, l)
 				}
 				vt.IDRing = vt.Ring
-				vt.lastIDR = current
+				idrSequence = current.Sequence
 				vt.ts = current.Timestamp
 				vt.bytes = 0
 			}
@@ -492,15 +495,17 @@ func (vt *VideoTrack) pushByteStream(ts uint32, payload []byte) {
 		}
 		// 已完成序列帧组装，重置Push函数，从Payload中提取Nalu供非bytestream格式使用
 		vt.PushByteStream = func(ts uint32, payload []byte) {
-			pack := vt.CurrentValue().(*VideoPack)
+			pack := vt.current()
 			if len(payload) < 4 {
 				return
 			}
 			vt.bytes += len(payload)
+			pack.IDR = payload[0]>>4 == 1
 			pack.Timestamp = ts
 			pack.Sequence = vt.PacketCount
 			pack.Payload = payload
 			pack.CompositionTime = utils.BigEndian.Uint24(payload[2:])
+			pack.NALUs = nil
 			for nalus := payload[5:]; len(nalus) > nalulenSize; {
 				nalulen := 0
 				for i := 0; i < nalulenSize; i++ {
@@ -522,9 +527,9 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 		vt.writeByteStream(pack)
 	}
 	vt.GetBPS()
-	pack.Sequence = vt.PacketCount
-	if pack.IDR {
-		defer vt.revIDR()
+	if pack.Sequence = vt.PacketCount; pack.IDR {
+		vt.revIDR()
 	}
+	vt.lastTs = pack.Timestamp
 	vt.Step()
 }

@@ -129,6 +129,7 @@ func (at *AudioTrack) push(pack *AudioPack) {
 		at.bytes = 0
 		at.ts = pack.Timestamp
 	}
+	at.lastTs = pack.Timestamp
 	at.Step()
 }
 

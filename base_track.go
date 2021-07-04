@@ -16,7 +16,6 @@ type Track interface {
 
 type AVPack interface {
 	Since(uint32) uint32
-	Distance(int) int
 }
 
 type BasePack struct {
@@ -30,10 +29,6 @@ func (p *BasePack) Since(ts uint32) uint32 {
 	return p.Timestamp - ts
 }
 
-func (p *BasePack) Distance(sq int) int {
-	return p.Sequence - sq
-}
-
 type Track_Base struct {
 	RingDisposable `json:"-"`
 	Stream         *Stream `json:"-"`
@@ -42,6 +37,7 @@ type Track_Base struct {
 	BPS            int
 	bytes          int    // GOP内的数据大小
 	ts             uint32 // GOP起始时间戳
+	lastTs         uint32 //最新的时间戳
 }
 
 func (t *Track_Base) GetBPS() {
