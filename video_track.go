@@ -414,9 +414,10 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							if len(nalu) < offset {
 								continue
 							}
-							S := nalu[offset]&fuaStartBitmask != 0
-							E := nalu[offset]&fuaEndBitmask != 0
-							naluType = nalu[offset] & 0b00111111
+							fuheader := nalu[2]
+							S := fuheader&fuaStartBitmask != 0
+							E := fuheader&fuaEndBitmask != 0
+							naluType = fuheader & 0b00111111
 							if S {
 								fuaBuffer = bytes.NewBuffer([]byte{})
 								nalu[0] = nalu[0]&0b10000001 | (naluType << 1)
