@@ -100,6 +100,14 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 					wait <- rt
 				}
 			}()
+			select {
+			case t := <-wait:
+				ts.RLock()
+				defer ts.RUnlock()
+				return ts.m[t]
+			case <-ts.Context.Done():
+				return nil
+			}
 		} else {
 			go func() {
 				for {
@@ -111,14 +119,20 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 					}
 				}
 			}()
-		}
-		select {
-		case t := <-wait:
-			ts.RLock()
-			defer ts.RUnlock()
-			return ts.m[t]
-		case <-ts.Context.Done():
-			return nil
+			for {
+				select {
+				case t := <-wait:
+					for _, codec := range codecs {
+						if t == codec {
+							ts.RLock()
+							defer ts.RUnlock()
+							return ts.m[t]
+						}
+					}
+				case <-ts.Context.Done():
+					return nil
+				}
+			}
 		}
 	} else { //进入不等待状态
 		ts.RLock()
