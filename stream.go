@@ -63,7 +63,6 @@ type Stream struct {
 	subscribeMutex  sync.Mutex
 	timeout         *time.Timer //更新时间用来做超时处理
 	Close           func()      `json:"-"`
-	prePayload      uint32      //需要预拼装ByteStream格式的数据的订阅者数量
 }
 
 func (r *Stream) Update() {
@@ -134,9 +133,6 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		utils.Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
 		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
-		if s.ByteStreamFormat {
-			r.prePayload++
-		}
 		r.Subscribers = append(r.Subscribers, s)
 		r.subscribeMutex.Unlock()
 		utils.Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
@@ -149,9 +145,6 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 	if r.Err() == nil {
 		var deleted bool
 		r.subscribeMutex.Lock()
-		if s.ByteStreamFormat {
-			r.prePayload--
-		}
 		r.Subscribers, deleted = DeleteSliceItem_Subscriber(r.Subscribers, s)
 		r.subscribeMutex.Unlock()
 		if deleted {

@@ -25,7 +25,6 @@ type Subscriber struct {
 	SubscribeArgs    url.Values
 	OnAudio          func(pack AudioPack) `json:"-"`
 	OnVideo          func(pack VideoPack) `json:"-"`
-	ByteStreamFormat bool
 	closeOnce        sync.Once
 }
 
@@ -137,7 +136,7 @@ func (s *Subscriber) PlayAudio(at *AudioTrack) {
 		}
 	}
 	send = func() {
-		if s.OnAudio(ap.Copy(startTimestamp)); at.lastTs -ap.Timestamp > 1000 {
+		if s.OnAudio(ap.Copy(startTimestamp)); at.lastTs-ap.Timestamp > 1000 {
 			action = drop
 		}
 	}
@@ -181,7 +180,7 @@ func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 		}
 	}
 	send = func() {
-		if s.OnVideo(vp.Copy(startTimestamp)); vt.lastTs - vp.Timestamp > 1000 {
+		if s.OnVideo(vp.Copy(startTimestamp)); vt.lastTs-vp.Timestamp > 1000 {
 			action = drop
 		}
 	}

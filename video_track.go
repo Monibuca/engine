@@ -47,13 +47,6 @@ type VideoTrack struct {
 	idrCount        int //处于缓冲中的关键帧数量
 }
 
-func (vt *VideoTrack) initVideoRing(v interface{}) {
-	pack := new(VideoPack)
-	if vt.writeByteStream != nil {
-		pack.Buffer = bytes.NewBuffer([]byte{})
-	}
-	v.(*RingItem).Value = pack
-}
 func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	var cancel context.CancelFunc
 	vt = &VideoTrack{
@@ -66,10 +59,14 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 			vt.revIDR = func() {
 				vt.idrCount++
 				current := vt.current()
-				l := vt.Ring.Len()
-				if vt.GOP = current.Sequence - idrSequence; vt.GOP < l-5 {
-					vt.Unlink(l - vt.GOP - 5) //缩小缓冲环节省内存
-					//utils.Printf("%s gop:%d ring atrophy to %d", s.StreamPath, vt.GOP, l)
+				vt.GOP = current.Sequence - idrSequence
+				if l := vt.Ring.Len() - vt.GOP - 5; l > 5 {
+					//缩小缓冲环节省内存
+					vt.Unlink(l).Do(func(v interface{}) {
+						if v.(*RingItem).Value.(*VideoPack).IDR {
+							vt.idrCount--
+						}
+					})
 				}
 				vt.IDRing = vt.Ring
 				idrSequence = current.Sequence
@@ -83,7 +80,9 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	vt.Stream = s
 	vt.CodecID = codec
 	vt.Init(256)
-	vt.Do(vt.initVideoRing)
+	vt.Do(func(v interface{}) {
+		v.(*RingItem).Value = new(VideoPack)
+	})
 	vt.WaitIDR, cancel = context.WithCancel(context.Background())
 	switch codec {
 	case 7:
@@ -525,14 +524,17 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 		vt.revIDR()
 	}
 	vt.lastTs = pack.Timestamp
-	nextPack := vt.NextValue().(*VideoPack)
-	if nextPack.IDR {
+	if nextPack := vt.NextValue().(*VideoPack); nextPack.IDR {
 		if vt.idrCount == 1 {
-			exRing := NewRingBuffer(5).Ring
-			exRing.Do(vt.initVideoRing)
+			exRing := ring.New(5)
+			for x := exRing; x.Value == nil; x = x.Next() {
+				pack := new(VideoPack)
+				x.Value = &RingItem{Value: pack}
+				if vt.writeByteStream != nil {
+					pack.Buffer = bytes.NewBuffer([]byte{})
+				}
+			}
 			vt.Link(exRing) // 扩大缓冲环
-			//l := vt.Ring.Len()
-			//utils.Printf("%s ring grow to %d", vt.Stream.StreamPath, l)
 		} else {
 			vt.idrCount--
 		}
