@@ -57,17 +57,20 @@ func (v *RTPVideo) push(payload []byte) {
 		var ts TSSlice
 		//有B帧
 		tmpVT := v.Stream.NewVideoTrack(0)
+		tmpVT.ExtraData = v.ExtraData
 		tmpVT.CodecID = v.CodecID
 		tmpVT.revIDR = func() {
-			l := len(ts)
+			l := ts.Len()
 			sort.Sort(ts)
 			start := tmpVT.Move(-l)
 			for i := 0; i < l; i++ {
 				vp := start.Value.(*RingItem).Value.(*VideoPack)
-				pts := vp.Timestamp
-				vp.Timestamp = ts[i]
-				vp.CompositionTime = pts - ts[i]
-				vt.push(vp)
+				pack := vt.current()
+				pack.IDR = vp.IDR
+				pack.Timestamp =  ts[i]
+				pack.CompositionTime =  vp.Timestamp - ts[i]
+				pack.NALUs = vp.NALUs
+				vt.push(pack)
 				start = start.Next()
 			}
 			ts = nil

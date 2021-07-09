@@ -251,15 +251,12 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							E := nalu[1]&fuaEndBitmask != 0
 							if S {
 								fuaBuffer = bytes.NewBuffer([]byte{})
-								naluRefIdc := nalu[0] & naluRefIdcBitmask
-								fragmentedNaluType := nalu[1] & naluTypeBitmask
-								nalu[fuaHeaderSize-1] = naluRefIdc | fragmentedNaluType
-								fuaBuffer.Write(nalu)
+								fuaBuffer.WriteByte((nalu[0] & naluRefIdcBitmask) | (nalu[1] & naluTypeBitmask))
 								mSync = true
 							}
 							fuaBuffer.Write(nalu[fuaHeaderSize:])
 							if E && mSync {
-								vt.PushNalu(ts, cts, fuaBuffer.Bytes()[fuaHeaderSize-1:])
+								vt.PushNalu(ts, cts, fuaBuffer.Bytes())
 							}
 						case codec.NALU_Access_Unit_Delimiter:
 						case codec.NALU_IDR_Picture:
