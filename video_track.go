@@ -44,6 +44,7 @@ type VideoTrack struct {
 	PushNalu        func(ts uint32, cts uint32, nalus ...[]byte) `json:"-"`
 	UsingDonlField  bool
 	writeByteStream func(pack *VideoPack)
+	idrCount        int //处于缓冲中的关键帧数量
 }
 
 func (vt *VideoTrack) initVideoRing(v interface{}) {
@@ -60,20 +61,15 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 			vt.IDRing = vt.Ring
 			cancel()
 			idrSequence := vt.current().Sequence
-			l := vt.Ring.Len()
+			// l := vt.Ring.Len()
+			vt.idrCount++
 			vt.revIDR = func() {
+				vt.idrCount++
 				current := vt.current()
-				if vt.GOP = current.Sequence - idrSequence; vt.GOP > l-1 {
-					//缓冲环不够大，导致IDR被覆盖
-					exRing := NewRingBuffer(vt.GOP - l + 5).Ring
-					exRing.Do(vt.initVideoRing)
-					vt.Link(exRing) // 扩大缓冲环
-					l = vt.Ring.Len()
-					utils.Printf("%s ring grow to %d", s.StreamPath, l)
-				} else if vt.GOP < l-5 {
+				l := vt.Ring.Len()
+				if vt.GOP = current.Sequence - idrSequence; vt.GOP < l-5 {
 					vt.Unlink(l - vt.GOP - 5) //缩小缓冲环节省内存
-					l = vt.Ring.Len()
-					utils.Printf("%s ring atrophy to %d", s.StreamPath, l)
+					//utils.Printf("%s gop:%d ring atrophy to %d", s.StreamPath, vt.GOP, l)
 				}
 				vt.IDRing = vt.Ring
 				idrSequence = current.Sequence
@@ -529,5 +525,17 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 		vt.revIDR()
 	}
 	vt.lastTs = pack.Timestamp
+	nextPack := vt.NextValue().(*VideoPack)
+	if nextPack.IDR {
+		if vt.idrCount == 1 {
+			exRing := NewRingBuffer(5).Ring
+			exRing.Do(vt.initVideoRing)
+			vt.Link(exRing) // 扩大缓冲环
+			//l := vt.Ring.Len()
+			//utils.Printf("%s ring grow to %d", vt.Stream.StreamPath, l)
+		} else {
+			vt.idrCount--
+		}
+	}
 	vt.Step()
 }

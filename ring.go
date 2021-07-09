@@ -108,6 +108,11 @@ func (r *RingBuffer) CurrentValue() interface{} {
 	return r.Current().Value
 }
 
+func (r *RingBuffer) NextValue() interface{} {
+	return r.Next().Value.(*RingItem).Value
+}
+
+
 func (r *RingBuffer) Current() *RingItem {
 	return r.Ring.Value.(*RingItem)
 }
