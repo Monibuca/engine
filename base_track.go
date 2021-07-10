@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
-
-	"github.com/Monibuca/utils/v3"
 )
 
 type Track interface {
