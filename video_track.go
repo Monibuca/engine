@@ -154,7 +154,6 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 					return
 				}
 				var fuaBuffer *bytes.Buffer
-				var mSync = false
 				//已完成SPS和PPS 组装，重置push函数，接收视频数据
 				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs [][]byte
@@ -243,16 +242,15 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 								utils.Printf("Payload is not large enough to be FU-A")
 								return
 							}
-							S := nalu[1]&fuaStartBitmask != 0
-							E := nalu[1]&fuaEndBitmask != 0
-							if S {
+							if nalu[1]&fuaStartBitmask != 0 {
 								fuaBuffer = bytes.NewBuffer([]byte{})
 								fuaBuffer.WriteByte((nalu[0] & naluRefIdcBitmask) | (nalu[1] & naluTypeBitmask))
-								mSync = true
 							}
-							fuaBuffer.Write(nalu[fuaHeaderSize:])
-							if E && mSync {
-								vt.PushNalu(ts, cts, fuaBuffer.Bytes())
+							if fuaBuffer != nil {
+								if fuaBuffer.Write(nalu[fuaHeaderSize:]); nalu[1]&fuaEndBitmask != 0 {
+									vt.PushNalu(ts, cts, fuaBuffer.Bytes())
+									fuaBuffer = nil
+								}
 							}
 						case codec.NALU_Access_Unit_Delimiter:
 						case codec.NALU_IDR_Picture:
@@ -408,17 +406,16 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 								continue
 							}
 							fuheader := nalu[2]
-							S := fuheader&fuaStartBitmask != 0
-							E := fuheader&fuaEndBitmask != 0
-							naluType = fuheader & 0b00111111
-							if S {
+							if naluType = fuheader & 0b00111111; fuheader&fuaStartBitmask != 0 {
 								fuaBuffer = bytes.NewBuffer([]byte{})
 								nalu[0] = nalu[0]&0b10000001 | (naluType << 1)
 								fuaBuffer.Write(nalu[:2])
 							}
-							fuaBuffer.Write(nalu[offset:])
-							if E {
-								vt.PushNalu(ts, cts, fuaBuffer.Bytes())
+							if fuaBuffer != nil {
+								if fuaBuffer.Write(nalu[offset:]); fuheader&fuaEndBitmask != 0 {
+									vt.PushNalu(ts, cts, fuaBuffer.Bytes())
+									fuaBuffer = nil
+								}
 							}
 						case codec.NAL_UNIT_CODED_SLICE_BLA,
 							codec.NAL_UNIT_CODED_SLICE_BLANT,
