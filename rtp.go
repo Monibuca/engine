@@ -67,8 +67,8 @@ func (v *RTPVideo) push(payload []byte) {
 				vp := start.Value.(*RingItem).Value.(*VideoPack)
 				pack := vt.current()
 				pack.IDR = vp.IDR
-				pack.Timestamp =  ts[i]
-				pack.CompositionTime =  vp.Timestamp - ts[i]
+				pack.Timestamp = ts[i]
+				pack.CompositionTime = vp.Timestamp - ts[i]
 				pack.NALUs = vp.NALUs
 				vt.push(pack)
 				start = start.Next()
@@ -102,7 +102,7 @@ func (v *RTPAudio) push(payload []byte) {
 				return
 			}
 			for _, payload = range codec.ParseRTPAAC(v.Payload) {
-				at.PushRaw(v.Timestamp/8, payload)
+				at.PushRaw(v.Timestamp/90, payload)
 			}
 		}
 	case 7, 8:

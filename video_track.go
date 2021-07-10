@@ -53,12 +53,13 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 		revIDR: func() {
 			vt.IDRing = vt.Ring
 			cancel()
-			idrSequence := vt.current().Sequence
-			// l := vt.Ring.Len()
+			current := vt.current()
+			idrSequence := current.Sequence
+			vt.ts = current.Timestamp
 			vt.idrCount++
 			vt.revIDR = func() {
 				vt.idrCount++
-				current := vt.current()
+				current = vt.current()
 				vt.GOP = current.Sequence - idrSequence
 				if l := vt.Ring.Len() - vt.GOP - 5; l > 5 {
 					//缩小缓冲环节省内存
@@ -300,7 +301,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 					vps = nalu
 				case codec.NAL_UNIT_SPS:
 					sps = nalu
-					vt.SPSInfo, _ = codec.ParseSPS(nalu)
+					vt.SPSInfo, _ = codec.ParseHevcSPS(nalu)
 				case codec.NAL_UNIT_PPS:
 					pps = nalu
 				}
@@ -435,9 +436,11 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							} else {
 								pack.NALUs = [][]byte{nalu}
 							}
+							vt.bytes += len(nalu)
 							vt.push(pack)
 						case 0, 1, 2, 3, 4, 5, 6, 7, 9:
 							nonIDRs = append(nonIDRs, nalu)
+							vt.bytes += len(nalu)
 						}
 					}
 					if len(nonIDRs) > 0 {
