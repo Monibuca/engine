@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/Monibuca/utils/v3/codec"
 )
@@ -169,4 +170,40 @@ func (at *AudioTrack) SetASC(asc []byte) {
 	//dependsOnCoreCoder = (config2 >> 1) & 0x01
 	//extensionFlag = config2 & 0x01
 	at.Stream.AudioTracks.AddTrack("aac", at)
+}
+
+func (at *AudioTrack) Play(ctx context.Context, onAudio func(AudioPack)) {
+	streamExit := at.Stream.Context.Done()
+	ar := at.Clone()
+	ap := ar.Read().(*AudioPack)
+	startTimestamp := ap.Timestamp
+	droped := 0
+	var action, send func()
+	drop := func() {
+		if at.current().Sequence-ap.Sequence < 4 {
+			action = send
+		} else {
+			droped++
+		}
+	}
+	send = func() {
+		if onAudio(ap.Copy(startTimestamp)); at.lastTs-ap.Timestamp > 1000 {
+			action = drop
+		}
+	}
+	var extraExit <-chan struct{}
+	if ctx != nil {
+		extraExit = ctx.Done()
+	}
+	for action = send; at.Flag != 2; ap = ar.Read().(*AudioPack) {
+		select {
+		case <-extraExit:
+			return
+		case <-streamExit:
+			return
+		default:
+			action()
+			ar.MoveNext()
+		}
+	}
 }

@@ -541,3 +541,43 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 	}
 	vt.Step()
 }
+
+func (vt *VideoTrack) Play(ctx context.Context, onVideo func(VideoPack)) {
+	var extraExit <-chan struct{}
+	if ctx != nil {
+		extraExit = ctx.Done()
+	}
+	streamExit := vt.Stream.Context.Done()
+	select {
+	case <-vt.WaitIDR.Done():
+	case <-streamExit:
+		return
+	case <-extraExit: //可能等不到关键帧就退出了
+		return
+	}
+	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	vp := vr.Read().(*VideoPack)
+	startTimestamp := vp.Timestamp
+	var action, send func()
+	drop := func() {
+		if vp.IDR {
+			action = send
+		}
+	}
+	send = func() {
+		if onVideo(vp.Copy(startTimestamp)); vt.lastTs-vp.Timestamp > 1000 {
+			action = drop
+		}
+	}
+	for action = send; vt.Flag != 2; vp = vr.Read().(*VideoPack) {
+		select {
+		case <-extraExit:
+			return
+		case <-streamExit:
+			return
+		default:
+			action()
+			vr.MoveNext()
+		}
+	}
+}

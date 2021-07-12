@@ -93,8 +93,7 @@ func (ts *Tracks) AddTrack(codec string, t Track) {
 func (ts *Tracks) WaitTrack(codecs ...string) Track {
 	ring := ts.SubRing(ts.head)
 	if ts.Context.Err() == nil { //在等待时间范围内
-		wait := make(chan string)
-		if len(codecs) == 0 { //任意编码需求，只取第一个
+		if wait := make(chan string); len(codecs) == 0 { //任意编码需求，只取第一个
 			go func() {
 				if rt, ok := ring.Read().(string); ok {
 					wait <- rt
@@ -138,6 +137,9 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 		ts.RLock()
 		defer ts.RUnlock()
 		if len(codecs) == 0 {
+			if len(ts.m) == 0 {
+				return nil
+			}
 			return ts.m[ring.Read().(string)]
 		} else {
 			for _, codec := range codecs {

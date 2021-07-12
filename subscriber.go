@@ -11,21 +11,21 @@ import (
 
 // Subscriber 订阅者实体定义
 type Subscriber struct {
-	context.Context  `json:"-"`
-	cancel           context.CancelFunc
-	Ctx2             context.Context `json:"-"`
-	*Stream          `json:"-"`
-	ID               string
-	TotalDrop        int //总丢帧
-	TotalPacket      int
-	Type             string
-	BufferLength     int
-	Delay            uint32
-	SubscribeTime    time.Time
-	SubscribeArgs    url.Values
-	OnAudio          func(pack AudioPack) `json:"-"`
-	OnVideo          func(pack VideoPack) `json:"-"`
-	closeOnce        sync.Once
+	context.Context `json:"-"`
+	cancel          context.CancelFunc
+	Ctx2            context.Context `json:"-"`
+	*Stream         `json:"-"`
+	ID              string
+	TotalDrop       int //总丢帧
+	TotalPacket     int
+	Type            string
+	BufferLength    int
+	Delay           uint32
+	SubscribeTime   time.Time
+	SubscribeArgs   url.Values
+	OnAudio         func(pack AudioPack) `json:"-"`
+	OnVideo         func(pack VideoPack) `json:"-"`
+	closeOnce       sync.Once
 }
 
 func (s *Subscriber) close() {
@@ -122,77 +122,9 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	}
 }
 func (s *Subscriber) PlayAudio(at *AudioTrack) {
-	streamExit := s.Context.Done()
-	ar := at.Clone()
-	ap := ar.Read().(*AudioPack)
-	startTimestamp := ap.Timestamp
-	droped := 0
-	var action, send func()
-	drop := func() {
-		if at.current().Sequence-ap.Sequence < 4 {
-			action = send
-		} else {
-			droped++
-		}
-	}
-	send = func() {
-		if s.OnAudio(ap.Copy(startTimestamp)); at.lastTs-ap.Timestamp > 1000 {
-			action = drop
-		}
-	}
-	var extraExit <-chan struct{}
-	if s.Ctx2 != nil {
-		extraExit = s.Ctx2.Done()
-	}
-	for action = send; at.Flag != 2; ap = ar.Read().(*AudioPack) {
-		select {
-		case <-extraExit:
-			return
-		case <-streamExit:
-			return
-		default:
-			action()
-			ar.MoveNext()
-		}
-	}
+	at.Play(s.Ctx2, s.OnAudio)
 }
 
 func (s *Subscriber) PlayVideo(vt *VideoTrack) {
-	var extraExit <-chan struct{}
-	if s.Ctx2 != nil {
-		extraExit = s.Ctx2.Done()
-	}
-	streamExit := s.Context.Done()
-	select {
-	case <-vt.WaitIDR.Done():
-	case <-streamExit:
-		return
-	case <-extraExit: //可能等不到关键帧就退出了
-		return
-	}
-	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
-	vp := vr.Read().(*VideoPack)
-	startTimestamp := vp.Timestamp
-	var action, send func()
-	drop := func() {
-		if vp.IDR {
-			action = send
-		}
-	}
-	send = func() {
-		if s.OnVideo(vp.Copy(startTimestamp)); vt.lastTs-vp.Timestamp > 1000 {
-			action = drop
-		}
-	}
-	for action = send; vt.Flag != 2; vp = vr.Read().(*VideoPack) {
-		select {
-		case <-extraExit:
-			return
-		case <-streamExit:
-			return
-		default:
-			action()
-			vr.MoveNext()
-		}
-	}
+	vt.Play(s.Ctx2, s.OnVideo)
 }
