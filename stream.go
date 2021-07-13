@@ -122,7 +122,7 @@ type ChangeStreamCmd struct {
 
 func (r *Stream) onClosed() {
 	Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
-	r.AVRing.Done()
+	r.AVRing.Dispose()
 	streamCollection.Delete(r.StreamPath)
 	for i, val := range Summary.Streams {
 		if val == &r.StreamInfo {

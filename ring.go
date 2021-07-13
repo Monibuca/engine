@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Monibuca/engine/v2/avformat"
@@ -21,6 +22,7 @@ type Ring struct {
 	buffer []RingItem
 	Size   int
 	Index  int
+	Flag   int32
 }
 
 // NewRing 创建Ring，传入大小指数
@@ -73,9 +75,15 @@ func (r *Ring) GoBack() {
 func (r *Ring) NextW() {
 	item := r.RingItem
 	item.UpdateTime = time.Now()
-	r.GoNext()
-	r.RingItem.Add(1)
-	item.Done()
+	if atomic.CompareAndSwapInt32(&r.Flag, 0, 1) {
+		r.GoNext()
+		r.RingItem.Add(1)
+		item.Done()
+		//Flag不为1代表被Dispose了，但尚未处理Done
+		if !atomic.CompareAndSwapInt32(&r.Flag, 1, 0) {
+			r.RingItem.Done()
+		}
+	}
 }
 
 // NextR 读下一个
@@ -92,7 +100,17 @@ func (r *Ring) GetBuffer() *bytes.Buffer {
 	}
 	return r.Buffer
 }
-
+// Clone 克隆一个Ring
+func (r *Ring) Dispose() {
+	current := r.RingItem
+	if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
+		current.Done()
+	} else if atomic.CompareAndSwapInt32(&r.Flag, 1, 2) {
+		//当前是1代表正在写入，此时变成2，但是Done的任务得交给NextW来处理
+	} else if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
+		current.Done()
+	}
+}
 // Clone 克隆一个Ring
 func (r Ring) Clone() *Ring {
 	return &r
