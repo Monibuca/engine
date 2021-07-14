@@ -17,7 +17,7 @@ import (
 	. "github.com/logrusorgru/aurora"
 )
 
-const Version = "3.1.4"
+const Version = "3.1.5"
 
 var (
 	config = &struct {

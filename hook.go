@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 )
+
 type TransCodeReq struct {
 	*Subscriber
 	RequestCodec string
@@ -19,6 +20,25 @@ const (
 
 var Hooks = make(map[string]*RingBuffer)
 var hookLocker sync.Mutex
+
+func AddHooks(hooks map[string]func(interface{})) {
+	hookLocker.Lock()
+	for name, hook := range hooks {
+		rl, ok := Hooks[name]
+		if !ok {
+			rl = &RingBuffer{}
+			rl.Init(4)
+			Hooks[name] = rl
+		}
+		go func(hooks *RingBuffer, callback func(interface{})) {
+			for {
+				callback(hooks.Read())
+				hooks.MoveNext()
+			}
+		}(rl.Clone(), hook)
+	}
+	hookLocker.Unlock()
+}
 
 func AddHook(name string, callback func(interface{})) {
 	hookLocker.Lock()
@@ -47,7 +67,7 @@ func AddHookWithContext(ctx context.Context, name string, callback func(interfac
 	}
 }
 
-func TriggerHook(name string ,payload interface{}) {
+func TriggerHook(name string, payload interface{}) {
 	hookLocker.Lock()
 	defer hookLocker.Unlock()
 	if rl, ok := Hooks[name]; ok {

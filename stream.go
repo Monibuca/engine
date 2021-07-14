@@ -63,6 +63,7 @@ type Stream struct {
 	subscribeMutex  sync.Mutex
 	timeout         *time.Timer //更新时间用来做超时处理
 	Close           func()      `json:"-"`
+	ExtraProp       interface{} //额外的属性，用于实现子类化，减少map的使用
 }
 
 func (r *Stream) Update() {
