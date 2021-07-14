@@ -135,9 +135,9 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
 		r.Subscribers = append(r.Subscribers, s)
+		TriggerHook(HOOK_SUBSCRIBE, s, len(r.Subscribers))
 		r.subscribeMutex.Unlock()
 		utils.Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-		TriggerHook(HOOK_SUBSCRIBE, s)
 	}
 }
 
@@ -147,14 +147,15 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 		var deleted bool
 		r.subscribeMutex.Lock()
 		r.Subscribers, deleted = DeleteSliceItem_Subscriber(r.Subscribers, s)
-		r.subscribeMutex.Unlock()
 		if deleted {
 			utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
-			TriggerHook(HOOK_UNSUBSCRIBE, s)
-			if len(r.Subscribers) == 0 && r.AutoUnPublish {
+			l := len(r.Subscribers)
+			TriggerHook(HOOK_UNSUBSCRIBE, s, l)
+			if l == 0 && r.AutoUnPublish {
 				r.Close()
 			}
 		}
+		r.subscribeMutex.Unlock()
 	}
 }
 func DeleteSliceItem_Subscriber(slice []*Subscriber, item *Subscriber) ([]*Subscriber, bool) {
