@@ -2,8 +2,8 @@ package engine
 
 import (
 	"container/ring"
+	"reflect"
 	"sync"
-	"sync/atomic"
 	// "time"
 )
 
@@ -14,25 +14,7 @@ type RingItem struct {
 
 type RingBuffer struct {
 	*ring.Ring
-	// UpdateTime time.Time //更新时间，用于计算是否超时
 }
-
-// 可释放的Ring，用于音视频
-type RingDisposable struct {
-	RingBuffer
-	Flag int32 // 0:不在写入，1：正在写入，2：已销毁
-}
-
-// 带锁的Ring，用于Hook
-// type RingLock struct {
-// 	RingBuffer
-// 	sync.Mutex
-// }
-// func (r *RingLock) Write(value interface{}) {
-// 	r.Lock()
-// 	r.RingBuffer.Write(value)
-// 	r.Unlock()
-// }
 
 // TODO: 池化，泛型
 
@@ -44,7 +26,6 @@ func NewRingBuffer(n int) (r *RingBuffer) {
 
 func (r *RingBuffer) Init(n int) {
 	r.Ring = ring.New(n)
-	// r.UpdateTime = time.Now()
 	for x := r.Ring; x.Value == nil; x = x.Next() {
 		x.Value = new(RingItem)
 	}
@@ -55,53 +36,22 @@ func (rb RingBuffer) Clone() *RingBuffer {
 	return &rb
 }
 
-func (r *RingBuffer) SubRing(rr *ring.Ring) *RingBuffer {
-	r = r.Clone()
+func (r RingBuffer) SubRing(rr *ring.Ring) *RingBuffer {
 	r.Ring = rr
-	return r
+	return &r
 }
 
 func (r *RingBuffer) Write(value interface{}) {
-	// r.UpdateTime = time.Now()
 	last := r.Current()
 	last.Value = value
 	r.GetNext().Add(1)
 	last.Done()
 }
 
-func (r *RingDisposable) Write(value interface{}) {
-	// r.UpdateTime = time.Now()
-	last := r.Current()
-	last.Value = value
-	if atomic.CompareAndSwapInt32(&r.Flag, 0, 1) {
-		current := r.GetNext()
-		current.Add(1)
-		last.Done()
-		//Flag不为1代表被Dispose了，但尚未处理Done
-		if !atomic.CompareAndSwapInt32(&r.Flag, 1, 0) {
-			current.Done()
-		}
-	}
-}
-
-func (r *RingDisposable) Step() {
-	// r.UpdateTime = time.Now()
-	last := r.Current()
-	if atomic.CompareAndSwapInt32(&r.Flag, 0, 1) {
-		current := r.GetNext()
-		current.Add(1)
-		last.Done()
-		//Flag不为1代表被Dispose了，但尚未处理Done
-		if !atomic.CompareAndSwapInt32(&r.Flag, 1, 0) {
-			current.Done()
-		}
-	}
-}
-
-func (r *RingBuffer) Read() interface{} {
+func (r *RingBuffer) read() reflect.Value {
 	current := r.Current()
 	current.Wait()
-	return current.Value
+	return reflect.ValueOf(current.Value)
 }
 
 func (r *RingBuffer) CurrentValue() interface{} {
@@ -111,7 +61,6 @@ func (r *RingBuffer) CurrentValue() interface{} {
 func (r *RingBuffer) NextValue() interface{} {
 	return r.Next().Value.(*RingItem).Value
 }
-
 
 func (r *RingBuffer) Current() *RingItem {
 	return r.Ring.Value.(*RingItem)
@@ -126,22 +75,38 @@ func (r *RingBuffer) GetNext() *RingItem {
 	return r.Current()
 }
 
-func (r *RingDisposable) Dispose() {
+func (r *RingBuffer) Read() interface{} {
 	current := r.Current()
-	if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
-		current.Done()
-	} else if atomic.CompareAndSwapInt32(&r.Flag, 1, 2) {
-		//当前是1代表正在写入，此时变成2，但是Done的任务得交给NextW来处理
-	} else if atomic.CompareAndSwapInt32(&r.Flag, 0, 2) {
-		current.Done()
-	}
+	current.Wait()
+	return current.Value
 }
 
-// // Timeout 发布者是否超时了
-// func (r *RingBuffer) Timeout(t time.Duration) bool {
-// 	// 如果设置为0则表示永不超时
-// 	if t == 0 {
-// 		return false
-// 	}
-// 	return time.Since(r.UpdateTime) > t
-// }
+func (r *RingBuffer) ReadLoop(handler interface{}, goon func() bool) {
+	if goon == nil {
+		switch t := reflect.ValueOf(handler); t.Kind() {
+		case reflect.Chan:
+			for v := r.read(); ; v = r.read() {
+				t.Send(v)
+				r.MoveNext()
+			}
+		case reflect.Func:
+			for args := []reflect.Value{r.read()}; ; args[0] = r.read() {
+				t.Call(args)
+				r.MoveNext()
+			}
+		}
+	} else {
+		switch t := reflect.ValueOf(handler); t.Kind() {
+		case reflect.Chan:
+			for v := r.read(); goon(); v = r.read() {
+				t.Send(v)
+				r.MoveNext()
+			}
+		case reflect.Func:
+			for args := []reflect.Value{r.read()}; goon(); args[0] = r.read() {
+				t.Call(args)
+				r.MoveNext()
+			}
+		}
+	}
+}

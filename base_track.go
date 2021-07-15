@@ -108,16 +108,17 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 				return nil
 			}
 		} else {
-			go func() {
-				for {
-					if rt, ok := ring.Read().(string); ok {
-						wait <- rt
-						ring.MoveNext()
-					} else {
-						break
-					}
-				}
-			}()
+			go ring.ReadLoop(wait)
+			// go func() {
+			// 	for {
+			// 		if rt, ok := ring.Read().(string); ok {
+			// 			wait <- rt
+			// 			ring.MoveNext()
+			// 		} else {
+			// 			break
+			// 		}
+			// 	}
+			// }()
 			for {
 				select {
 				case t := <-wait:

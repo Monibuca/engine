@@ -84,11 +84,10 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	}
 	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
 	ar := at.Clone()
-	// dropping := false //是否处于丢帧中
 	vp := vr.Read().(*VideoPack)
 	ap := ar.Read().(*AudioPack)
-	startTimestamp := vp.Timestamp
-	for vt.Flag != 2 {
+	vst, ast := vp.Timestamp, ap.Timestamp
+	for vt.Goon() {
 		select {
 		case <-extraExit:
 			return
@@ -96,25 +95,11 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 			return
 		default:
 			if ap.Timestamp > vp.Timestamp || ap.Timestamp == 0 {
-				s.OnVideo(vp.Copy(startTimestamp))
-				// if !dropping {
-				// 	s.OnVideo(vp.Copy(startTimestamp))
-				// 	if vt.lastTs - vp.Timestamp > 1000 {
-				// 		dropping = true
-				// 	}
-				// } else if vp.IDR {
-				// 	dropping = false
-				// }
+				s.OnVideo(vp.Copy(vst))
 				vr.MoveNext()
 				vp = vr.Read().(*VideoPack)
 			} else {
-				s.OnAudio(ap.Copy(startTimestamp))
-				// if !dropping {
-				// 	s.OnAudio(ap.Copy(startTimestamp))
-				// 	if at.CurrentValue().(AVPack).Since(ap.Timestamp) > 1000 {
-				// 		dropping = true
-				// 	}
-				// }
+				s.OnAudio(ap.Copy(ast))
 				ar.MoveNext()
 				ap = ar.Read().(*AudioPack)
 			}

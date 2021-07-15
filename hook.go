@@ -27,20 +27,14 @@ func AddHooks(hooks map[string]interface{}) {
 	for name, hook := range hooks {
 		rl, ok := Hooks[name]
 		if !ok {
-			rl = &RingBuffer{}
-			rl.Init(4)
+			rl = NewRingBuffer(4)
 			Hooks[name] = rl
 		}
-		go func(hooks *RingBuffer, callback interface{}) {
-			vf := reflect.ValueOf(callback)
-			if vf.Kind() != reflect.Func {
-				panic("callback is not a function")
-			}
-			for {
-				vf.Call(hooks.Read().([]reflect.Value))
-				hooks.MoveNext()
-			}
-		}(rl.Clone(), hook)
+		vf := reflect.ValueOf(hook)
+		if vf.Kind() != reflect.Func {
+			panic("callback is not a function")
+		}
+		go rl.Clone().ReadLoop(vf.Call, nil)
 	}
 	hookLocker.Unlock()
 }
@@ -49,8 +43,7 @@ func AddHook(name string, callback interface{}) {
 	hookLocker.Lock()
 	rl, ok := Hooks[name]
 	if !ok {
-		rl = &RingBuffer{}
-		rl.Init(4)
+		rl = NewRingBuffer(4)
 		Hooks[name] = rl
 	}
 	hookLocker.Unlock()
@@ -58,9 +51,10 @@ func AddHook(name string, callback interface{}) {
 	if vf.Kind() != reflect.Func {
 		panic("callback is not a function")
 	}
-	for hooks := rl.Clone(); ; hooks.MoveNext() {
-		vf.Call(hooks.Read().([]reflect.Value))
-	}
+	rl.Clone().ReadLoop(vf.Call, nil)
+	// for hooks := rl.Clone(); ; hooks.MoveNext() {
+	// 	vf.Call(hooks.Read().([]reflect.Value))
+	// }
 }
 
 func AddHookWithContext(ctx context.Context, name string, callback interface{}) {
@@ -75,9 +69,10 @@ func AddHookWithContext(ctx context.Context, name string, callback interface{}) 
 	if vf.Kind() != reflect.Func {
 		panic("callback is not a function")
 	}
-	for hooks := rl.Clone(); ctx.Err() == nil; hooks.MoveNext() {
-		vf.Call(hooks.Read().([]reflect.Value))
-	}
+	rl.Clone().ReadLoop(vf.Call, func() bool { return ctx.Err() == nil })
+	// for hooks := rl.Clone(); ctx.Err() == nil; hooks.MoveNext() {
+	// 	vf.Call(hooks.Read().([]reflect.Value))
+	// }
 }
 
 func TriggerHook(name string, payload ...interface{}) {
