@@ -83,7 +83,7 @@ func AddHookWithContext(ctx context.Context, name string, callback interface{}) 
 func TriggerHook(name string, payload ...interface{}) {
 	args := make([]reflect.Value, len(payload))
 	for i, arg := range payload {
-		args[i] = reflect.ValueOf(&arg).Elem()
+		args[i] = reflect.ValueOf(arg)
 	}
 	hookLocker.Lock()
 	defer hookLocker.Unlock()
