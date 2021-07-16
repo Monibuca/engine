@@ -54,6 +54,11 @@ func (r *RingBuffer) read() reflect.Value {
 	return reflect.ValueOf(current.Value)
 }
 
+func (r *RingBuffer) nextRead() reflect.Value {
+	r.MoveNext()
+	return r.read()
+}
+
 func (r *RingBuffer) CurrentValue() interface{} {
 	return r.Current().Value
 }
@@ -70,8 +75,13 @@ func (r *RingBuffer) MoveNext() {
 	r.Ring = r.Next()
 }
 
+func (r *RingBuffer) NextRead() interface{} {
+	r.MoveNext()
+	return r.Read()
+}
+
 func (r *RingBuffer) GetNext() *RingItem {
-	r.Ring = r.Next()
+	r.MoveNext()
 	return r.Current()
 }
 
@@ -81,32 +91,30 @@ func (r *RingBuffer) Read() interface{} {
 	return current.Value
 }
 
-func (r *RingBuffer) ReadLoop(handler interface{}, goon func() bool) {
-	if goon == nil {
-		switch t := reflect.ValueOf(handler); t.Kind() {
-		case reflect.Chan:
-			for v := r.read(); ; v = r.read() {
-				t.Send(v)
-				r.MoveNext()
-			}
-		case reflect.Func:
-			for args := []reflect.Value{r.read()}; ; args[0] = r.read() {
-				t.Call(args)
-				r.MoveNext()
-			}
+// ReadLoop 循环读取，采用了反射机制，不适用高性能场景
+// handler入参可以传入回调函数或者channel
+func (r *RingBuffer) ReadLoop(handler interface{}) {
+	switch t := reflect.ValueOf(handler); t.Kind() {
+	case reflect.Chan:
+		for v := r.read(); ; v = r.nextRead() {
+			t.Send(v)
 		}
-	} else {
-		switch t := reflect.ValueOf(handler); t.Kind() {
-		case reflect.Chan:
-			for v := r.read(); goon(); v = r.read() {
-				t.Send(v)
-				r.MoveNext()
-			}
-		case reflect.Func:
-			for args := []reflect.Value{r.read()}; goon(); args[0] = r.read() {
-				t.Call(args)
-				r.MoveNext()
-			}
+	case reflect.Func:
+		for args := []reflect.Value{r.read()}; ; args[0] = r.nextRead() {
+			t.Call(args)
+		}
+	}
+}
+// goon判断函数用来判断是否继续读取,返回false将终止循环
+func (r *RingBuffer) ReadLoopConditional(handler interface{}, goon func() bool) {
+	switch t := reflect.ValueOf(handler); t.Kind() {
+	case reflect.Chan:
+		for v := r.read(); goon(); v = r.nextRead() {
+			t.Send(v)
+		}
+	case reflect.Func:
+		for args := []reflect.Value{r.read()}; goon(); args[0] = r.nextRead() {
+			t.Call(args)
 		}
 	}
 }

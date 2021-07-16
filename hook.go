@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"context"
 	"reflect"
 	"sync"
 )
@@ -34,7 +33,7 @@ func AddHooks(hooks map[string]interface{}) {
 		if vf.Kind() != reflect.Func {
 			panic("callback is not a function")
 		}
-		go rl.Clone().ReadLoop(vf.Call, nil)
+		go rl.Clone().ReadLoop(vf.Call)
 	}
 	hookLocker.Unlock()
 }
@@ -51,13 +50,13 @@ func AddHook(name string, callback interface{}) {
 	if vf.Kind() != reflect.Func {
 		panic("callback is not a function")
 	}
-	rl.Clone().ReadLoop(vf.Call, nil)
+	rl.Clone().ReadLoop(vf.Call)
 	// for hooks := rl.Clone(); ; hooks.MoveNext() {
 	// 	vf.Call(hooks.Read().([]reflect.Value))
 	// }
 }
 
-func AddHookWithContext(ctx context.Context, name string, callback interface{}) {
+func AddHookConditional(name string, callback interface{}, goon func() bool) {
 	hookLocker.Lock()
 	rl, ok := Hooks[name]
 	if !ok {
@@ -69,7 +68,7 @@ func AddHookWithContext(ctx context.Context, name string, callback interface{}) 
 	if vf.Kind() != reflect.Func {
 		panic("callback is not a function")
 	}
-	rl.Clone().ReadLoop(vf.Call, func() bool { return ctx.Err() == nil })
+	rl.Clone().ReadLoopConditional(vf.Call, goon)
 	// for hooks := rl.Clone(); ctx.Err() == nil; hooks.MoveNext() {
 	// 	vf.Call(hooks.Read().([]reflect.Value))
 	// }

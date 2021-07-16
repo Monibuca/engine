@@ -89,6 +89,17 @@ func (ts *Tracks) AddTrack(codec string, t Track) {
 		ts.Write(codec)
 	}
 }
+func (ts *Tracks) GetTrack(codec string) Track {
+	ts.RLock()
+	defer ts.RUnlock()
+	return ts.m[codec]
+}
+
+func (ts *Tracks) OnTrack(callback func(Track)) {
+	ts.SubRing(ts.head).ReadLoop(func(codec string) {
+		callback(ts.GetTrack(codec))
+	})
+}
 
 func (ts *Tracks) WaitTrack(codecs ...string) Track {
 	ring := ts.SubRing(ts.head)
@@ -101,9 +112,7 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 			}()
 			select {
 			case t := <-wait:
-				ts.RLock()
-				defer ts.RUnlock()
-				return ts.m[t]
+				return ts.GetTrack(t)
 			case <-ts.Context.Done():
 				return nil
 			}
@@ -124,9 +133,7 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 				case t := <-wait:
 					for _, codec := range codecs {
 						if t == codec {
-							ts.RLock()
-							defer ts.RUnlock()
-							return ts.m[t]
+							return ts.GetTrack(t)
 						}
 					}
 				case <-ts.Context.Done():

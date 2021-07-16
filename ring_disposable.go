@@ -62,11 +62,11 @@ func (r *RingDisposable) Dispose() {
 		current.Done()
 	}
 }
-
+// Goon 是否继续
 func (r *RingDisposable) Goon() bool {
 	return *r.Flag != 2
 }
 
 func (r *RingDisposable) ReadLoop(handler interface{}) {
-	r.RingBuffer.ReadLoop(handler, r.Goon)
+	r.RingBuffer.ReadLoopConditional(handler, r.Goon)
 }
