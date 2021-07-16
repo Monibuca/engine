@@ -81,30 +81,30 @@ func (ts *Tracks) Dispose() {
 	ts.RUnlock()
 	ts.RingDisposable.Dispose()
 }
-func (ts *Tracks) AddTrack(codec string, t Track) {
+func (ts *Tracks) AddTrack(name string, t Track) {
 	ts.Lock()
 	defer ts.Unlock()
-	if _, ok := ts.m[codec]; !ok {
-		ts.m[codec] = t
-		ts.Write(codec)
+	if _, ok := ts.m[name]; !ok {
+		ts.m[name] = t
+		ts.Write(name)
 	}
 }
-func (ts *Tracks) GetTrack(codec string) Track {
+func (ts *Tracks) GetTrack(name string) Track {
 	ts.RLock()
 	defer ts.RUnlock()
-	return ts.m[codec]
+	return ts.m[name]
 }
 
-func (ts *Tracks) OnTrack(callback func(Track)) {
-	ts.SubRing(ts.head).ReadLoop(func(codec string) {
-		callback(ts.GetTrack(codec))
+func (ts *Tracks) OnTrack(callback func(string, Track)) {
+	ts.SubRing(ts.head).ReadLoop(func(name string) {
+		callback(name, ts.GetTrack(name))
 	})
 }
 
-func (ts *Tracks) WaitTrack(codecs ...string) Track {
+func (ts *Tracks) WaitTrack(names ...string) Track {
 	ring := ts.SubRing(ts.head)
 	if ts.Context.Err() == nil { //在等待时间范围内
-		if wait := make(chan string); len(codecs) == 0 { //任意编码需求，只取第一个
+		if wait := make(chan string); len(names) == 0 { //任意编码需求，只取第一个
 			go func() {
 				if rt, ok := ring.Read().(string); ok {
 					wait <- rt
@@ -131,8 +131,8 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 			for {
 				select {
 				case t := <-wait:
-					for _, codec := range codecs {
-						if t == codec {
+					for _, name := range names {
+						if t == name {
 							return ts.GetTrack(t)
 						}
 					}
@@ -144,14 +144,14 @@ func (ts *Tracks) WaitTrack(codecs ...string) Track {
 	} else { //进入不等待状态
 		ts.RLock()
 		defer ts.RUnlock()
-		if len(codecs) == 0 {
+		if len(names) == 0 {
 			if len(ts.m) == 0 {
 				return nil
 			}
 			return ts.m[ring.Read().(string)]
 		} else {
-			for _, codec := range codecs {
-				if t, ok := ts.m[codec]; ok {
+			for _, name := range names {
+				if t, ok := ts.m[name]; ok {
 					return t
 				}
 			}
