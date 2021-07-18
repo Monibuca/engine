@@ -49,6 +49,18 @@ func FindStream(streamPath string) *Stream {
 	return Streams.GetStream(streamPath)
 }
 
+// Publish 直接发布
+func Publish(streamPath, t string) *Stream {
+	var stream = &Stream{
+		StreamPath: streamPath,
+		Type:       t,
+	}
+	if stream.Publish() {
+		return stream
+	}
+	return nil
+}
+
 // Stream 流定义
 type Stream struct {
 	context.Context `json:"-"`
@@ -62,12 +74,35 @@ type Stream struct {
 	Transcoding     map[string]string //转码配置，key：目标编码，value：发布者提供的编码
 	subscribeMutex  sync.Mutex
 	timeout         *time.Timer //更新时间用来做超时处理
-	Close           func()      `json:"-"`
+	OnClose         func()      `json:"-"`
 	ExtraProp       interface{} //额外的属性，用于实现子类化，减少map的使用
 }
 
+// 增加结束时的回调，使用类似Js的猴子补丁
+func (r *Stream) AddOnClose(onClose func()) {
+	if originOnClose := r.OnClose; originOnClose == nil {
+		r.OnClose = onClose
+	} else {
+		r.OnClose = func() {
+			originOnClose()
+			onClose()
+		}
+	}
+}
+
 func (r *Stream) Update() {
-	r.timeout.Reset(config.PublishTimeout)
+	if r.timeout != nil {
+		r.timeout.Reset(config.PublishTimeout)
+	}
+}
+
+func (r *Stream) Close() {
+	Streams.Lock()
+	if r.OnClose != nil {
+		r.OnClose()
+		r.OnClose = nil
+	}
+	Streams.Unlock()
 }
 
 // Publish 发布者进行发布操作
@@ -80,27 +115,23 @@ func (r *Stream) Publish() bool {
 	r.VideoTracks.Init()
 	r.AudioTracks.Init()
 	var cancel context.CancelFunc
-	customClose := r.Close
 	r.Context, cancel = context.WithCancel(context.Background())
-	var closeOnce sync.Once
-	r.Close = func() {
-		closeOnce.Do(func() {
-			r.timeout.Stop()
-			if customClose != nil {
-				customClose()
-			}
-			cancel()
-			r.VideoTracks.Dispose()
-			r.AudioTracks.Dispose()
-			utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
-			Streams.Delete(r.StreamPath)
-			TriggerHook(HOOK_STREAMCLOSE, r)
-		})
-	}
+	r.AddOnClose(func() {
+		cancel()
+		r.timeout.Stop()
+		r.VideoTracks.Dispose()
+		r.AudioTracks.Dispose()
+		utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
+		delete(Streams.m, r.StreamPath)
+		TriggerHook(HOOK_STREAMCLOSE, r)
+	})
 	r.StartTime = time.Now()
 	Streams.m[r.StreamPath] = r
 	utils.Print(Green("Stream publish:"), BrightCyan(r.StreamPath))
-	r.timeout = time.AfterFunc(config.PublishTimeout, r.Close)
+	r.timeout = time.AfterFunc(config.PublishTimeout, func() {
+		utils.Print(Yellow("Stream timeout:"), BrightCyan(r.StreamPath))
+		r.Close()
+	})
 	//触发钩子
 	TriggerHook(HOOK_PUBLISH, r)
 	return true

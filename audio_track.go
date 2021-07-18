@@ -56,6 +56,9 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 			//extensionFlag = config2 & 0x01
 			at.ExtraData = payload
 			at.PushByteStream = func(ts uint32, payload []byte) {
+				if len(payload) < 3 {
+					return
+				}
 				pack := at.current()
 				pack.Raw = payload[2:]
 				pack.Timestamp = ts
@@ -69,11 +72,10 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 		at.Channels = payload[0]&0x01 + 1
 		at.ExtraData = payload[:1]
 		at.PushByteStream = func(ts uint32, payload []byte) {
-			pack := at.current()
-			payloadLen := len(payload)
-			if payloadLen < 4 {
+			if len(payload) < 2 {
 				return
 			}
+			pack := at.current()
 			pack.Raw = payload[1:]
 			pack.Timestamp = ts
 			pack.Payload = payload
