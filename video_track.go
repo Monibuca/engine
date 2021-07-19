@@ -160,7 +160,8 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 					stapaHeaderSize := 1
 					mTAP16LengthSize := 4
 					for _, nalu := range nalus {
-						if len(nalu) == 0 {
+						naluLen := len(nalu)
+						if naluLen == 0 {
 							continue
 						}
 						naluType := nalu[0] & naluTypeBitmask
@@ -176,10 +177,9 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							fallthrough
 						case codec.NALU_STAPA:
 							var nalus [][]byte
-							for currOffset, naluSize := stapaHeaderSize, 0; currOffset < len(nalu); currOffset += naluSize {
+							for currOffset, naluSize := stapaHeaderSize, 0; currOffset < naluLen; currOffset += naluSize {
 								naluSize = int(binary.BigEndian.Uint16(nalu[currOffset:]))
-								currOffset += stapaNALULengthSize
-								if currOffset+len(nalu) < currOffset+naluSize {
+								if currOffset += stapaNALULengthSize; naluLen < currOffset+naluSize {
 									utils.Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, len(nalu)-currOffset)
 									return
 								}
@@ -190,10 +190,10 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							mTAP16LengthSize = 5
 							fallthrough
 						case codec.MTAP16:
-							for currOffset, naluSize := 3, 0; currOffset < len(nalu); currOffset += naluSize {
+							for currOffset, naluSize := 3, 0; currOffset < naluLen; currOffset += naluSize {
 								naluSize = int(binary.BigEndian.Uint16(nalu[currOffset:]))
 								currOffset += mTAP16LengthSize
-								if currOffset+len(nalu) < currOffset+naluSize {
+								if naluLen < currOffset+naluSize {
 									utils.Printf("MTAP16 declared size(%d) is larger then buffer(%d)", naluSize, len(nalu)-currOffset)
 									return
 								}
@@ -241,7 +241,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 								+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 							*/
 						case codec.NALU_FUA:
-							if len(nalu) < fuaHeaderSize {
+							if naluLen < fuaHeaderSize {
 								utils.Printf("Payload is not large enough to be FU-A")
 								return
 							}
@@ -257,7 +257,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							}
 						case codec.NALU_Access_Unit_Delimiter:
 						case codec.NALU_IDR_Picture:
-							vt.bytes += len(nalu)
+							vt.bytes += naluLen
 							pack := vt.current()
 							pack.IDR = true
 							pack.Timestamp = ts
@@ -271,7 +271,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							vt.push(pack)
 						case codec.NALU_Non_IDR_Picture:
 							nonIDRs = append(nonIDRs, nalu)
-							vt.bytes += len(nalu)
+							vt.bytes += naluLen
 						case codec.NALU_SEI:
 						case codec.NALU_Filler_Data:
 						default:
@@ -322,6 +322,10 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs [][]byte
 					for _, nalu := range nalus {
+						naluLen := len(nalu)
+						if naluLen == 0 {
+							continue
+						}
 						/*
 						   0               1
 						   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5
@@ -333,10 +337,8 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 						   NUH layer ID(LayerId) : 6 bits
 						   NUH temporal ID plus 1 (TID) : 3 bits
 						*/
+
 						naluType := nalu[0] & naluTypeBitmask_hevc >> 1
-						if len(nalu) == 0 {
-							continue
-						}
 						switch naluType {
 						case codec.NAL_UNIT_VPS:
 							vps = nalu
@@ -382,10 +384,10 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 								currOffset = 4
 							}
 							var nalus [][]byte
-							for naluSize := 0; currOffset < len(nalu); currOffset += naluSize {
+							for naluSize := 0; currOffset < naluLen; currOffset += naluSize {
 								naluSize = int(binary.BigEndian.Uint16(nalu[currOffset:]))
 								currOffset += 2
-								if currOffset+len(nalu) < currOffset+naluSize {
+								if naluLen < currOffset+naluSize {
 									utils.Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, len(nalu)-currOffset)
 									return
 								}
@@ -421,7 +423,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							if vt.UsingDonlField {
 								offset = 5
 							}
-							if len(nalu) < offset {
+							if naluLen < offset {
 								continue
 							}
 							fuheader := nalu[2]
@@ -452,11 +454,11 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							} else {
 								pack.NALUs = [][]byte{nalu}
 							}
-							vt.bytes += len(nalu)
+							vt.bytes += naluLen
 							vt.push(pack)
 						case 0, 1, 2, 3, 4, 5, 6, 7, 9:
 							nonIDRs = append(nonIDRs, nalu)
-							vt.bytes += len(nalu)
+							vt.bytes += naluLen
 						}
 					}
 					if len(nonIDRs) > 0 {
