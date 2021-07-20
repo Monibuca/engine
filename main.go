@@ -17,14 +17,14 @@ import (
 	. "github.com/logrusorgru/aurora"
 )
 
-const Version = "3.1.9"
+var Version = "3.2.2"
 
 var (
 	config = &struct {
 		EnableAudio    bool
 		EnableVideo    bool
 		PublishTimeout time.Duration
-	}{true, true, time.Minute}
+	}{true, true, 60}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw     []byte
 	StartTime     time.Time                        //启动时间
@@ -53,9 +53,15 @@ func InstallPlugin(opt *PluginConfig) {
 	utils.Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
 }
 
+func init() {
+	if parts := strings.Split(utils.CurrentDir(), "@"); len(parts) > 1 {
+		Version = parts[len(parts)-1]
+	}
+}
+
 // Run 启动Monibuca引擎
 func Run(configFile string) (err error) {
-	err = util.CreateShutdownScript()
+	util.CreateShutdownScript()
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
 		utils.Print(Red("read config file error:"), err)
@@ -69,6 +75,7 @@ func Run(configFile string) (err error) {
 			if err = json.Unmarshal(b, config); err != nil {
 				log.Println(err)
 			}
+			config.PublishTimeout *= time.Second
 		}
 		for name, config := range Plugins {
 			if cfg, ok := cg[name]; ok {
