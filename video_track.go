@@ -120,9 +120,6 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 		}
 		pack.Payload = pack.Bytes()
 	}
-	vt.Do(func(v interface{}) {
-		v.(*RingItem).Value.(*VideoPack).Buffer = bytes.NewBuffer([]byte{})
-	})
 	switch vt.CodecID {
 	case 7:
 		{
@@ -544,11 +541,7 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 		if vt.idrCount == 1 {
 			exRing := ring.New(5)
 			for x := exRing; x.Value == nil; x = x.Next() {
-				pack := new(VideoPack)
-				x.Value = &RingItem{Value: pack}
-				if vt.writeByteStream != nil {
-					pack.Buffer = bytes.NewBuffer([]byte{})
-				}
+				x.Value = &RingItem{Value: new(VideoPack)}
 			}
 			vt.Link(exRing) // 扩大缓冲环
 		} else {
@@ -558,26 +551,22 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 	vt.Step()
 }
 
-func (vt *VideoTrack) Play(ctx context.Context, onVideo func(VideoPack)) {
-	var extraExit <-chan struct{}
-	if ctx != nil {
-		extraExit = ctx.Done()
-	}
-	streamExit := vt.Stream.Context.Done()
+func (vt *VideoTrack) Play(onVideo func(VideoPack), exit1, exit2 <-chan struct{}) {
 	select {
 	case <-vt.WaitIDR.Done():
-	case <-streamExit:
+	case <-exit1:
 		return
-	case <-extraExit: //可能等不到关键帧就退出了
+	case <-exit2: //可能等不到关键帧就退出了
 		return
 	}
 	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
 	vp := vr.Read().(*VideoPack)
 	for startTimestamp := vp.Timestamp; vt.Goon(); vp = vr.Read().(*VideoPack) {
+		utils.Println(vp.Timestamp)
 		select {
-		case <-extraExit:
+		case <-exit1:
 			return
-		case <-streamExit:
+		case <-exit2:
 			return
 		default:
 			onVideo(vp.Copy(startTimestamp))

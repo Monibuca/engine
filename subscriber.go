@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Monibuca/utils/v3"
 	"github.com/pkg/errors"
 )
 
@@ -94,6 +95,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		case <-streamExit:
 			return
 		default:
+			utils.Println(vp.Timestamp, ap.Timestamp, ap.Timestamp > vp.Timestamp)
 			if ap.Timestamp > vp.Timestamp || ap.Timestamp == 0 {
 				s.OnVideo(vp.Copy(vst))
 				vr.MoveNext()
@@ -107,9 +109,17 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	}
 }
 func (s *Subscriber) PlayAudio(at *AudioTrack) {
-	at.Play(s.Ctx2, s.OnAudio)
+	if s.Ctx2 != nil {
+		at.Play(s.OnAudio, s.Done(), s.Ctx2.Done())
+	} else {
+		at.Play(s.OnAudio, s.Done(), nil)
+	}
 }
 
 func (s *Subscriber) PlayVideo(vt *VideoTrack) {
-	vt.Play(s.Ctx2, s.OnVideo)
+	if s.Ctx2 != nil {
+		vt.Play(s.OnVideo, s.Done(), s.Ctx2.Done())
+	} else {
+		vt.Play(s.OnVideo, s.Done(), nil)
+	}
 }

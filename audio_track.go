@@ -1,8 +1,6 @@
 package engine
 
 import (
-	"bytes"
-	"context"
 
 	"github.com/Monibuca/utils/v3/codec"
 )
@@ -105,9 +103,6 @@ func (at *AudioTrack) pushRaw(ts uint32, payload []byte) {
 			pack.Payload = pack.Bytes()
 		}
 	}
-	at.Do(func(v interface{}) {
-		v.(*RingItem).Value.(*AudioPack).Buffer = bytes.NewBuffer([]byte{})
-	})
 	at.PushRaw = func(ts uint32, payload []byte) {
 		pack := at.CurrentValue().(*AudioPack)
 		pack.Timestamp = ts
@@ -142,7 +137,7 @@ func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at.PushByteStream = at.pushByteStream
 	at.PushRaw = at.pushRaw
 	at.Stream = s
-	at.Init(8)
+	at.Init(256)
 	at.Do(func(v interface{}) {
 		v.(*RingItem).Value = new(AudioPack)
 	})
@@ -174,19 +169,14 @@ func (at *AudioTrack) SetASC(asc []byte) {
 	at.Stream.AudioTracks.AddTrack("aac", at)
 }
 
-func (at *AudioTrack) Play(ctx context.Context, onAudio func(AudioPack)) {
-	streamExit := at.Stream.Context.Done()
+func (at *AudioTrack) Play(onAudio func(AudioPack), exit1, exit2 <-chan struct{}) {
 	ar := at.Clone()
 	ap := ar.Read().(*AudioPack)
-	var extraExit <-chan struct{}
-	if ctx != nil {
-		extraExit = ctx.Done()
-	}
 	for startTimestamp := ap.Timestamp; at.Goon(); ap = ar.Read().(*AudioPack) {
 		select {
-		case <-extraExit:
+		case <-exit1:
 			return
-		case <-streamExit:
+		case <-exit2:
 			return
 		default:
 			onAudio(ap.Copy(startTimestamp))

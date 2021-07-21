@@ -21,7 +21,7 @@ type AVPack interface {
 type BasePack struct {
 	Timestamp uint32
 	Sequence  int
-	*bytes.Buffer
+	bytes.Buffer
 	Payload []byte
 }
 
