@@ -562,7 +562,6 @@ func (vt *VideoTrack) Play(onVideo func(VideoPack), exit1, exit2 <-chan struct{}
 	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
 	vp := vr.Read().(*VideoPack)
 	for startTimestamp := vp.Timestamp; vt.Goon(); vp = vr.Read().(*VideoPack) {
-		utils.Println(vp.Timestamp)
 		select {
 		case <-exit1:
 			return

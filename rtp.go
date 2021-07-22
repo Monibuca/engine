@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"github.com/Monibuca/utils/v3"
 	"github.com/Monibuca/utils/v3/codec"
 	"github.com/pion/rtp"
 )
@@ -50,17 +49,23 @@ func (v *RTPVideo) push(payload []byte) {
 	}
 	var p *VideoPack
 	t0 := v.Timestamp
+	absTs := uint32(0)
 	tmpVT := v.Stream.NewVideoTrack(0)
 	tmpVT.ExtraData = v.ExtraData
 	tmpVT.CodecID = v.CodecID
 	start := tmpVT.Ring
-	tmpVT.PushNalu(0, 0, v.Payload)
+	tmpVT.PushNalu(absTs, 0, v.Payload)
 	v.Push = func(payload []byte) {
 		if err := v.Unmarshal(payload); err != nil {
 			return
 		}
-		t1 := (v.Timestamp - t0) / 90
-		utils.Println("video:", t1)
+		if t0 > v.Timestamp && t0-v.Timestamp > 100000 {
+			absTs += (v.Timestamp)
+		} else {
+			absTs += (v.Timestamp - t0)
+		}
+		t0 = v.Timestamp
+		t1 := absTs / 90
 		tmpVT.PushNalu(t1, 0, v.Payload)
 		end := tmpVT.Prev()
 		if start != end {
@@ -156,14 +161,21 @@ func (v *RTPAudio) push(payload []byte) {
 		return
 	}
 	t0 := v.Timestamp
+	absTs := uint32(0)
 	switch at.CodecID {
 	case 10:
+		tb := at.SoundRate
 		v.Push = func(payload []byte) {
 			if err := v.Unmarshal(payload); err != nil {
 				return
 			}
-			t1 := (v.Timestamp - t0) / 90
-			utils.Println("audio:", t1)
+			if v.Timestamp >= t0 {
+				absTs += (v.Timestamp - t0)
+			} else {
+				absTs += (v.Timestamp)
+			}
+			t0 = v.Timestamp
+			t1 := absTs * 10 / uint32(tb/100)
 			for _, payload = range codec.ParseRTPAAC(v.Payload) {
 				at.PushRaw(t1, payload)
 			}
