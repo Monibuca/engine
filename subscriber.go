@@ -95,6 +95,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		case <-streamExit:
 			return
 		default:
+			utils.Println(ap.Timestamp, vp.Timestamp)
 			if ap.Timestamp > vp.Timestamp || ap.Timestamp == 0 {
 				s.OnVideo(vp.Copy(vst))
 				vr.MoveNext()
