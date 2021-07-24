@@ -37,6 +37,14 @@ func (sc *StreamCollection) ToList() (r []*Stream) {
 	return
 }
 
+func (sc *StreamCollection) Range(f func(*Stream)) {
+	sc.RLock()
+	defer sc.RUnlock()
+	for _, s := range sc.m {
+		f(s)
+	}
+}
+
 func init() {
 	Streams.m = make(map[string]*Stream)
 }
