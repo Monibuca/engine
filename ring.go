@@ -4,11 +4,14 @@ import (
 	"container/ring"
 	"reflect"
 	"sync"
+	"sync/atomic"
+	"time"
 	// "time"
 )
 
 type RingItem struct {
-	Value interface{}
+	Value   interface{}
+	reading int32
 	sync.WaitGroup
 }
 
@@ -87,7 +90,9 @@ func (r *RingBuffer) GetNext() *RingItem {
 
 func (r *RingBuffer) Read() interface{} {
 	current := r.Current()
+	atomic.AddInt32(&current.reading, 1)
 	current.Wait()
+	atomic.AddInt32(&current.reading, -1)
 	return current.Value
 }
 
@@ -105,6 +110,7 @@ func (r *RingBuffer) ReadLoop(handler interface{}) {
 		}
 	}
 }
+
 // goon判断函数用来判断是否继续读取,返回false将终止循环
 func (r *RingBuffer) ReadLoopConditional(handler interface{}, goon func() bool) {
 	switch t := reflect.ValueOf(handler); t.Kind() {

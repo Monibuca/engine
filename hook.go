@@ -21,13 +21,18 @@ const (
 var Hooks = make(map[string]*RingBuffer)
 var hookLocker sync.Mutex
 
+func addHookRing(name string) (r *RingBuffer) {
+	r = NewRingBuffer(4)
+	Hooks[name] = r
+	return
+}
+
 func AddHooks(hooks map[string]interface{}) {
 	hookLocker.Lock()
 	for name, hook := range hooks {
 		rl, ok := Hooks[name]
 		if !ok {
-			rl = NewRingBuffer(4)
-			Hooks[name] = rl
+			rl = addHookRing(name)
 		}
 		vf := reflect.ValueOf(hook)
 		if vf.Kind() != reflect.Func {
@@ -42,8 +47,7 @@ func AddHook(name string, callback interface{}) {
 	hookLocker.Lock()
 	rl, ok := Hooks[name]
 	if !ok {
-		rl = NewRingBuffer(4)
-		Hooks[name] = rl
+		rl = addHookRing(name)
 	}
 	hookLocker.Unlock()
 	vf := reflect.ValueOf(callback)
@@ -60,8 +64,7 @@ func AddHookConditional(name string, callback interface{}, goon func() bool) {
 	hookLocker.Lock()
 	rl, ok := Hooks[name]
 	if !ok {
-		rl = NewRingBuffer(4)
-		Hooks[name] = rl
+		rl = addHookRing(name)
 	}
 	hookLocker.Unlock()
 	vf := reflect.ValueOf(callback)
@@ -84,8 +87,7 @@ func TriggerHook(name string, payload ...interface{}) {
 	if rl, ok := Hooks[name]; ok {
 		rl.Write(args)
 	} else {
-		rl = NewRingBuffer(4)
-		Hooks[name] = rl
+		rl = addHookRing(name)
 		rl.Write(args)
 	}
 }
