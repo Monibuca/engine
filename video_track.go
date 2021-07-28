@@ -3,6 +3,7 @@ package engine
 import (
 	"container/ring"
 	"context"
+	"time"
 
 	"github.com/Monibuca/utils/v3"
 	"github.com/Monibuca/utils/v3/codec"
@@ -57,7 +58,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 				if l := vt.Ring.Len() - vt.GOP - 5; l > 5 {
 					//缩小缓冲环节省内存
 					vt.Unlink(l).Do(func(v interface{}) {
-						if v.(*RingItem).Value.(*VideoPack).IDR {
+						if v.(*AVItem).Value.(*VideoPack).IDR {
 							vt.idrCount--
 						}
 					})
@@ -72,9 +73,10 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	vt.PushNalu = vt.pushNalu
 	vt.Stream = s
 	vt.CodecID = codec
-	vt.Init(256)
+	vt.Init(s.Context, 256)
+	vt.poll = time.Millisecond * 20
 	vt.Do(func(v interface{}) {
-		v.(*RingItem).Value = new(VideoPack)
+		v.(*AVItem).Value = new(VideoPack)
 	})
 	vt.WaitIDR, cancel = context.WithCancel(context.Background())
 	switch codec {
@@ -376,7 +378,7 @@ func (vt *VideoTrack) push(pack *VideoPack) {
 		if vt.idrCount == 1 {
 			exRing := ring.New(5)
 			for x := exRing; x.Value == nil; x = x.Next() {
-				x.Value = &RingItem{Value: new(VideoPack)}
+				x.Value = &AVItem{Value: new(VideoPack)}
 			}
 			vt.Link(exRing) // 扩大缓冲环
 		} else {
@@ -396,7 +398,7 @@ func (vt *VideoTrack) Play(onVideo func(VideoPack), exit1, exit2 <-chan struct{}
 	}
 	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
 	vp := vr.Read().(*VideoPack)
-	for startTimestamp := vp.Timestamp; vt.Goon(); vp = vr.Read().(*VideoPack) {
+	for startTimestamp := vp.Timestamp; ; vp = vr.Read().(*VideoPack) {
 		select {
 		case <-exit1:
 			return

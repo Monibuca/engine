@@ -11,7 +11,6 @@ import (
 
 type Track interface {
 	GetBPS()
-	Dispose()
 }
 
 type AVPack interface {
@@ -30,14 +29,14 @@ func (p *BasePack) Since(ts uint32) uint32 {
 }
 
 type Track_Base struct {
-	RingDisposable `json:"-"`
-	Stream         *Stream `json:"-"`
-	PacketCount    int
-	CodecID        byte
-	BPS            int
-	bytes          int    // GOP内的数据大小
-	ts             uint32 // GOP起始时间戳
-	lastTs         uint32 //最新的时间戳
+	AVRing      `json:"-"`
+	Stream      *Stream `json:"-"`
+	PacketCount int
+	CodecID     byte
+	BPS         int
+	bytes       int    // GOP内的数据大小
+	ts          uint32 // GOP起始时间戳
+	lastTs      uint32 //最新的时间戳
 }
 
 func (t *Track_Base) GetBPS() {
@@ -53,7 +52,7 @@ func (t *Track_Base) GetBPS() {
 // }
 
 type Tracks struct {
-	RingDisposable
+	RingBuffer
 	m map[string]Track
 	context.Context
 	sync.RWMutex
@@ -66,21 +65,13 @@ func (ts *Tracks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(ts.m)
 }
 
-func (ts *Tracks) Init() {
-	ts.RingDisposable.Init(8)
+func (ts *Tracks) Init(ctx context.Context) {
+	ts.RingBuffer.Init(ctx, 8)
 	ts.head = ts.Ring
 	ts.m = make(map[string]Track)
 	ts.Context, _ = context.WithTimeout(context.Background(), time.Second*5)
 }
 
-func (ts *Tracks) Dispose() {
-	ts.RLock()
-	for _, v := range ts.m {
-		v.Dispose()
-	}
-	ts.RUnlock()
-	ts.RingDisposable.Dispose()
-}
 func (ts *Tracks) AddTrack(name string, t Track) {
 	ts.Lock()
 	defer ts.Unlock()

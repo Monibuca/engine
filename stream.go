@@ -120,10 +120,10 @@ func (r *Stream) Publish() bool {
 	if _, ok := Streams.m[r.StreamPath]; ok {
 		return false
 	}
-	r.VideoTracks.Init()
-	r.AudioTracks.Init()
 	var cancel context.CancelFunc
 	r.Context, cancel = context.WithCancel(context.Background())
+	r.VideoTracks.Init(r.Context)
+	r.AudioTracks.Init(r.Context)
 	r.AddOnClose(func() {
 		cancel()
 		r.timeout.Stop()

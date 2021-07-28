@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"context"
 	"reflect"
+	"runtime"
 	"sync"
 )
 
@@ -22,7 +24,7 @@ var Hooks = make(map[string]*RingBuffer)
 var hookLocker sync.Mutex
 
 func addHookRing(name string) (r *RingBuffer) {
-	r = NewRingBuffer(4)
+	r = r.Init(context.TODO(), 10)
 	Hooks[name] = r
 	return
 }
@@ -55,9 +57,6 @@ func AddHook(name string, callback interface{}) {
 		panic("callback is not a function")
 	}
 	rl.Clone().ReadLoop(vf.Call)
-	// for hooks := rl.Clone(); ; hooks.MoveNext() {
-	// 	vf.Call(hooks.Read().([]reflect.Value))
-	// }
 }
 
 func AddHookConditional(name string, callback interface{}, goon func() bool) {
@@ -72,9 +71,6 @@ func AddHookConditional(name string, callback interface{}, goon func() bool) {
 		panic("callback is not a function")
 	}
 	rl.Clone().ReadLoopConditional(vf.Call, goon)
-	// for hooks := rl.Clone(); ctx.Err() == nil; hooks.MoveNext() {
-	// 	vf.Call(hooks.Read().([]reflect.Value))
-	// }
 }
 
 func TriggerHook(name string, payload ...interface{}) {
@@ -82,6 +78,7 @@ func TriggerHook(name string, payload ...interface{}) {
 	for i, arg := range payload {
 		args[i] = reflect.ValueOf(arg)
 	}
+	defer runtime.Gosched() //防止连续写入
 	hookLocker.Lock()
 	defer hookLocker.Unlock()
 	if rl, ok := Hooks[name]; ok {

@@ -87,7 +87,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	vp := vr.Read().(*VideoPack)
 	ap := ar.Read().(*AudioPack)
 	vst, ast := vp.Timestamp, ap.Timestamp
-	for vt.Goon() {
+	for {
 		select {
 		case <-extraExit:
 			return

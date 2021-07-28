@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"time"
 
 	"github.com/Monibuca/utils/v3/codec"
 )
@@ -137,9 +138,10 @@ func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at.PushByteStream = at.pushByteStream
 	at.PushRaw = at.pushRaw
 	at.Stream = s
-	at.Init(256)
+	at.Init(s.Context, 256)
+	at.poll = time.Millisecond * 10
 	at.Do(func(v interface{}) {
-		v.(*RingItem).Value = new(AudioPack)
+		v.(*AVItem).Value = new(AudioPack)
 	})
 	switch codec {
 	case 10:
@@ -172,7 +174,7 @@ func (at *AudioTrack) SetASC(asc []byte) {
 func (at *AudioTrack) Play(onAudio func(AudioPack), exit1, exit2 <-chan struct{}) {
 	ar := at.Clone()
 	ap := ar.Read().(*AudioPack)
-	for startTimestamp := ap.Timestamp; at.Goon(); ap = ar.Read().(*AudioPack) {
+	for startTimestamp := ap.Timestamp; ; ap = ar.Read().(*AudioPack) {
 		select {
 		case <-exit1:
 			return
