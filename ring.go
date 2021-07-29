@@ -17,16 +17,18 @@ type LockItem struct {
 
 type RingBuffer struct {
 	*ring.Ring
-	done uint32
+	Flag *int32
 	context.Context
 }
 
 func (r *RingBuffer) Init(ctx context.Context, n int) *RingBuffer {
+	var flag int32
 	if r == nil {
-		r = &RingBuffer{Context: ctx, Ring: ring.New(n)}
+		r = &RingBuffer{Context: ctx, Ring: ring.New(n), Flag: &flag}
 	} else {
 		r.Ring = ring.New(n)
 		r.Context = ctx
+		r.Flag = &flag
 	}
 	for x := r.Ring; x.Value == nil; x = x.Next() {
 		x.Value = new(LockItem)
@@ -75,13 +77,26 @@ func (r *RingBuffer) Read() interface{} {
 func (r *RingBuffer) Write(value interface{}) {
 	last := r.Current()
 	last.Value = value
-	r.GetNext().Lock()
-	last.Unlock()
+	if atomic.CompareAndSwapInt32(r.Flag, 0, 1) {
+		current := r.GetNext()
+		current.Lock()
+		last.Unlock()
+		//Flag不为1代表被Dispose了，但尚未处理Done
+		if !atomic.CompareAndSwapInt32(r.Flag, 1, 0) {
+			current.Unlock()
+		}
+	}
 }
 
 func (r *RingBuffer) Dispose() {
-	atomic.StoreUint32(&r.done,1) 
-	r.Current().Unlock()
+	current := r.Current()
+	if atomic.CompareAndSwapInt32(r.Flag, 0, 2) {
+		current.Unlock()
+	} else if atomic.CompareAndSwapInt32(r.Flag, 1, 2) {
+		//当前是1代表正在写入，此时变成2，但是Done的任务得交给NextW来处理
+	} else if atomic.CompareAndSwapInt32(r.Flag, 0, 2) {
+		current.Unlock()
+	}
 }
 
 func (r *RingBuffer) read() reflect.Value {
@@ -97,7 +112,7 @@ func (r *RingBuffer) nextRead() reflect.Value {
 // handler入参可以传入回调函数或者channel
 func (r *RingBuffer) ReadLoop(handler interface{}) {
 	r.ReadLoopConditional(handler, func() bool {
-		return r.Err() == nil
+		return r.Err() == nil && *r.Flag != 2
 	})
 }
 
