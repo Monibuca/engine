@@ -1,4 +1,4 @@
-// +build linux,arm64 darwin,arm64
+// +build linux,!darwin
 
 package util
 
