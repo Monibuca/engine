@@ -112,9 +112,9 @@ func (r *Stream) Close() {
 		return
 	}
 	delete(Streams.m, r.StreamPath)
+	r.timeout.Stop()
 	r.timeout = nil // 防止重复调用Close
 	Streams.Unlock()
-	r.timeout.Stop()
 	r.VideoTracks.Dispose()
 	r.AudioTracks.Dispose()
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
