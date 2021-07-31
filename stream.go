@@ -107,12 +107,12 @@ func (r *Stream) Update() {
 func (r *Stream) Close() {
 	Streams.Lock()
 	//如果没有发布过，就不需要进行处理
-	if r.Context == nil {
+	if r.timeout == nil {
 		Streams.Unlock()
 		return
 	}
 	delete(Streams.m, r.StreamPath)
-	r.Context = nil // 防止重复调用Close
+	r.timeout = nil // 防止重复调用Close
 	Streams.Unlock()
 	r.timeout.Stop()
 	r.VideoTracks.Dispose()
