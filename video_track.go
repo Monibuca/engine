@@ -198,7 +198,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 						case codec.NALU_SEI:
 						case codec.NALU_Filler_Data:
 						default:
-							utils.Printf("nalType not support yet:%d", naluType)
+							utils.Printf("%s,nalType not support yet:%d,[0]=0x%X", vt.Stream.StreamPath, naluType, nalu[0])
 						}
 					}
 					if nonIDRs > 0 {
