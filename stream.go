@@ -106,11 +106,20 @@ func (r *Stream) Update() {
 
 func (r *Stream) Close() {
 	Streams.Lock()
-	if r.OnClose != nil {
-		r.OnClose()
-		r.OnClose = nil
+	//如果没有发布过，就不需要进行处理
+	if r.Context == nil {
+		Streams.Unlock()
+		return
 	}
+	delete(Streams.m, r.StreamPath)
+	r.Context = nil // 防止重复调用Close
 	Streams.Unlock()
+	r.timeout.Stop()
+	r.VideoTracks.Dispose()
+	r.AudioTracks.Dispose()
+	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
+	TriggerHook(HOOK_STREAMCLOSE, r)
+	r.OnClose()
 }
 
 // Publish 发布者进行发布操作
@@ -124,15 +133,7 @@ func (r *Stream) Publish() bool {
 	r.Context, cancel = context.WithCancel(context.Background())
 	r.VideoTracks.Init(r.Context)
 	r.AudioTracks.Init(r.Context)
-	r.AddOnClose(func() {
-		cancel()
-		r.timeout.Stop()
-		r.VideoTracks.Dispose()
-		r.AudioTracks.Dispose()
-		utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
-		delete(Streams.m, r.StreamPath)
-		TriggerHook(HOOK_STREAMCLOSE, r)
-	})
+	r.AddOnClose(cancel)
 	r.StartTime = time.Now()
 	Streams.m[r.StreamPath] = r
 	utils.Print(Green("Stream publish:"), BrightCyan(r.StreamPath))
