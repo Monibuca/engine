@@ -6,7 +6,7 @@ import (
 )
 
 type RTPPublisher struct {
-	rtp.Packet
+	rtp.Packet `json:"-"`
 	lastTs  uint32
 	absTs   uint32
 	lastSeq uint16

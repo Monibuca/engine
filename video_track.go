@@ -27,7 +27,7 @@ func (vp VideoPack) Copy(ts uint32) VideoPack {
 }
 
 type VideoTrack struct {
-	IDRing *ring.Ring //最近的关键帧位置，首屏渲染
+	IDRing *ring.Ring `json:"-"` //最近的关键帧位置，首屏渲染
 	Track_Base
 	SPSInfo         codec.SPSInfo
 	GOP             int             //关键帧间隔
