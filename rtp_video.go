@@ -59,9 +59,12 @@ func (s *Stream) NewRTPVideo(codec byte) (r *RTPVideo) {
 }
 
 func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
+	naluLen := len(payload)
+	if naluLen == 0 {
+		return
+	}
 	naluType := payload[0] & naluTypeBitmask
 	lenSize := sizeMap[naluType]
-	naluLen := len(payload)
 	switch naluType {
 	case codec.NALU_STAPA, codec.NALU_STAPB:
 		current := &result
@@ -146,8 +149,11 @@ func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
 }
 
 func (v *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
-	naluType := payload[0] & naluTypeBitmask_hevc >> 1
 	naluLen := len(payload)
+	if naluLen == 0 {
+		return
+	}
+	naluType := payload[0] & naluTypeBitmask_hevc >> 1
 	switch naluType {
 	// 4.4.2. Aggregation Packets (APs) (p25)
 	/*
