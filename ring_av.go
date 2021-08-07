@@ -9,9 +9,20 @@ import (
 )
 
 type AVItem struct {
-	Value   interface{}
+	Timestamp uint32
+	Sequence  int
+	Value interface{}
 	canRead bool
 }
+
+func (p *AVItem) Since(ts uint32) uint32 {
+	return p.Timestamp - ts
+}
+
+func (p *AVItem) SetTs(ts uint32) {
+	p.Timestamp = ts
+}
+
 type AVRing struct {
 	RingBuffer
 	poll time.Duration
@@ -75,7 +86,7 @@ func (r *AVRing) Current() *AVItem {
 	return r.Ring.Value.(*AVItem)
 }
 
-func (r *AVRing) NextRead() interface{} {
+func (r *AVRing) NextRead() (item *AVItem, value interface{}) {
 	r.MoveNext()
 	return r.Read()
 }
@@ -86,12 +97,12 @@ func (r *AVRing) GetNext() *AVItem {
 	r.MoveNext()
 	return r.Current()
 }
-func (r *AVRing) Read() interface{} {
+func (r *AVRing) Read() (item *AVItem, value interface{}) {
 	current := r.Current()
 	for r.Err() == nil && !current.canRead {
 		r.wait()
 	}
-	return current.Value
+	return current, current.Value
 }
 
 // ReadLoop 循环读取，采用了反射机制，不适用高性能场景
@@ -108,4 +119,3 @@ func (r *AVRing) ReadLoop(handler interface{}) {
 		}
 	}
 }
-

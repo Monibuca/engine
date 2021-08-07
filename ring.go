@@ -6,12 +6,19 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
+	"time"
 )
+
+type DataItem struct {
+	Timestamp time.Time
+	Sequence  int
+	Value interface{}
+}
 
 // TODO: 池化，泛型
 
 type LockItem struct {
-	Value interface{}
+	DataItem
 	sync.RWMutex
 }
 
@@ -72,6 +79,19 @@ func (r *RingBuffer) Read() interface{} {
 	current.RLock()
 	defer current.RUnlock()
 	return current.Value
+}
+
+func (r *RingBuffer) Step() {
+	last := r.Current()
+	if atomic.CompareAndSwapInt32(r.Flag, 0, 1) {
+		current := r.GetNext()
+		current.Lock()
+		last.Unlock()
+		//Flag不为1代表被Dispose了，但尚未处理Done
+		if !atomic.CompareAndSwapInt32(r.Flag, 1, 0) {
+			current.Unlock()
+		}
+	}
 }
 
 func (r *RingBuffer) Write(value interface{}) {

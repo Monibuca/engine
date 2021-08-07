@@ -12,37 +12,60 @@ import (
 type Track interface {
 	GetBPS()
 }
-
-type AVPack interface {
-	Since(uint32) uint32
+type BaseTrack struct {
+	Stream      *Stream `json:"-"`
+	PacketCount int
+	BPS         int
+	bytes       int
+	ts          uint32
 }
 
-type BasePack struct {
-	Timestamp uint32
-	Sequence  int
+func (t *BaseTrack) addBytes(size int) {
+	t.bytes += size
+}
+
+type AVPack struct {
 	bytes.Buffer
 	Payload []byte
 }
 
-func (p *BasePack) Since(ts uint32) uint32 {
-	return p.Timestamp - ts
+func (pack *AVPack) Bytes2Payload() {
+	pack.Payload = pack.Bytes()
 }
 
-type Track_Base struct {
-	AVRing      `json:"-"`
-	Stream      *Stream `json:"-"`
-	PacketCount int
-	CodecID     byte
-	BPS         int
-	bytes       int    // GOP内的数据大小
-	ts          uint32 // GOP起始时间戳
-	lastTs      uint32 //最新的时间戳
+type AVTrack struct {
+	AVRing  `json:"-"`
+	CodecID byte
+	BaseTrack
+	*AVItem `json:"-"` //当前正在写入的数据对象
 }
 
-func (t *Track_Base) GetBPS() {
-	avPack := t.CurrentValue().(AVPack)
+func (t *DataTrack) resetBPS() {
+	t.bytes = 0
+	t.ts = t.Current().Timestamp
+}
+
+func (t *DataTrack) GetBPS() {
 	t.PacketCount++
-	if delta := avPack.Since(t.ts); delta != 0 {
+	t.Sequence = t.PacketCount
+	if delta := time.Since(t.ts); delta != 0 {
+		t.BPS = t.bytes * 1000 / int(delta)
+	}
+}
+
+func (t *AVTrack) setCurrent() {
+	t.AVItem = t.Current()
+}
+
+func (t *AVTrack) resetBPS() {
+	t.bytes = 0
+	t.ts = t.Current().Timestamp
+}
+
+func (t *AVTrack) GetBPS() {
+	t.PacketCount++
+	t.Sequence = t.PacketCount
+	if delta := t.Since(t.ts); delta != 0 {
 		t.BPS = t.bytes * 1000 / int(delta)
 	}
 }

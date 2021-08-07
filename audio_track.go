@@ -7,24 +7,19 @@ import (
 )
 
 type AudioPack struct {
-	BasePack
+	AVPack
 	Raw []byte
 }
-
-func (ap AudioPack) Copy(ts uint32) AudioPack {
-	ap.Timestamp = ap.Since(ts)
-	return ap
-}
-
 type AudioTrack struct {
-	Track_Base
+	AVTrack
 	SoundRate       int                             //2bit
 	SoundSize       byte                            //1bit
 	Channels        byte                            //1bit
 	ExtraData       []byte                          `json:"-"` //rtmp协议需要先发这个帧
 	PushByteStream  func(ts uint32, payload []byte) `json:"-"`
 	PushRaw         func(ts uint32, payload []byte) `json:"-"`
-	writeByteStream func(pack *AudioPack)           //使用函数写入，避免申请内存
+	writeByteStream func()                          //使用函数写入，避免申请内存
+	*AudioPack      `json:"-"`                      // 当前正在写入的音频对象
 }
 
 func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
@@ -58,11 +53,10 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 				if len(payload) < 3 {
 					return
 				}
-				pack := at.current()
-				pack.Raw = payload[2:]
-				pack.Timestamp = ts
-				pack.Payload = payload
-				at.push(pack)
+				at.SetTs(ts)
+				at.Raw = payload[2:]
+				at.Payload = payload
+				at.push()
 			}
 		}
 	default:
@@ -74,62 +68,61 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 			if len(payload) < 2 {
 				return
 			}
-			pack := at.current()
-			pack.Raw = payload[1:]
-			pack.Timestamp = ts
-			pack.Payload = payload
-			at.push(pack)
+			at.SetTs(ts)
+			at.Raw = payload[1:]
+			at.Payload = payload
+			at.push()
 		}
 		at.PushByteStream(ts, payload)
 	}
 
 }
-func (at *AudioTrack) current() *AudioPack {
-	return at.CurrentValue().(*AudioPack)
+
+func (at *AudioTrack) setCurrent() {
+	at.AVTrack.setCurrent()
+	at.AudioPack = at.Value.(*AudioPack)
 }
+
 func (at *AudioTrack) pushRaw(ts uint32, payload []byte) {
 	switch at.CodecID {
 	case 10:
-		at.writeByteStream = func(pack *AudioPack) {
-			pack.Reset()
-			pack.Write([]byte{at.ExtraData[0], 1})
-			pack.Write(pack.Raw)
-			pack.Payload = pack.Bytes()
+		at.writeByteStream = func() {
+			at.Reset()
+			at.Write([]byte{at.ExtraData[0], 1})
+			at.Write(at.Raw)
+			at.Bytes2Payload()
 		}
 	default:
-		at.writeByteStream = func(pack *AudioPack) {
-			pack.Reset()
-			pack.WriteByte(at.ExtraData[0])
-			pack.Write(pack.Raw)
-			pack.Payload = pack.Bytes()
+		at.writeByteStream = func() {
+			at.Reset()
+			at.WriteByte(at.ExtraData[0])
+			at.Write(at.Raw)
+			at.Bytes2Payload()
 		}
 	}
 	at.PushRaw = func(ts uint32, payload []byte) {
-		pack := at.CurrentValue().(*AudioPack)
-		pack.Timestamp = ts
-		pack.Raw = payload
-		at.push(pack)
+		at.SetTs(ts)
+		at.Raw = payload
+		at.push()
 	}
 	at.PushRaw(ts, payload)
 }
 
 // Push 来自发布者推送的音频
-func (at *AudioTrack) push(pack *AudioPack) {
+func (at *AudioTrack) push() {
 	if at.Stream != nil {
 		at.Stream.Update()
 	}
 	if at.writeByteStream != nil {
-		at.writeByteStream(pack)
+		at.writeByteStream()
 	}
-	at.bytes += len(pack.Raw)
+	at.addBytes(len(at.Raw))
 	at.GetBPS()
-	pack.Sequence = at.PacketCount
-	if pack.Since(at.ts) > 1000 {
-		at.bytes = 0
-		at.ts = pack.Timestamp
+	if at.Since(at.ts) > 1000 {
+		at.resetBPS()
 	}
-	at.lastTs = pack.Timestamp
 	at.Step()
+	at.setCurrent()
 }
 
 func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
@@ -143,6 +136,7 @@ func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at.Do(func(v interface{}) {
 		v.(*AVItem).Value = new(AudioPack)
 	})
+	at.setCurrent()
 	switch codec {
 	case 10:
 		s.AudioTracks.AddTrack("aac", at)
@@ -171,17 +165,17 @@ func (at *AudioTrack) SetASC(asc []byte) {
 	at.Stream.AudioTracks.AddTrack("aac", at)
 }
 
-func (at *AudioTrack) Play(onAudio func(AudioPack), exit1, exit2 <-chan struct{}) {
+func (at *AudioTrack) Play(onAudio func(uint32, *AudioPack), exit1, exit2 <-chan struct{}) {
 	ar := at.Clone()
-	ap := ar.Read().(*AudioPack)
-	for startTimestamp := ap.Timestamp; ; ap = ar.Read().(*AudioPack) {
+	item, ap := ar.Read()
+	for startTimestamp := item.Timestamp; ; item, ap = ar.Read() {
 		select {
 		case <-exit1:
 			return
 		case <-exit2:
 			return
 		default:
-			onAudio(ap.Copy(startTimestamp))
+			onAudio(item.Timestamp-startTimestamp, ap.(*AudioPack))
 			ar.MoveNext()
 		}
 	}

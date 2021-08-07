@@ -23,8 +23,8 @@ type Subscriber struct {
 	Delay           uint32
 	SubscribeTime   time.Time
 	SubscribeArgs   url.Values
-	OnAudio         func(pack AudioPack) `json:"-"`
-	OnVideo         func(pack VideoPack) `json:"-"`
+	OnAudio         func(uint32, *AudioPack) `json:"-"`
+	OnVideo         func(uint32, *VideoPack) `json:"-"`
 	closeOnce       sync.Once
 }
 
@@ -76,7 +76,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	}
 	streamExit := s.Context.Done()
 	select {
-	case <-vt.WaitIDR.Done(): //等待获取到第一个关键帧
+	case <-vt.WaitIDR: //等待获取到第一个关键帧
 	case <-streamExit: //可能等不到关键帧就退出了
 		return
 	case <-extraExit: //可能等不到关键帧就退出了
@@ -84,9 +84,9 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	}
 	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
 	ar := at.Clone()
-	vp := vr.Read().(*VideoPack)
-	ap := ar.Read().(*AudioPack)
-	vst, ast := vp.Timestamp, ap.Timestamp
+	iv, vp := vr.Read()
+	ia, ap := ar.Read()
+	vst, ast := iv.Timestamp, ia.Timestamp
 	for {
 		select {
 		case <-extraExit:
@@ -94,14 +94,14 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		case <-streamExit:
 			return
 		default:
-			if ap.Timestamp > vp.Timestamp || ap.Timestamp == 0 {
-				s.OnVideo(vp.Copy(vst))
+			if ia.Timestamp > iv.Timestamp || ia.Timestamp == 0 {
+				s.OnVideo(iv.Timestamp-vst, vp.(*VideoPack))
 				vr.MoveNext()
-				vp = vr.Read().(*VideoPack)
+				iv, vp = vr.Read()
 			} else {
-				s.OnAudio(ap.Copy(ast))
+				s.OnAudio(ia.Timestamp-ast, ap.(*AudioPack))
 				ar.MoveNext()
-				ap = ar.Read().(*AudioPack)
+				ia, ap = ar.Read()
 			}
 		}
 	}

@@ -78,6 +78,7 @@ type Stream struct {
 	Subscribers     []*Subscriber // 订阅者
 	VideoTracks     Tracks
 	AudioTracks     Tracks
+	DataTracks      Tracks
 	AutoUnPublish   bool              //	当无人订阅时自动停止发布
 	Transcoding     map[string]string //转码配置，key：目标编码，value：发布者提供的编码
 	subscribeMutex  sync.Mutex
@@ -117,6 +118,7 @@ func (r *Stream) Close() {
 	Streams.Unlock()
 	r.VideoTracks.Dispose()
 	r.AudioTracks.Dispose()
+	r.DataTracks.Dispose()
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 	TriggerHook(HOOK_STREAMCLOSE, r)
 	r.OnClose()
@@ -133,6 +135,7 @@ func (r *Stream) Publish() bool {
 	r.Context, cancel = context.WithCancel(context.Background())
 	r.VideoTracks.Init(r.Context)
 	r.AudioTracks.Init(r.Context)
+	r.DataTracks.Init(r.Context)
 	r.AddOnClose(cancel)
 	r.StartTime = time.Now()
 	Streams.m[r.StreamPath] = r
@@ -146,22 +149,32 @@ func (r *Stream) Publish() bool {
 	return true
 }
 
-func (r *Stream) WaitVideoTrack(codecs ...string) *VideoTrack {
+func (r *Stream) WaitDataTrack(names ...string) *DataTrack {
 	if !config.EnableVideo {
 		return nil
 	}
-	if track := r.VideoTracks.WaitTrack(codecs...); track != nil {
+	if track := r.DataTracks.WaitTrack(names...); track != nil {
+		return track.(*DataTrack)
+	}
+	return nil
+}
+
+func (r *Stream) WaitVideoTrack(names ...string) *VideoTrack {
+	if !config.EnableVideo {
+		return nil
+	}
+	if track := r.VideoTracks.WaitTrack(names...); track != nil {
 		return track.(*VideoTrack)
 	}
 	return nil
 }
 
 // TODO: 触发转码逻辑
-func (r *Stream) WaitAudioTrack(codecs ...string) *AudioTrack {
+func (r *Stream) WaitAudioTrack(names ...string) *AudioTrack {
 	if !config.EnableAudio {
 		return nil
 	}
-	if track := r.AudioTracks.WaitTrack(codecs...); track != nil {
+	if track := r.AudioTracks.WaitTrack(names...); track != nil {
 		return track.(*AudioTrack)
 	}
 	return nil
