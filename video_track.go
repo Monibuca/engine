@@ -112,13 +112,13 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 			tmp[0] = nIdrBit
 		}
 		tmp[1] = 1
-		vt.Write(tmp[:2])
+		vt.Buffer.Write(tmp[:2])
 		utils.BigEndian.PutUint24(tmp, vt.CompositionTime)
-		vt.Write(tmp[:3])
+		vt.Buffer.Write(tmp[:3])
 		for _, nalu := range vt.NALUs {
 			utils.BigEndian.PutUint32(tmp, uint32(len(nalu)))
-			vt.Write(tmp)
-			vt.Write(nalu)
+			vt.Buffer.Write(tmp)
+			vt.Buffer.Write(nalu)
 		}
 		vt.Bytes2Payload()
 	}

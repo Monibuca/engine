@@ -88,15 +88,15 @@ func (at *AudioTrack) pushRaw(ts uint32, payload []byte) {
 	case 10:
 		at.writeByteStream = func() {
 			at.Reset()
-			at.Write([]byte{at.ExtraData[0], 1})
-			at.Write(at.Raw)
+			at.Buffer.Write([]byte{at.ExtraData[0], 1})
+			at.Buffer.Write(at.Raw)
 			at.Bytes2Payload()
 		}
 	default:
 		at.writeByteStream = func() {
 			at.Reset()
 			at.WriteByte(at.ExtraData[0])
-			at.Write(at.Raw)
+			at.Buffer.Write(at.Raw)
 			at.Bytes2Payload()
 		}
 	}
