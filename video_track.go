@@ -384,9 +384,11 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 	case <-exit2: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	vr := vt.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
+	realSt := vt.PreItem().Timestamp // 当前时间戳
 	item, vp := vr.Read()
-	for startTimestamp := item.Timestamp; ; item, vp = vr.Read() {
+	startTimestamp := item.Timestamp
+	for chase := true; ; item, vp = vr.Read() {
 		select {
 		case <-exit1:
 			return
@@ -394,6 +396,14 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 			return
 		default:
 			onVideo(item.Timestamp-startTimestamp, vp.(*VideoPack))
+			if chase {
+				if startTimestamp < realSt-10 {
+					startTimestamp += 10
+				} else {
+					startTimestamp = realSt
+					chase = false
+				}
+			}
 			vr.MoveNext()
 		}
 	}

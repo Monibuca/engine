@@ -3,7 +3,6 @@ package engine
 import (
 	"container/ring"
 	"context"
-	"reflect"
 	"runtime"
 	"time"
 )
@@ -11,8 +10,8 @@ import (
 type AVItem struct {
 	Timestamp uint32
 	Sequence  int
-	Value interface{}
-	canRead bool
+	Value     interface{}
+	canRead   bool
 }
 
 func (p *AVItem) Since(ts uint32) uint32 {
@@ -36,8 +35,8 @@ func (r *AVRing) Init(ctx context.Context, n int) *AVRing {
 	}
 	return r
 }
-func (rb AVRing) Clone() *AVRing {
-	return &rb
+func (r AVRing) Clone() *AVRing {
+	return &r
 }
 
 func (r AVRing) SubRing(rr *ring.Ring) *AVRing {
@@ -65,19 +64,6 @@ func (r *AVRing) wait() {
 	}
 }
 
-func (r *AVRing) read() reflect.Value {
-	current := r.Current()
-	for r.Err() == nil && !current.canRead {
-		r.wait()
-	}
-	return reflect.ValueOf(current.Value)
-}
-
-func (r *AVRing) nextRead() reflect.Value {
-	r.MoveNext()
-	return r.read()
-}
-
 func (r *AVRing) CurrentValue() interface{} {
 	return r.Current().Value
 }
@@ -93,6 +79,9 @@ func (r *AVRing) NextRead() (item *AVItem, value interface{}) {
 func (r *AVRing) NextValue() interface{} {
 	return r.Next().Value.(*AVItem).Value
 }
+func (r *AVRing) PreItem() *AVItem {
+	return r.Prev().Value.(*AVItem)
+}
 func (r *AVRing) GetNext() *AVItem {
 	r.MoveNext()
 	return r.Current()
@@ -103,19 +92,4 @@ func (r *AVRing) Read() (item *AVItem, value interface{}) {
 		r.wait()
 	}
 	return current, current.Value
-}
-
-// ReadLoop 循环读取，采用了反射机制，不适用高性能场景
-// handler入参可以传入回调函数或者channel
-func (r *AVRing) ReadLoop(handler interface{}) {
-	switch t := reflect.ValueOf(handler); t.Kind() {
-	case reflect.Chan:
-		for v := r.read(); r.Err() == nil; v = r.nextRead() {
-			t.Send(v)
-		}
-	case reflect.Func:
-		for args := []reflect.Value{r.read()}; r.Err() == nil; args[0] = r.nextRead() {
-			t.Call(args)
-		}
-	}
 }
