@@ -8,18 +8,10 @@ import (
 )
 
 type AVItem struct {
-	Timestamp uint32
+	time.Time
 	Sequence  int
 	Value     interface{}
 	canRead   bool
-}
-
-func (p *AVItem) Since(ts uint32) uint32 {
-	return p.Timestamp - ts
-}
-
-func (p *AVItem) SetTs(ts uint32) {
-	p.Timestamp = ts
 }
 
 type AVRing struct {

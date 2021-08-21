@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/Monibuca/utils/v3"
 )
 
 type Track interface {
@@ -17,7 +19,7 @@ type BaseTrack struct {
 	PacketCount int
 	BPS         int
 	bytes       int
-	ts          uint32
+	ts          time.Time
 }
 
 func (t *BaseTrack) addBytes(size int) {
@@ -37,7 +39,10 @@ type AVTrack struct {
 	AVRing  `json:"-"`
 	CodecID byte
 	BaseTrack
-	*AVItem `json:"-"` //当前正在写入的数据对象
+	*AVItem  `json:"-"` //当前正在写入的数据对象
+	lastTs   uint32
+	lastTime time.Time
+	timebase time.Duration
 }
 
 func (t *DataTrack) resetBPS() {
@@ -59,15 +64,31 @@ func (t *AVTrack) setCurrent() {
 
 func (t *AVTrack) resetBPS() {
 	t.bytes = 0
-	t.ts = t.Current().Timestamp
+	t.ts = t.Current().Time
 }
 
 func (t *AVTrack) GetBPS() {
 	t.PacketCount++
 	t.Sequence = t.PacketCount
-	if delta := t.Since(t.ts); delta != 0 {
-		t.BPS = t.bytes * 1000 / int(delta)
+	if delta := int(t.Sub(t.ts).Seconds()); delta != 0 {
+		t.BPS = t.bytes / delta
 	}
+}
+
+func (t *AVTrack) setTS(ts uint32) {
+	if t.lastTs == 0 {
+		t.Time = time.Now()
+	} else {
+		if t.lastTs > ts || ts-t.lastTs > 10000 {
+			utils.Println("timestamp wrong %s lastTs:%d currentTs:%d", t.Stream.StreamPath, t.lastTs, ts)
+			//按照频率估算时间戳增量
+			t.Time = t.lastTime.Add(time.Second / t.timebase)
+		} else {
+			t.Time = t.lastTime.Add(time.Duration(ts-t.lastTs) * time.Millisecond)
+		}
+	}
+	t.lastTs = ts
+	t.lastTime = t.Time
 }
 
 // func (t *Track_Base) Dispose() {

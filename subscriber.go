@@ -82,12 +82,12 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	case <-extraExit: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
-	realSt := vt.PreItem().Timestamp // 当前时间戳
+	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	realSt := vt.PreItem().Time // 当前时间戳
 	ar := at.Clone()
 	iv, vp := vr.Read()
 	ia, ap := ar.Read()
-	vst := iv.Timestamp
+	vst := iv.Time
 	chase := true
 	for {
 		select {
@@ -96,22 +96,20 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		case <-streamExit:
 			return
 		default:
-			if ia.Timestamp > iv.Timestamp || ia.Timestamp == 0 {
-				s.OnVideo(iv.Timestamp-vst, vp.(*VideoPack))
+			if ia.After(iv.Time) || ia.IsZero() {
+				s.OnVideo(uint32(iv.Sub(vst).Milliseconds()), vp.(*VideoPack))
 				if chase {
-					if vst < realSt-10 {
-						vst += 10
+					if add10 := vst.Add(time.Millisecond * 10); realSt.After(add10) {
+						vst = add10
 					} else {
 						vst = realSt
 						chase = false
 					}
 				}
-				vr.MoveNext()
-				iv, vp = vr.Read()
+				iv, vp = vr.NextRead()
 			} else {
-				s.OnAudio(ia.Timestamp-vst, ap.(*AudioPack))
-				ar.MoveNext()
-				ia, ap = ar.Read()
+				s.OnAudio(uint32(ia.Sub(vst).Milliseconds()), ap.(*AudioPack))
+				ia, ap = ar.NextRead()
 			}
 		}
 	}

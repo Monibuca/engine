@@ -58,7 +58,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 			vt.IDRing = vt.Ring
 			close(vt.WaitIDR)
 			idrSequence := vt.Sequence
-			vt.ts = vt.Timestamp
+			vt.ts = vt.Time
 			vt.idrCount++
 			vt.revIDR = func() {
 				vt.idrCount++
@@ -175,14 +175,14 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							}
 							vt.addBytes(naluLen)
 							vt.IDR = true
-							vt.SetTs(ts)
+							vt.setTS(ts)
 							vt.CompositionTime = cts
 							vt.SetNalu0(nalu)
 							vt.push()
 						case codec.NALU_Non_IDR_Picture:
 							vt.addBytes(naluLen)
 							vt.IDR = false
-							vt.SetTs(ts)
+							vt.setTS(ts)
 							vt.CompositionTime = cts
 							if nonIDRs == 0 {
 								vt.SetNalu0(nalu)
@@ -274,7 +274,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 							codec.NAL_UNIT_CODED_SLICE_CRA:
 							vt.IDR = true
-							vt.SetTs(ts)
+							vt.setTS(ts)
 							vt.CompositionTime = cts
 							vt.SetNalu0(nalu)
 							vt.addBytes(naluLen)
@@ -286,7 +286,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 					}
 					if len(nonIDRs) > 0 {
 						vt.IDR = false
-						vt.SetTs(ts)
+						vt.setTS(ts)
 						vt.CompositionTime = cts
 						vt.NALUs = nonIDRs
 						vt.push()
@@ -335,7 +335,7 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 		}
 		vt.addBytes(len(payload))
 		vt.IDR = payload[0]>>4 == 1
-		vt.SetTs(ts)
+		vt.setTS(ts)
 		vt.Payload = payload
 		vt.CompositionTime = utils.BigEndian.Uint24(payload[2:])
 		vt.ResetNALUs()
@@ -384,10 +384,10 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 	case <-exit2: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
-	realSt := vt.PreItem().Timestamp // 当前时间戳
+	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	realSt := vt.PreItem().Time // 当前时间戳
 	item, vp := vr.Read()
-	startTimestamp := item.Timestamp
+	startTimestamp := item.Time
 	for chase := true; ; item, vp = vr.Read() {
 		select {
 		case <-exit1:
@@ -395,10 +395,11 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 		case <-exit2:
 			return
 		default:
-			onVideo(item.Timestamp-startTimestamp, vp.(*VideoPack))
+			onVideo(uint32(item.Sub(startTimestamp).Milliseconds()), vp.(*VideoPack))
 			if chase {
-				if startTimestamp < realSt-10 {
-					startTimestamp += 10
+				add10 := startTimestamp.Add(time.Millisecond * 10)
+				if realSt.After(add10) {
+					startTimestamp = add10
 				} else {
 					startTimestamp = realSt
 					chase = false

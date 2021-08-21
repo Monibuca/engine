@@ -20,6 +20,7 @@ type AudioTrack struct {
 	PushRaw         func(ts uint32, payload []byte) `json:"-"`
 	writeByteStream func()                          //使用函数写入，避免申请内存
 	*AudioPack      `json:"-"`                      // 当前正在写入的音频对象
+	
 }
 
 func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
@@ -49,11 +50,12 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 			//dependsOnCoreCoder = (config2 >> 1) & 0x01
 			//extensionFlag = config2 & 0x01
 			at.ExtraData = payload
+			at.timebase = time.Duration(at.SoundRate)
 			at.PushByteStream = func(ts uint32, payload []byte) {
 				if len(payload) < 3 {
 					return
 				}
-				at.SetTs(ts)
+				at.setTS(ts)
 				at.Raw = payload[2:]
 				at.Payload = payload
 				at.push()
@@ -64,11 +66,12 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 		at.SoundSize = (payload[0] & 0x02) >> 1              // 采样精度 0 = 8-bit samples or 1 = 16-bit samples
 		at.Channels = payload[0]&0x01 + 1
 		at.ExtraData = payload[:1]
+		at.timebase = time.Duration(at.SoundRate)
 		at.PushByteStream = func(ts uint32, payload []byte) {
 			if len(payload) < 2 {
 				return
 			}
-			at.SetTs(ts)
+			at.setTS(ts)
 			at.Raw = payload[1:]
 			at.Payload = payload
 			at.push()
@@ -101,7 +104,7 @@ func (at *AudioTrack) pushRaw(ts uint32, payload []byte) {
 		}
 	}
 	at.PushRaw = func(ts uint32, payload []byte) {
-		at.SetTs(ts)
+		at.setTS(ts)
 		at.Raw = payload
 		at.push()
 	}
@@ -118,7 +121,7 @@ func (at *AudioTrack) push() {
 	}
 	at.addBytes(len(at.Raw))
 	at.GetBPS()
-	if at.Since(at.ts) > 1000 {
+	if at.Sub(at.ts) > time.Second {
 		at.resetBPS()
 	}
 	at.Step()
@@ -162,20 +165,21 @@ func (at *AudioTrack) SetASC(asc []byte) {
 	//frameLengthFlag = (config2 >> 2) & 0x01
 	//dependsOnCoreCoder = (config2 >> 1) & 0x01
 	//extensionFlag = config2 & 0x01
+	at.timebase = time.Duration(at.SoundRate)
 	at.Stream.AudioTracks.AddTrack("aac", at)
 }
 
 func (at *AudioTrack) Play(onAudio func(uint32, *AudioPack), exit1, exit2 <-chan struct{}) {
 	ar := at.Clone()
 	item, ap := ar.Read()
-	for startTimestamp := item.Timestamp; ; item, ap = ar.Read() {
+	for startTimestamp := item.Time; ; item, ap = ar.Read() {
 		select {
 		case <-exit1:
 			return
 		case <-exit2:
 			return
 		default:
-			onAudio(item.Timestamp-startTimestamp, ap.(*AudioPack))
+			onAudio(uint32(item.Sub(startTimestamp).Milliseconds()), ap.(*AudioPack))
 			ar.MoveNext()
 		}
 	}
