@@ -130,6 +130,7 @@ func (at *AudioTrack) push() {
 
 func (s *Stream) NewAudioTrack(codec byte) (at *AudioTrack) {
 	at = &AudioTrack{}
+	at.timebase = 8000
 	at.CodecID = codec
 	at.PushByteStream = at.pushByteStream
 	at.PushRaw = at.pushRaw
