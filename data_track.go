@@ -11,7 +11,6 @@ type DataTrack struct {
 	BaseTrack
 	*LockItem
 	sync.Locker // 写入锁，可选，单一写入可以不加锁
-	ts          time.Time
 }
 
 func (s *Stream) NewDataTrack(l sync.Locker) (dt *DataTrack) {
@@ -29,7 +28,7 @@ func (dt *DataTrack) Push(data interface{}) {
 		dt.Lock()
 		defer dt.Unlock()
 	}
-	dt.Timestamp = time.Now()
+	dt.Time = time.Now()
 	dt.addBytes(int(unsafe.Sizeof(data)))
 	dt.GetBPS()
 	if time.Since(dt.ts) > 1000 {

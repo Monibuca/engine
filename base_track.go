@@ -47,7 +47,7 @@ type AVTrack struct {
 
 func (t *DataTrack) resetBPS() {
 	t.bytes = 0
-	t.ts = t.Current().Timestamp
+	t.ts = t.Current().Time
 }
 
 func (t *DataTrack) GetBPS() {

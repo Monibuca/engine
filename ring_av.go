@@ -8,10 +8,8 @@ import (
 )
 
 type AVItem struct {
-	time.Time
-	Sequence  int
-	Value     interface{}
-	canRead   bool
+	DataItem
+	canRead bool
 }
 
 type AVRing struct {

@@ -77,6 +77,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 			}
 		},
 	}
+	vt.timebase = 90000
 	vt.PushNalu = vt.pushNalu
 	vt.Stream = s
 	vt.CodecID = codec
@@ -365,7 +366,7 @@ func (vt *VideoTrack) push() {
 		if vt.idrCount == 1 {
 			exRing := ring.New(5)
 			for x := exRing; x.Value == nil; x = x.Next() {
-				x.Value = &AVItem{Value: new(VideoPack)}
+				x.Value = &AVItem{DataItem: DataItem{Value: new(VideoPack)}}
 			}
 			vt.Link(exRing) // 扩大缓冲环
 		} else {
