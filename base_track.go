@@ -47,7 +47,7 @@ type AVTrack struct {
 
 func (t *DataTrack) resetBPS() {
 	t.bytes = 0
-	t.ts = t.Current().Time
+	t.ts = t.Current().Timestamp
 }
 
 func (t *DataTrack) GetBPS() {
@@ -64,31 +64,31 @@ func (t *AVTrack) setCurrent() {
 
 func (t *AVTrack) resetBPS() {
 	t.bytes = 0
-	t.ts = t.Current().Time
+	t.ts = t.Current().Timestamp
 }
 
 func (t *AVTrack) GetBPS() {
 	t.PacketCount++
 	t.Sequence = t.PacketCount
-	if delta := int(t.Sub(t.ts).Seconds()); delta != 0 {
+	if delta := int(t.Timestamp.Sub(t.ts).Seconds()); delta != 0 {
 		t.BPS = t.bytes / delta
 	}
 }
 
 func (t *AVTrack) setTS(ts uint32) {
 	if t.lastTs == 0 {
-		t.Time = time.Now()
+		t.Timestamp = time.Now()
 	} else {
 		if t.lastTs > ts || ts-t.lastTs > 10000 {
-			utils.Println("timestamp wrong %s lastTs:%d currentTs:%d", t.Stream.StreamPath, t.lastTs, ts)
+			utils.Printf("timestamp wrong %s lastTs:%d currentTs:%d", t.Stream.StreamPath, t.lastTs, ts)
 			//按照频率估算时间戳增量
-			t.Time = t.lastTime.Add(time.Second / t.timebase)
+			t.Timestamp = t.lastTime.Add(time.Second / t.timebase)
 		} else {
-			t.Time = t.lastTime.Add(time.Duration(ts-t.lastTs) * time.Millisecond)
+			t.Timestamp = t.lastTime.Add(time.Duration(ts-t.lastTs) * time.Millisecond)
 		}
 	}
 	t.lastTs = ts
-	t.lastTime = t.Time
+	t.lastTime = t.Timestamp
 }
 
 // func (t *Track_Base) Dispose() {

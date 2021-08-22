@@ -10,7 +10,7 @@ import (
 )
 
 type DataItem struct {
-	time.Time
+	Timestamp time.Time
 	Sequence  int
 	Value     interface{}
 }

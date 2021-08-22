@@ -58,7 +58,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 			vt.IDRing = vt.Ring
 			close(vt.WaitIDR)
 			idrSequence := vt.Sequence
-			vt.ts = vt.Time
+			vt.ts = vt.Timestamp
 			vt.idrCount++
 			vt.revIDR = func() {
 				vt.idrCount++
@@ -385,10 +385,10 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 	case <-exit2: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
-	realSt := vt.PreItem().Time // 当前时间戳
+	vr := vt.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
+	realSt := vt.PreItem().Timestamp // 当前时间戳
 	item, vp := vr.Read()
-	startTimestamp := item.Time
+	startTimestamp := item.Timestamp
 	for chase := true; ; item, vp = vr.Read() {
 		select {
 		case <-exit1:
@@ -396,7 +396,7 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 		case <-exit2:
 			return
 		default:
-			onVideo(uint32(item.Sub(startTimestamp).Milliseconds()), vp.(*VideoPack))
+			onVideo(uint32(item.Timestamp.Sub(startTimestamp).Milliseconds()), vp.(*VideoPack))
 			if chase {
 				add10 := startTimestamp.Add(time.Millisecond * 10)
 				if realSt.After(add10) {

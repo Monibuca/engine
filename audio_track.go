@@ -121,7 +121,7 @@ func (at *AudioTrack) push() {
 	}
 	at.addBytes(len(at.Raw))
 	at.GetBPS()
-	if at.Sub(at.ts) > time.Second {
+	if at.Timestamp.Sub(at.ts) > time.Second {
 		at.resetBPS()
 	}
 	at.Step()
@@ -172,14 +172,14 @@ func (at *AudioTrack) SetASC(asc []byte) {
 func (at *AudioTrack) Play(onAudio func(uint32, *AudioPack), exit1, exit2 <-chan struct{}) {
 	ar := at.Clone()
 	item, ap := ar.Read()
-	for startTimestamp := item.Time; ; item, ap = ar.Read() {
+	for startTimestamp := item.Timestamp; ; item, ap = ar.Read() {
 		select {
 		case <-exit1:
 			return
 		case <-exit2:
 			return
 		default:
-			onAudio(uint32(item.Sub(startTimestamp).Milliseconds()), ap.(*AudioPack))
+			onAudio(uint32(item.Timestamp.Sub(startTimestamp).Milliseconds()), ap.(*AudioPack))
 			ar.MoveNext()
 		}
 	}

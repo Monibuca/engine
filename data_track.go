@@ -28,7 +28,7 @@ func (dt *DataTrack) Push(data interface{}) {
 		dt.Lock()
 		defer dt.Unlock()
 	}
-	dt.Time = time.Now()
+	dt.Timestamp = time.Now()
 	dt.addBytes(int(unsafe.Sizeof(data)))
 	dt.GetBPS()
 	if time.Since(dt.ts) > 1000 {
