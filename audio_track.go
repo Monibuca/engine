@@ -20,20 +20,11 @@ type AudioTrack struct {
 	PushRaw         func(ts uint32, payload []byte) `json:"-"`
 	writeByteStream func()                          //使用函数写入，避免申请内存
 	*AudioPack      `json:"-"`                      // 当前正在写入的音频对象
-	
+
 }
 
 func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
-	at.CodecID = payload[0] >> 4
-	switch at.CodecID {
-	case 10:
-		at.Stream.AudioTracks.AddTrack("aac", at)
-	case 7:
-		at.Stream.AudioTracks.AddTrack("pcma", at)
-	case 8:
-		at.Stream.AudioTracks.AddTrack("pcmu", at)
-	}
-	switch at.CodecID {
+	switch at.CodecID = payload[0] >> 4; at.CodecID {
 	case 10:
 		if payload[1] != 0 {
 			return
@@ -60,6 +51,7 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 				at.Payload = payload
 				at.push()
 			}
+			at.Stream.AudioTracks.AddTrack("aac", at)
 		}
 	default:
 		at.SoundRate = codec.SoundRate[(payload[0]&0x0c)>>2] // 采样率 0 = 5.5 kHz or 1 = 11 kHz or 2 = 22 kHz or 3 = 44 kHz
@@ -75,6 +67,12 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 			at.Raw = payload[1:]
 			at.Payload = payload
 			at.push()
+		}
+		switch at.CodecID {
+		case 7:
+			at.Stream.AudioTracks.AddTrack("pcma", at)
+		case 8:
+			at.Stream.AudioTracks.AddTrack("pcmu", at)
 		}
 		at.PushByteStream(ts, payload)
 	}

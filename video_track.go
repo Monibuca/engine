@@ -87,12 +87,6 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 		v.(*AVItem).Value = new(VideoPack)
 	})
 	vt.setCurrent()
-	switch codec {
-	case 7:
-		s.VideoTracks.AddTrack("h264", vt)
-	case 12:
-		s.VideoTracks.AddTrack("h265", vt)
-	}
 	return
 }
 
@@ -152,6 +146,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 				if vt.ExtraData == nil {
 					return
 				}
+				vt.Stream.VideoTracks.AddTrack("h264", vt)
 				//已完成SPS和PPS 组装，重置push函数，接收视频数据
 				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs int
@@ -232,6 +227,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 				vt.ExtraData.Payload = extraData
 			}
 			if vt.ExtraData != nil {
+				vt.Stream.VideoTracks.AddTrack("h265", vt)
 				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs [][]byte
 					for _, nalu := range nalus {
