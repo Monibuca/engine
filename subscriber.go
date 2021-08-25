@@ -82,7 +82,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	case <-extraExit: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.SubRing(vt.IDRing) //从关键帧开始读取，首屏秒开
+	vr := vt.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
 	realSt := vt.PreItem().Timestamp // 当前时间戳
 	ar := at.Clone()
 	iv, vp := vr.Read()
@@ -114,18 +114,23 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		}
 	}
 }
+func (s *Subscriber) onAudio(ts uint32, ap *AudioPack) {
+	s.OnAudio(ts, ap)
+}
+func (s *Subscriber) onVideo(ts uint32, vp *VideoPack) {
+	s.OnVideo(ts, vp)
+}
 func (s *Subscriber) PlayAudio(at *AudioTrack) {
 	if s.Ctx2 != nil {
-		at.Play(s.OnAudio, s.Done(), s.Ctx2.Done())
+		at.Play(s.onAudio, s.Done(), s.Ctx2.Done())
 	} else {
-		at.Play(s.OnAudio, s.Done(), nil)
+		at.Play(s.onAudio, s.Done(), nil)
 	}
 }
-
 func (s *Subscriber) PlayVideo(vt *VideoTrack) {
 	if s.Ctx2 != nil {
-		vt.Play(s.OnVideo, s.Done(), s.Ctx2.Done())
+		vt.Play(s.onVideo, s.Done(), s.Ctx2.Done())
 	} else {
-		vt.Play(s.OnVideo, s.Done(), nil)
+		vt.Play(s.onVideo, s.Done(), nil)
 	}
 }
