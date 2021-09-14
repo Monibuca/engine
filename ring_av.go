@@ -20,6 +20,7 @@ type AVRing struct {
 func (r *AVRing) Init(ctx context.Context, n int) *AVRing {
 	r.Ring = ring.New(n)
 	r.Context = ctx
+	r.Size = n
 	for x := r.Ring; x.Value == nil; x = x.Next() {
 		x.Value = new(AVItem)
 	}

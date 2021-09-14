@@ -68,7 +68,6 @@ func Publish(streamPath, t string) *Stream {
 	}
 	return nil
 }
-
 // Stream 流定义
 type Stream struct {
 	context.Context `json:"-"`

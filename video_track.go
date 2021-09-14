@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"container/list"
 	"container/ring"
 	"time"
 
@@ -49,6 +50,7 @@ type VideoTrack struct {
 	idrCount        int //处于缓冲中的关键帧数量
 	nalulenSize     int
 	*VideoPack      `json:"-"` //当前写入的视频数据
+	keyFrameBuffers *list.List //用于作为关键帧缓存的对象池，缓冲中每个节点都有buffer，但是关键帧的长度较长，会导致每个节点都可能增长空间
 }
 
 func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
@@ -63,10 +65,12 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 			vt.revIDR = func() {
 				vt.idrCount++
 				vt.GOP = vt.Sequence - idrSequence
-				if l := vt.Ring.Len() - vt.GOP - 5; l > 5 {
+				if l := vt.Size - vt.GOP - 5; l > 5 {
+					vt.Size -= l
 					//缩小缓冲环节省内存
 					vt.Unlink(l).Do(func(v interface{}) {
 						if v.(*AVItem).Value.(*VideoPack).IDR {
+							vt.keyFrameBuffers.PushBack(v.(*AVItem).Value)
 							vt.idrCount--
 						}
 					})
@@ -76,6 +80,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 				vt.resetBPS()
 			}
 		},
+		keyFrameBuffers: list.New(),
 	}
 	vt.timebase = 90000
 	vt.PushNalu = vt.pushNalu
@@ -170,14 +175,14 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 								nonIDRs = 0
 							}
 							vt.addBytes(naluLen)
-							vt.IDR = true
+							vt.setIDR(true)
 							vt.setTS(ts)
 							vt.CompositionTime = cts
 							vt.SetNalu0(nalu)
 							vt.push()
 						case codec.NALU_Non_IDR_Picture:
 							vt.addBytes(naluLen)
-							vt.IDR = false
+							vt.setIDR(false)
 							vt.setTS(ts)
 							vt.CompositionTime = cts
 							if nonIDRs == 0 {
@@ -270,7 +275,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							codec.NAL_UNIT_CODED_SLICE_IDR,
 							codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 							codec.NAL_UNIT_CODED_SLICE_CRA:
-							vt.IDR = true
+							vt.setIDR(true)
 							vt.setTS(ts)
 							vt.CompositionTime = cts
 							vt.SetNalu0(nalu)
@@ -282,7 +287,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 						}
 					}
 					if len(nonIDRs) > 0 {
-						vt.IDR = false
+						vt.setIDR(false)
 						vt.setTS(ts)
 						vt.CompositionTime = cts
 						vt.NALUs = nonIDRs
@@ -348,6 +353,21 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 	}
 }
 
+// 设置关键帧信息，主要是为了判断缓存之前是否是关键帧，用来调度缓存
+func (vt *VideoTrack) setIDR(idr bool) {
+	if idr == vt.IDR {
+		return
+	}
+	if idr {
+		if cache := vt.keyFrameBuffers.Back(); cache != nil {
+			vt.AVItem.Value = vt.keyFrameBuffers.Remove(cache)
+		}
+	} else {
+		vt.keyFrameBuffers.PushBack(vt.AVItem.Value)
+		vt.AVItem.Value = new(VideoPack)
+	}
+	vt.IDR = idr
+}
 func (vt *VideoTrack) push() {
 	if vt.Stream != nil {
 		vt.Stream.Update()
@@ -360,11 +380,13 @@ func (vt *VideoTrack) push() {
 	}
 	if nextPack := vt.NextValue().(*VideoPack); nextPack.IDR {
 		if vt.idrCount == 1 {
-			exRing := ring.New(5)
-			for x := exRing; x.Value == nil; x = x.Next() {
-				x.Value = &AVItem{DataItem: DataItem{Value: new(VideoPack)}}
+			if vt.Size < config.MaxRingSize {
+				exRing := ring.New(5)
+				for x := exRing; x.Value == nil; x = x.Next() {
+					x.Value = &AVItem{DataItem: DataItem{Value: new(VideoPack)}}
+				}
+				vt.Link(exRing) // 扩大缓冲环
 			}
-			vt.Link(exRing) // 扩大缓冲环
 		} else {
 			vt.idrCount--
 		}

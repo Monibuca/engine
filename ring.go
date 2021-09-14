@@ -24,6 +24,7 @@ type LockItem struct {
 
 type RingBuffer struct {
 	*ring.Ring
+	Size int
 	Flag *int32
 	context.Context
 }
@@ -34,6 +35,7 @@ func (rb *RingBuffer) Init(ctx context.Context, n int) *RingBuffer {
 		rb = &RingBuffer{Context: ctx, Ring: ring.New(n), Flag: &flag}
 	} else {
 		rb.Ring = ring.New(n)
+		rb.Size = n
 		rb.Context = ctx
 		rb.Flag = &flag
 	}

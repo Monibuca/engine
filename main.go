@@ -24,7 +24,8 @@ var (
 		EnableAudio    bool
 		EnableVideo    bool
 		PublishTimeout time.Duration
-	}{true, true, 60}
+		MaxRingSize    int
+	}{true, true, 60, 256}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw     []byte
 	StartTime     time.Time                        //启动时间
