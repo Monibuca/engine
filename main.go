@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -31,6 +32,7 @@ var (
 	StartTime     time.Time                        //启动时间
 	Plugins       = make(map[string]*PluginConfig) // Plugins 所有的插件配置
 	HasTranscoder bool
+	Ctx           context.Context
 )
 
 //PluginConfig 插件配置定义
@@ -39,7 +41,7 @@ type PluginConfig struct {
 	Config    interface{}                  //插件配置
 	Version   string                       //插件版本
 	Dir       string                       //插件代码路径
-	Run       func()                       //插件启动函数
+	Run       func()        //插件启动函数
 	HotConfig map[string]func(interface{}) //热修改配置
 }
 
@@ -61,7 +63,8 @@ func init() {
 }
 
 // Run 启动Monibuca引擎
-func Run(configFile string) (err error) {
+func Run(ctx context.Context, configFile string) (err error) {
+	Ctx = ctx
 	util.CreateShutdownScript()
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
