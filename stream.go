@@ -7,6 +7,7 @@ import (
 
 	utils "github.com/Monibuca/utils/v3"
 	. "github.com/logrusorgru/aurora"
+	"github.com/pkg/errors"
 )
 
 type StreamCollection struct {
@@ -51,6 +52,7 @@ func init() {
 
 // Streams 所有的流集合
 var Streams StreamCollection
+var StreamTimeoutError = errors.New("timeout")
 
 //FindStream 根据流路径查找流
 func FindStream(streamPath string) *Stream {
@@ -68,59 +70,62 @@ func Publish(streamPath, t string) *Stream {
 	}
 	return nil
 }
-// Stream 流定义
-type Stream struct {
-	context.Context `json:"-"`
-	StreamPath      string
-	Type            string        //流类型，来自发布者
-	StartTime       time.Time     //流的创建时间
-	Subscribers     []*Subscriber // 订阅者
-	VideoTracks     Tracks
-	AudioTracks     Tracks
-	DataTracks      Tracks
-	AutoUnPublish   bool              //	当无人订阅时自动停止发布
-	Transcoding     map[string]string //转码配置，key：目标编码，value：发布者提供的编码
-	subscribeMutex  sync.Mutex
-	timeout         *time.Timer //更新时间用来做超时处理
-	OnClose         func()      `json:"-"`
-	ExtraProp       interface{} //额外的属性，用于实现子类化，减少map的使用
+
+type StreamContext struct {
+	context.Context
+	cancel    context.CancelFunc
+	timeout   *time.Timer //更新时间用来做超时处理
+	IsTimeout bool
 }
 
-// 增加结束时的回调，使用类似Js的猴子补丁
-func (r *Stream) AddOnClose(onClose func()) {
-	if originOnClose := r.OnClose; originOnClose == nil {
-		r.OnClose = onClose
-	} else {
-		r.OnClose = func() {
-			originOnClose()
-			onClose()
-		}
+func (r *StreamContext) Err() error {
+	if r.IsTimeout {
+		return StreamTimeoutError
 	}
+	return r.Context.Err()
 }
-
-func (r *Stream) Update() {
+func (r *StreamContext) Update() {
 	if r.timeout != nil {
 		r.timeout.Reset(config.PublishTimeout)
 	}
 }
 
+// Stream 流定义
+type Stream struct {
+	StreamContext  `json:"-"`
+	StreamPath     string
+	Type           string        //流类型，来自发布者
+	StartTime      time.Time     //流的创建时间
+	Subscribers    []*Subscriber // 订阅者
+	VideoTracks    Tracks
+	AudioTracks    Tracks
+	DataTracks     Tracks
+	AutoUnPublish  bool              //	当无人订阅时自动停止发布
+	Transcoding    map[string]string //转码配置，key：目标编码，value：发布者提供的编码
+	subscribeMutex sync.Mutex
+	OnClose        func()      `json:"-"`
+	ExtraProp      interface{} //额外的属性，用于实现子类化，减少map的使用
+}
+
 func (r *Stream) Close() {
 	Streams.Lock()
 	//如果没有发布过，就不需要进行处理
-	if r.timeout == nil {
+	if r.cancel == nil {
 		Streams.Unlock()
 		return
 	}
+	r.cancel()
+	r.cancel = nil
 	delete(Streams.m, r.StreamPath)
-	r.timeout.Stop()
-	r.timeout = nil // 防止重复调用Close
 	Streams.Unlock()
 	r.VideoTracks.Dispose()
 	r.AudioTracks.Dispose()
 	r.DataTracks.Dispose()
-	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
+	if r.OnClose != nil {
+		r.OnClose()
+	}
 	TriggerHook(HOOK_STREAMCLOSE, r)
-	r.OnClose()
+	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 }
 
 // Publish 发布者进行发布操作
@@ -130,22 +135,29 @@ func (r *Stream) Publish() bool {
 	if _, ok := Streams.m[r.StreamPath]; ok {
 		return false
 	}
-	var cancel context.CancelFunc
-	r.Context, cancel = context.WithCancel(Ctx)
-	r.VideoTracks.Init(r.Context)
-	r.AudioTracks.Init(r.Context)
-	r.DataTracks.Init(r.Context)
-	r.AddOnClose(cancel)
+	r.Context, r.cancel = context.WithCancel(Ctx)
+	r.VideoTracks.Init(r)
+	r.AudioTracks.Init(r)
+	r.DataTracks.Init(r)
 	r.StartTime = time.Now()
 	Streams.m[r.StreamPath] = r
 	utils.Print(Green("Stream publish:"), BrightCyan(r.StreamPath))
-	r.timeout = time.AfterFunc(config.PublishTimeout, func() {
-		utils.Print(Yellow("Stream timeout:"), BrightCyan(r.StreamPath))
-		r.Close()
-	})
 	//触发钩子
 	TriggerHook(HOOK_PUBLISH, r)
+	go r.waitClose()
 	return true
+}
+// 等待流关闭
+func (r *Stream) waitClose() {
+	r.timeout = time.NewTimer(config.PublishTimeout)
+	select {
+	case <-r.Done():
+	case <-r.timeout.C:
+		utils.Print(Yellow("Stream timeout:"), BrightCyan(r.StreamPath))
+		r.IsTimeout = true
+		r.Close()
+	}
+	r.timeout.Stop()
 }
 
 func (r *Stream) WaitDataTrack(names ...string) *DataTrack {
