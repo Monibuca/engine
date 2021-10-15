@@ -346,8 +346,14 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 			for i := 0; i < vt.nalulenSize; i++ {
 				nalulen += int(nalus[i]) << (8 * (vt.nalulenSize - i - 1))
 			}
-			vt.NALUs = append(vt.NALUs, nalus[vt.nalulenSize:nalulen+vt.nalulenSize])
-			nalus = nalus[nalulen+vt.nalulenSize:]
+			end := nalulen + vt.nalulenSize
+			if len(nalus) > end {
+				vt.NALUs = append(vt.NALUs, nalus[vt.nalulenSize:end])
+				nalus = nalus[end:]
+			} else {
+				utils.Printf("PushByteStream error,len %d,nalulenSize:%d,end:%d", len(nalus), vt.nalulenSize, end)
+				break
+			}
 		}
 		vt.push()
 	}
