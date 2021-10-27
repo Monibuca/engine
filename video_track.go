@@ -367,10 +367,12 @@ func (vt *VideoTrack) setIDR(idr bool) {
 	if idr {
 		if cache := vt.keyFrameBuffers.Back(); cache != nil {
 			vt.AVItem.Value = vt.keyFrameBuffers.Remove(cache)
+			vt.VideoPack = vt.AVItem.Value.(*VideoPack)
 		}
 	} else {
 		vt.keyFrameBuffers.PushBack(vt.AVItem.Value)
-		vt.AVItem.Value = new(VideoPack)
+		vt.VideoPack = new(VideoPack)
+		vt.AVItem.Value = vt.VideoPack
 	}
 	vt.IDR = idr
 }
