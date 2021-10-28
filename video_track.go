@@ -70,6 +70,7 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 					//缩小缓冲环节省内存
 					vt.Unlink(l).Do(func(v interface{}) {
 						if v.(*AVItem).Value.(*VideoPack).IDR {
+							// 将关键帧的缓存放入对象池
 							vt.keyFrameBuffers.PushBack(v.(*AVItem).Value)
 							vt.idrCount--
 						}
@@ -347,7 +348,7 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 				nalulen += int(nalus[i]) << (8 * (vt.nalulenSize - i - 1))
 			}
 			end := nalulen + vt.nalulenSize
-			if len(nalus) > end {
+			if len(nalus) >= end {
 				vt.NALUs = append(vt.NALUs, nalus[vt.nalulenSize:end])
 				nalus = nalus[end:]
 			} else {
@@ -361,17 +362,19 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 
 // 设置关键帧信息，主要是为了判断缓存之前是否是关键帧，用来调度缓存
 func (vt *VideoTrack) setIDR(idr bool) {
+	// 如果当前帧的类型和需要设置的类型相同，则不需要操作
 	if idr == vt.IDR {
 		return
 	}
+	// 原来是非关键帧，现在是关键帧，需要从关键帧池里面拿出一个缓存
 	if idr {
 		if cache := vt.keyFrameBuffers.Back(); cache != nil {
 			vt.AVItem.Value = vt.keyFrameBuffers.Remove(cache)
-			vt.VideoPack = vt.AVItem.Value.(*VideoPack)
+			vt.VideoPack = vt.AVItem.Value.(*VideoPack) //设置当前操作的指针
 		}
-	} else {
+	} else {//原来是关键帧，现在是非关键帧，把原来的关键帧缓存放回去
 		vt.keyFrameBuffers.PushBack(vt.AVItem.Value)
-		vt.VideoPack = new(VideoPack)
+		vt.VideoPack = new(VideoPack) //设置当前操作的指针
 		vt.AVItem.Value = vt.VideoPack
 	}
 	vt.IDR = idr
