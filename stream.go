@@ -105,6 +105,7 @@ type Stream struct {
 	subscribeMutex sync.Mutex
 	OnClose        func()      `json:"-"`
 	ExtraProp      interface{} //额外的属性，用于实现子类化，减少map的使用
+	closeDelay     *time.Timer
 }
 
 func (r *Stream) Close() {
@@ -113,6 +114,9 @@ func (r *Stream) Close() {
 	if r.cancel == nil {
 		Streams.Unlock()
 		return
+	}
+	if r.closeDelay != nil {
+		r.closeDelay.Stop()
 	}
 	r.cancel()
 	r.cancel = nil
@@ -147,6 +151,7 @@ func (r *Stream) Publish() bool {
 	go r.waitClose()
 	return true
 }
+
 // 等待流关闭
 func (r *Stream) waitClose() {
 	r.timeout = time.NewTimer(config.PublishTimeout)
@@ -198,6 +203,9 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		utils.Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
 		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
+		if config.AutoCloseDelay > 0 && r.closeDelay != nil {
+			r.closeDelay.Stop()
+		}
 		r.Subscribers = append(r.Subscribers, s)
 		TriggerHook(HOOK_SUBSCRIBE, s, len(r.Subscribers))
 		r.subscribeMutex.Unlock()
@@ -210,16 +218,22 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 	if r.Err() == nil {
 		var deleted bool
 		r.subscribeMutex.Lock()
+		defer r.subscribeMutex.Unlock()
 		r.Subscribers, deleted = DeleteSliceItem_Subscriber(r.Subscribers, s)
 		if deleted {
 			utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
 			l := len(r.Subscribers)
 			TriggerHook(HOOK_UNSUBSCRIBE, s, l)
 			if l == 0 && r.AutoUnPublish {
-				r.Close()
+				if config.AutoCloseDelay == 0 {
+					r.Close()
+				} else if r.closeDelay != nil {
+					r.closeDelay.Reset(time.Second * config.AutoCloseDelay)
+				} else {
+					r.closeDelay = time.AfterFunc(time.Second*config.AutoCloseDelay, r.Close)
+				}
 			}
 		}
-		r.subscribeMutex.Unlock()
 	}
 }
 func DeleteSliceItem_Subscriber(slice []*Subscriber, item *Subscriber) ([]*Subscriber, bool) {

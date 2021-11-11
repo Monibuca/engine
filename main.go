@@ -26,7 +26,8 @@ var (
 		EnableVideo    bool
 		PublishTimeout time.Duration
 		MaxRingSize    int
-	}{true, true, 60, 256}
+		AutoCloseDelay time.Duration
+	}{true, true, 60, 256, 10}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw     []byte
 	StartTime     time.Time                        //启动时间
@@ -41,7 +42,7 @@ type PluginConfig struct {
 	Config    interface{}                  //插件配置
 	Version   string                       //插件版本
 	Dir       string                       //插件代码路径
-	Run       func()        //插件启动函数
+	Run       func()                       //插件启动函数
 	HotConfig map[string]func(interface{}) //热修改配置
 }
 

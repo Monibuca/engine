@@ -124,7 +124,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 		vt.Bytes2Payload()
 	}
 	switch vt.CodecID {
-	case 7:
+	case codec.CodecID_H264:
 		{
 			var info codec.AVCDecoderConfigurationRecord
 			vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
@@ -204,7 +204,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 				}
 			}
 		}
-	case 12:
+	case codec.CodecID_H265:
 		var vps, sps, pps []byte
 		vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 			// 等待接收SPS和PPS数据

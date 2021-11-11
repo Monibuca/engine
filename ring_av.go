@@ -63,10 +63,6 @@ func (r *AVRing) Current() *AVItem {
 	return r.Ring.Value.(*AVItem)
 }
 
-func (r *AVRing) NextRead() (item *AVItem, value interface{}) {
-	r.MoveNext()
-	return r.Read()
-}
 func (r *AVRing) NextValue() interface{} {
 	return r.Next().Value.(*AVItem).Value
 }
@@ -77,10 +73,19 @@ func (r *AVRing) GetNext() *AVItem {
 	r.MoveNext()
 	return r.Current()
 }
+
 func (r *AVRing) Read() (item *AVItem, value interface{}) {
 	current := r.Current()
 	for r.Err() == nil && !current.canRead {
 		r.wait()
+	}
+	return current, current.Value
+}
+
+func (r *AVRing) TryRead() (item *AVItem, value interface{}) {
+	current := r.Current()
+	if r.Err() == nil && !current.canRead {
+		return nil, nil
 	}
 	return current, current.Value
 }

@@ -86,7 +86,7 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 	realSt := vt.PreItem().Timestamp // 当前时间戳
 	ar := at.Clone()
 	iv, vp := vr.Read()
-	ia, ap := ar.Read()
+	ia, ap := ar.TryRead()
 	vst := iv.Timestamp
 	chase := true
 	for {
@@ -96,7 +96,12 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 		case <-streamExit:
 			return
 		default:
-			if ia.Timestamp.After(iv.Timestamp) || ia.Timestamp.IsZero() {
+			if ia == nil && iv == nil {
+				time.Sleep(time.Millisecond * 10)
+			} else if ia != nil && (iv == nil || iv.Timestamp.After(ia.Timestamp)) {
+				s.OnAudio(uint32(ia.Timestamp.Sub(vst).Milliseconds()), ap.(*AudioPack))
+				ar.MoveNext()
+			} else if iv != nil && (ia == nil || ia.Timestamp.After(iv.Timestamp)) {
 				s.OnVideo(uint32(iv.Timestamp.Sub(vst).Milliseconds()), vp.(*VideoPack))
 				if chase {
 					if add10 := vst.Add(time.Millisecond * 10); realSt.After(add10) {
@@ -106,11 +111,10 @@ func (s *Subscriber) Play(at *AudioTrack, vt *VideoTrack) {
 						chase = false
 					}
 				}
-				iv, vp = vr.NextRead()
-			} else {
-				s.OnAudio(uint32(ia.Timestamp.Sub(vst).Milliseconds()), ap.(*AudioPack))
-				ia, ap = ar.NextRead()
+				vr.MoveNext()
 			}
+			ia, ap = ar.TryRead()
+			iv, vp = vr.TryRead()
 		}
 	}
 }

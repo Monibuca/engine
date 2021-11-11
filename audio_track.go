@@ -25,7 +25,7 @@ type AudioTrack struct {
 
 func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 	switch at.CodecID = payload[0] >> 4; at.CodecID {
-	case 10:
+	case codec.CodecID_AAC:
 		if payload[1] != 0 {
 			return
 		} else {
@@ -69,9 +69,9 @@ func (at *AudioTrack) pushByteStream(ts uint32, payload []byte) {
 			at.push()
 		}
 		switch at.CodecID {
-		case 7:
+		case codec.CodecID_PCMA:
 			at.Stream.AudioTracks.AddTrack("pcma", at)
-		case 8:
+		case codec.CodecID_PCMU:
 			at.Stream.AudioTracks.AddTrack("pcmu", at)
 		}
 		at.PushByteStream(ts, payload)
