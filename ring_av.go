@@ -89,3 +89,11 @@ func (r *AVRing) TryRead() (item *AVItem, value interface{}) {
 	}
 	return current, current.Value
 }
+
+// 定位到给定时刻之后的第一个位置
+func (r AVRing) Location(t time.Time) *AVRing {
+	for r.PreItem().canRead && r.PreItem().Timestamp.After(t) {
+		r.Ring = r.Prev()
+	}
+	return &r
+}
