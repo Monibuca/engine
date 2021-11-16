@@ -26,8 +26,8 @@ var (
 		EnableVideo    bool
 		PublishTimeout time.Duration
 		MaxRingSize    int
-		AutoCloseDelay time.Duration
-	}{true, true, 60, 256, 10}
+		AutoCloseAfter int
+	}{true, true, 60, 256, -1}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw     []byte
 	StartTime     time.Time                        //启动时间

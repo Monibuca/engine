@@ -100,7 +100,7 @@ type Stream struct {
 	VideoTracks    Tracks
 	AudioTracks    Tracks
 	DataTracks     Tracks
-	AutoUnPublish  bool              //	当无人订阅时自动停止发布
+	AutoCloseAfter *int               //当无人订阅时延迟N秒后自动停止发布
 	Transcoding    map[string]string //转码配置，key：目标编码，value：发布者提供的编码
 	subscribeMutex sync.Mutex
 	OnClose        func()      `json:"-"`
@@ -139,6 +139,9 @@ func (r *Stream) Publish() bool {
 	if _, ok := Streams.m[r.StreamPath]; ok {
 		return false
 	}
+	if r.AutoCloseAfter == nil {
+		r.AutoCloseAfter = &config.AutoCloseAfter
+	}
 	r.Context, r.cancel = context.WithCancel(Ctx)
 	r.VideoTracks.Init(r)
 	r.AudioTracks.Init(r)
@@ -155,14 +158,24 @@ func (r *Stream) Publish() bool {
 // 等待流关闭
 func (r *Stream) waitClose() {
 	r.timeout = time.NewTimer(config.PublishTimeout)
+	defer r.timeout.Stop()
+	var closeChann <-chan time.Time
+	if *r.AutoCloseAfter > 0 {
+		r.closeDelay = time.NewTimer(time.Duration(*r.AutoCloseAfter) * time.Second)
+		r.closeDelay.Stop()
+		closeChann = r.closeDelay.C
+		defer r.closeDelay.Stop()
+	}
 	select {
 	case <-r.Done():
+	case <-closeChann:
+		utils.Print(Yellow("Stream closeDelay:"), BrightCyan(r.StreamPath))
+		r.Close()
 	case <-r.timeout.C:
 		utils.Print(Yellow("Stream timeout:"), BrightCyan(r.StreamPath))
 		r.IsTimeout = true
 		r.Close()
 	}
-	r.timeout.Stop()
 }
 
 func (r *Stream) WaitDataTrack(names ...string) *DataTrack {
@@ -203,7 +216,7 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		utils.Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
 		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
-		if config.AutoCloseDelay > 0 && r.closeDelay != nil {
+		if *r.AutoCloseAfter > 0 {
 			r.closeDelay.Stop()
 		}
 		r.Subscribers = append(r.Subscribers, s)
@@ -224,13 +237,11 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 			utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
 			l := len(r.Subscribers)
 			TriggerHook(HOOK_UNSUBSCRIBE, s, l)
-			if l == 0 && r.AutoUnPublish {
-				if config.AutoCloseDelay == 0 {
+			if l == 0 && *r.AutoCloseAfter >= 0 {
+				if *r.AutoCloseAfter == 0 {
 					r.Close()
-				} else if r.closeDelay != nil {
-					r.closeDelay.Reset(time.Second * config.AutoCloseDelay)
 				} else {
-					r.closeDelay = time.AfterFunc(time.Second*config.AutoCloseDelay, r.Close)
+					r.closeDelay.Reset(time.Duration(*r.AutoCloseAfter) * time.Second)
 				}
 			}
 		}

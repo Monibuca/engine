@@ -10,31 +10,8 @@ type RTPPublisher struct {
 	lastTs     uint32
 	absTs      uint32
 	lastSeq    uint16
+	ts uint32 //毫秒单位的时间戳
 	demux      func()
-}
-
-func (p *RTPPublisher) Push(payload []byte) {
-	if p.Unmarshal(payload) == nil {
-		if p.lastTs != 0 {
-			if p.SequenceNumber != p.lastSeq+1 {
-				println("RTP Publisher: SequenceNumber error", p.lastSeq, p.SequenceNumber)
-				return
-			} else {
-				if p.lastTs > p.Timestamp {
-					if p.lastTs-p.Timestamp > 100000 {
-						p.absTs += (p.Timestamp)
-					} else { //B frame
-						p.absTs -= (p.lastTs - p.Timestamp)
-					}
-				} else {
-					p.absTs += (p.Timestamp - p.lastTs)
-				}
-			}
-		}
-		p.lastTs = p.Timestamp
-		p.lastSeq = p.SequenceNumber
-		p.demux()
-	}
 }
 
 type RTPAudio struct {
@@ -51,20 +28,43 @@ func (s *Stream) NewRTPAudio(codec byte) (r *RTPAudio) {
 }
 
 func (v *RTPAudio) push() {
-	at := v.AudioTrack
-	tb := at.SoundRate
-	switch at.CodecID {
-	case 10:
+	switch v.CodecID {
+	case codec.CodecID_AAC:
 		v.demux = func() {
-			t1 := uint32(uint64(v.absTs) * 1000 / uint64(tb))
 			for _, payload := range codec.ParseRTPAAC(v.Payload) {
-				at.PushRaw(t1, payload)
+				v.PushRaw(v.ts, payload)
 			}
 		}
-	case 7, 8:
+	case codec.CodecID_PCMA, codec.CodecID_PCMU:
 		v.demux = func() {
-			at.PushRaw(uint32(uint64(v.absTs) * 1000 / uint64(tb)), v.Payload)
+			v.PushRaw(v.ts, v.Payload)
 		}
 	}
 	v.demux()
+}
+
+func (p *RTPAudio) Push(payload []byte) {
+	if p.Unmarshal(payload) == nil {
+		if p.lastTs != 0 {
+			if p.SequenceNumber != p.lastSeq+1 {
+				println("RTP Publisher: SequenceNumber error", p.lastSeq, p.SequenceNumber)
+				return
+			} else {
+				// if p.lastTs > p.Timestamp {
+				// 	if p.lastTs-p.Timestamp > 100000 {
+				// 		p.absTs += (p.Timestamp)
+				// 	} else { //B frame
+				// 		p.absTs -= (p.lastTs - p.Timestamp)
+				// 	}
+				// } else {
+				// 	p.absTs += (p.Timestamp - p.lastTs)
+				// }
+				p.absTs += (p.Timestamp - p.lastTs)
+				p.ts = uint32(uint64(p.absTs) * 1000 / uint64(p.SoundRate))
+			}
+		}
+		p.lastTs = p.Timestamp
+		p.lastSeq = p.SequenceNumber
+		p.demux()
+	}
 }
