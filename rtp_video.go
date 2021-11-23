@@ -42,7 +42,7 @@ func (s *Stream) NewRTPVideo(codecID byte) (r *RTPVideo) {
 	r = &RTPVideo{
 		VideoTrack: s.NewVideoTrack(codecID),
 	}
-	r.timeBase = 90000
+	r.timeBase = &r.timebase
 	switch codecID {
 	case codec.CodecID_H264:
 		r.demuxNalu = r.demuxH264

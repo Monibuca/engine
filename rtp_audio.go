@@ -16,6 +16,7 @@ func (s *Stream) NewRTPAudio(codec byte) (r *RTPAudio) {
 	r = &RTPAudio{
 		AudioTrack: s.NewAudioTrack(codec),
 	}
+	r.timeBase = &r.timebase
 	r.OnDemux = r.push
 	return
 }
@@ -37,7 +38,6 @@ func (v *RTPAudio) push(ts uint32, payload []byte) {
 		utils.Println("RTP Publisher: Unsupported codec", v.CodecID)
 		return // TODO
 	}
-	v.timeBase = uint64(v.AudioTrack.SoundRate)
 	v.timestamp = time.Now()
 	v.OnDemux(ts, payload)
 }
