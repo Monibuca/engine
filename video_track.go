@@ -372,7 +372,7 @@ func (vt *VideoTrack) setIDR(idr bool) {
 			vt.AVItem.Value = vt.keyFrameBuffers.Remove(cache)
 			vt.VideoPack = vt.AVItem.Value.(*VideoPack) //设置当前操作的指针
 		}
-	} else {//原来是关键帧，现在是非关键帧，把原来的关键帧缓存放回去
+	} else { //原来是关键帧，现在是非关键帧，把原来的关键帧缓存放回去
 		vt.keyFrameBuffers.PushBack(vt.AVItem.Value)
 		vt.VideoPack = new(VideoPack) //设置当前操作的指针
 		vt.AVItem.Value = vt.VideoPack

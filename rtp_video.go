@@ -2,7 +2,6 @@ package engine
 
 import (
 	"bytes"
-	"container/heap"
 	"encoding/binary"
 
 	"github.com/Monibuca/utils/v3"
@@ -33,7 +32,7 @@ type RTPNalu struct {
 }
 
 type RTPVideo struct {
-	RTPPublisher
+	RTPDemuxer `json:"-"`
 	*VideoTrack
 	fuaBuffer *bytes.Buffer
 	demuxNalu func([]byte) *RTPNalu
@@ -43,13 +42,14 @@ func (s *Stream) NewRTPVideo(codecID byte) (r *RTPVideo) {
 	r = &RTPVideo{
 		VideoTrack: s.NewVideoTrack(codecID),
 	}
+	r.timeBase = 90000
 	switch codecID {
 	case codec.CodecID_H264:
 		r.demuxNalu = r.demuxH264
 	case codec.CodecID_H265:
 		r.demuxNalu = r.demuxH265
 	}
-	r.demux = r._demux
+	r.OnDemux = r._demux
 	return
 }
 
@@ -69,7 +69,7 @@ func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
 				utils.Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, naluLen-currOffset)
 				return
 			}
-			*current = &RTPNalu{Payload: payload[currOffset : currOffset+naluSize], PTS: v.Timestamp}
+			*current = &RTPNalu{Payload: payload[currOffset : currOffset+naluSize], PTS: v.PTS}
 			current = &(*current).Next
 		}
 	case codec.NALU_MTAP16, codec.NALU_MTAP24:
@@ -85,7 +85,7 @@ func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
 			if lenSize == 5 {
 				ts = (ts << 8) | uint16(payload[currOffset+5])
 			}
-			*current = &RTPNalu{Payload: payload[currOffset : currOffset+naluSize], PTS: v.Timestamp + uint32(ts)}
+			*current = &RTPNalu{Payload: payload[currOffset : currOffset+naluSize], PTS: v.PTS + uint32(ts)}
 			current = &(*current).Next
 		}
 		/*
@@ -133,12 +133,12 @@ func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
 		}
 		if v.fuaBuffer != nil {
 			if v.fuaBuffer.Write(payload[lenSize:]); payload[1]&fuaEndBitmask != 0 {
-				result = &RTPNalu{Payload: v.fuaBuffer.Bytes(), PTS: v.Timestamp}
+				result = &RTPNalu{Payload: v.fuaBuffer.Bytes(), PTS: v.PTS}
 				v.fuaBuffer = nil
 			}
 		}
 	default:
-		return &RTPNalu{Payload: payload, PTS: v.Timestamp}
+		return &RTPNalu{Payload: payload, PTS: v.PTS}
 	}
 	return
 }
@@ -266,61 +266,65 @@ func (p *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
 	return
 }
 
-func (p *RTPVideo) _demux() {
-	if last := p.demuxNalu(p.Payload); last != nil {
-		p.demux = func() {
-			if current := p.demuxNalu(p.Payload); current != nil {
-				if last.PTS > current.PTS { //有B帧
-					var b B
-					utils.Println("rtp has B-frame!!")
-					for heap.Push(&b, last); last.Next != nil; last = last.Next {
-						heap.Push(&b, last.Next)
-					}
-					for heap.Push(&b, current); current.Next != nil; current = current.Next {
-						heap.Push(&b, current.Next)
-					}
-					p.demux = func() {
-						if current := p.demuxNalu(p.Payload); current != nil {
-							if current.PTS > b.MaxTS {
-								for b.Len() > 0 {
-									el := heap.Pop(&b).(struct {
-										DTS uint32
-										*RTPNalu
-									})
-									p.absTs += (el.DTS - p.lastTs)
-									p.lastTs = el.DTS
-									p.PushNalu(p.absTs/90, (el.PTS/90 - el.DTS/90), el.Payload)
-								}
-								b.MaxTS = 0
-							}
-							for heap.Push(&b, current); current.Next != nil; current = current.Next {
-								heap.Push(&b, current.Next)
-							}
-						}
-					}
-					return
-				}
-				if p.lastTs != 0 {
-					p.absTs += (last.PTS - p.lastTs)
-				}
-				p.lastTs = last.PTS
-				p.PushNalu(p.absTs/90, 0, last.Payload)
-				for last = current; last.Next != nil; last = last.Next {
-					p.absTs += (last.PTS - p.lastTs)
-					p.lastTs = last.PTS
-					p.PushNalu(p.absTs/90, 0, last.Payload)
-				}
+// func (p *RTPVideo) _demux(ts uint32, payload []byte) {
+// 	p.timestamp = time.Now()
+// 	if last := p.demuxNalu(payload); last != nil {
+// 		p.OnDemux = func(ts uint32, payload []byte) {
+// 			if current := p.demuxNalu(payload); current != nil {
+// 				if last.PTS > current.PTS { //有B帧
+// 					var b B
+// 					utils.Println("rtp has B-frame!!")
+// 					for heap.Push(&b, last); last.Next != nil; last = last.Next {
+// 						heap.Push(&b, last.Next)
+// 					}
+// 					for heap.Push(&b, current); current.Next != nil; current = current.Next {
+// 						heap.Push(&b, current.Next)
+// 					}
+// 					p.OnDemux = func(ts uint32, payload []byte) {
+// 						if current := p.demuxNalu(payload); current != nil {
+// 							if current.PTS > b.MaxTS {
+// 								for b.Len() > 0 {
+// 									el := heap.Pop(&b).(struct {
+// 										DTS uint32
+// 										*RTPNalu
+// 									})
+// 									p.PushNalu(el.DTS, (el.PTS - el.DTS), el.Payload)
+// 								}
+// 								b.MaxTS = 0
+// 							}
+// 							for heap.Push(&b, current); current.Next != nil; current = current.Next {
+// 								heap.Push(&b, current.Next)
+// 							}
+// 						}
+// 					}
+// 					return
+// 				}
+// 				p.PushNalu(p.PTS, 0, last.Payload)
+// 				for last = current; last.Next != nil; last = last.Next {
+// 					p.PushNalu(p.PTS, 0, last.Payload)
+// 				}
+// 			}
+// 		}
+// 	}
+// }
+
+func (p *RTPVideo) _demux(ts uint32, payload []byte) {
+	if nalus := p.demuxNalu(payload); nalus != nil {
+		startPTS := nalus.PTS
+		dtsEst := NewDTSEstimator()
+		dts := dtsEst.Feed(0)
+		p.PushNalu(dts, 0, nalus.Payload)
+		for nalus = nalus.Next; nalus != nil; nalus = nalus.Next {
+			pts := nalus.PTS - startPTS
+			dts := dtsEst.Feed(pts)
+			p.PushNalu(dts, pts-dts, nalus.Payload)
+		}
+		p.OnDemux = func(ts uint32, payload []byte) {
+			for nalus := p.demuxNalu(p.Payload); nalus != nil; nalus = nalus.Next {
+				pts := nalus.PTS - startPTS
+				dts := dtsEst.Feed(pts)
+				p.PushNalu(dts, pts-dts, nalus.Payload)
 			}
 		}
-	}
-}
-func (p *RTPVideo) Push(payload []byte) {
-	if p.Unmarshal(payload) == nil {
-		if p.lastSeq > 0 && p.SequenceNumber != p.lastSeq+1 {
-			println("RTP Publisher: SequenceNumber error", p.lastSeq, p.SequenceNumber)
-			return
-		}
-		p.lastSeq = p.SequenceNumber
-		p.demux()
 	}
 }
