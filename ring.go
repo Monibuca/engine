@@ -130,12 +130,18 @@ func (rb *RingBuffer) nextRead() reflect.Value {
 	return rb.read()
 }
 
+func (rb *RingBuffer) condition() bool {
+	return rb.Err() == nil && *rb.Flag != 2
+}
+
 // ReadLoop 循环读取，采用了反射机制，不适用高性能场景
 // handler入参可以传入回调函数或者channel
-func (rb *RingBuffer) ReadLoop(handler interface{}) {
-	rb.ReadLoopConditional(handler, func() bool {
-		return rb.Err() == nil && *rb.Flag != 2
-	})
+func (rb *RingBuffer) ReadLoop(handler interface{}, async bool) {
+	if async {
+		rb.ReadLoopConditionalGo(handler, rb.condition)
+	} else {
+		rb.ReadLoopConditional(handler, rb.condition)
+	}
 }
 
 // goon判断函数用来判断是否继续读取,返回false将终止循环
@@ -148,6 +154,20 @@ func (rb *RingBuffer) ReadLoopConditional(handler interface{}, goon func() bool)
 	case reflect.Func:
 		for args := []reflect.Value{rb.read()}; goon(); args[0] = rb.nextRead() {
 			t.Call(args)
+		}
+	}
+}
+
+// goon判断函数用来判断是否继续读取,返回false将终止循环
+func (r *RingBuffer) ReadLoopConditionalGo(handler interface{}, goon func() bool) {
+	switch t := reflect.ValueOf(handler); t.Kind() {
+	case reflect.Chan:
+		for v := r.read(); goon(); v = r.nextRead() {
+			t.Send(v)
+		}
+	case reflect.Func:
+		for args := []reflect.Value{r.read()}; goon(); args[0] = r.nextRead() {
+			go t.Call(args)
 		}
 	}
 }

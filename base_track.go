@@ -133,7 +133,7 @@ func (ts *Tracks) GetTrack(name string) Track {
 func (ts *Tracks) OnTrack(callback func(string, Track)) {
 	ts.SubRing(ts.head).ReadLoop(func(name string) {
 		callback(name, ts.GetTrack(name))
-	})
+	}, false)
 }
 
 func (ts *Tracks) WaitTrack(names ...string) Track {
@@ -152,7 +152,7 @@ func (ts *Tracks) WaitTrack(names ...string) Track {
 				return nil
 			}
 		} else {
-			go ring.ReadLoop(wait)
+			go ring.ReadLoop(wait, false)
 			// go func() {
 			// 	for {
 			// 		if rt, ok := ring.Read().(string); ok {

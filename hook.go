@@ -40,12 +40,12 @@ func AddHooks(hooks map[string]interface{}) {
 		if vf.Kind() != reflect.Func {
 			panic("callback is not a function")
 		}
-		go rl.Clone().ReadLoop(vf.Call)
+		go rl.Clone().ReadLoop(vf.Call, false)
 	}
 	hookLocker.Unlock()
 }
 
-func AddHook(name string, callback interface{}) {
+func addHook(name string, callback interface{}, async bool) {
 	hookLocker.Lock()
 	rl, ok := Hooks[name]
 	if !ok {
@@ -56,7 +56,15 @@ func AddHook(name string, callback interface{}) {
 	if vf.Kind() != reflect.Func {
 		panic("callback is not a function")
 	}
-	rl.Clone().ReadLoop(vf.Call)
+	rl.Clone().ReadLoop(vf.Call, async)
+}
+
+func AddHook(name string, callback interface{}) {
+	addHook(name, callback, false)
+}
+
+func AddHookGo(name string, callback interface{}) {
+	addHook(name, callback, true)
 }
 
 func AddHookConditional(name string, callback interface{}, goon func() bool) {
