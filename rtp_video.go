@@ -6,7 +6,7 @@ import (
 
 	"github.com/Monibuca/utils/v3"
 	"github.com/Monibuca/utils/v3/codec"
-	"github.com/pion/rtp/codecs"
+	// "github.com/pion/rtp/codecs"
 )
 
 const (
@@ -143,128 +143,130 @@ func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
 	return
 }
 
-// func (v *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
-// 	naluLen := len(payload)
-// 	if naluLen == 0 {
-// 		return
-// 	}
-// 	naluType := payload[0] & naluTypeBitmask_hevc >> 1
-// 	switch naluType {
-// 	// 4.4.2. Aggregation Packets (APs) (p25)
-// 	/*
-// 	    0               1               2               3
-// 	    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-// 	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	   |      PayloadHdr (Type=48)     |           NALU 1 DONL         |
-// 	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	   |           NALU 1 Size         |            NALU 1 HDR         |
-// 	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	   |                                                               |
-// 	   |                         NALU 1 Data . . .                     |
-// 	   |                                                               |
-// 	   +     . . .     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	   |               |  NALU 2 DOND  |            NALU 2 Size        |
-// 	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	   |          NALU 2 HDR           |                               |
-// 	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            NALU 2 Data        |
-// 	   |                                                               |
-// 	   |         . . .                 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	   |                               :    ...OPTIONAL RTP padding    |
-// 	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 	*/
-// 	case codec.NAL_UNIT_UNSPECIFIED_48:
-// 		currOffset := 2
-// 		if v.UsingDonlField {
-// 			currOffset = 4
-// 		}
-// 		current := &result
-// 		for naluSize := 0; currOffset < naluLen; currOffset += naluSize {
-// 			naluSize = int(binary.BigEndian.Uint16(payload[currOffset:]))
-// 			currOffset += 2
-// 			if naluLen < currOffset+naluSize {
-// 				utils.Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, naluLen-currOffset)
-// 				return
-// 			}
-// 			*current = &RTPNalu{Payload: payload[currOffset : currOffset+naluSize], Ts: v.absTs}
-// 			current = &(*current).Next
-// 			if v.UsingDonlField {
-// 				currOffset += 1
-// 			}
-// 		}
-// 		// 4.4.3. Fragmentation Units (p29)
-// 		/*
-// 		    0               1               2               3
-// 		    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-// 		   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 		   |     PayloadHdr (Type=49)      |    FU header  |  DONL (cond)  |
-// 		   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
-// 		   |  DONL (cond)  |                                               |
-// 		   |-+-+-+-+-+-+-+-+                                               |
-// 		   |                           FU payload                          |
-// 		   |                                                               |
-// 		   |                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 		   |                               :    ...OPTIONAL RTP padding    |
-// 		   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-// 		   +---------------+
-// 		   |0|1|2|3|4|5|6|7|
-// 		   +-+-+-+-+-+-+-+-+
-// 		   |S|E|   FuType  |
-// 		   +---------------+
-// 		*/
-// 	case codec.NAL_UNIT_UNSPECIFIED_49:
-// 		offset := 3
-// 		if v.UsingDonlField {
-// 			offset = 5
-// 		}
-// 		if naluLen < offset {
-// 			return
-// 		}
-// 		fuheader := payload[2]
-// 		if naluType = fuheader & 0b00111111; fuheader&fuaStartBitmask != 0 {
-// 			v.fuaBuffer = bytes.NewBuffer([]byte{})
-// 			payload[0] = payload[0]&0b10000001 | (naluType << 1)
-// 			v.fuaBuffer.Write(payload[:2])
-// 		}
-// 		if v.fuaBuffer != nil {
-// 			if v.fuaBuffer.Write(payload[offset:]); fuheader&fuaEndBitmask != 0 {
-// 				result = &RTPNalu{Payload: v.fuaBuffer.Bytes(), Ts: v.absTs}
-// 				v.fuaBuffer = nil
-// 			}
-// 		}
-// 	default:
-// 		return &RTPNalu{Payload: payload, Ts: v.absTs}
-// 	}
-// 	return
-// }
-
-func (p *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
-	var h265 codecs.H265Packet
-	if _, err := h265.Unmarshal(payload); err == nil {
-		switch v := h265.Packet().(type) {
-		case (*codecs.H265FragmentationUnitPacket):
-			if v.FuHeader().S() {
-				p.fuaBuffer = bytes.NewBuffer([]byte{})
-			}
-			p.fuaBuffer.Write(v.Payload())
-			if v.FuHeader().E() {
-				result = &RTPNalu{Payload: p.fuaBuffer.Bytes(), PTS: p.Timestamp}
-				p.fuaBuffer = nil
-			}
-		case (*codecs.H265AggregationPacket):
-			head := &RTPNalu{Payload: v.FirstUnit().NalUnit(), PTS: p.Timestamp}
-			for _, nalu := range v.OtherUnits() {
-				head.Next = &RTPNalu{Payload: nalu.NalUnit(), PTS: p.Timestamp}
-				head = head.Next
-			}
-			return head
-		case (*codecs.H265PACIPacket):
-			return &RTPNalu{Payload: v.Payload(), PTS: p.Timestamp}
-		case (*codecs.H265SingleNALUnitPacket):
-			return &RTPNalu{Payload: v.Payload(), PTS: p.Timestamp}
+func (v *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
+	naluLen := len(payload)
+	if naluLen == 0 {
+		return
+	}
+	naluType := payload[0] & naluTypeBitmask_hevc >> 1
+	switch naluType {
+	// 4.4.2. Aggregation Packets (APs) (p25)
+	/*
+	    0               1               2               3
+	    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   |      PayloadHdr (Type=48)     |           NALU 1 DONL         |
+	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   |           NALU 1 Size         |            NALU 1 HDR         |
+	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   |                                                               |
+	   |                         NALU 1 Data . . .                     |
+	   |                                                               |
+	   +     . . .     +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   |               |  NALU 2 DOND  |            NALU 2 Size        |
+	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   |          NALU 2 HDR           |                               |
+	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+            NALU 2 Data        |
+	   |                                                               |
+	   |         . . .                 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	   |                               :    ...OPTIONAL RTP padding    |
+	   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+	*/
+	case codec.NAL_UNIT_UNSPECIFIED_48:
+		currOffset := 2
+		if v.UsingDonlField {
+			currOffset = 4
 		}
+		current := &result
+		for naluSize := 0; currOffset < naluLen; currOffset += naluSize {
+			naluSize = int(binary.BigEndian.Uint16(payload[currOffset:]))
+			currOffset += 2
+			if naluLen < currOffset+naluSize {
+				utils.Printf("STAP-A declared size(%d) is larger then buffer(%d)", naluSize, naluLen-currOffset)
+				return
+			}
+			*current = &RTPNalu{Payload: payload[currOffset : currOffset+naluSize], PTS: v.PTS}
+			current = &(*current).Next
+			if v.UsingDonlField {
+				currOffset += 1
+			}
+		}
+		// 4.4.3. Fragmentation Units (p29)
+		/*
+		    0               1               2               3
+		    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+		   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+		   |     PayloadHdr (Type=49)      |    FU header  |  DONL (cond)  |
+		   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
+		   |  DONL (cond)  |                                               |
+		   |-+-+-+-+-+-+-+-+                                               |
+		   |                           FU payload                          |
+		   |                                                               |
+		   |                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+		   |                               :    ...OPTIONAL RTP padding    |
+		   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+		   +---------------+
+		   |0|1|2|3|4|5|6|7|
+		   +-+-+-+-+-+-+-+-+
+		   |S|E|   FuType  |
+		   +---------------+
+		*/
+	case codec.NAL_UNIT_UNSPECIFIED_49:
+		offset := 3
+		if v.UsingDonlField {
+			offset = 5
+		}
+		if naluLen < offset {
+			return
+		}
+		fuheader := payload[2]
+		if naluType = fuheader & 0b00111111; fuheader&fuaStartBitmask != 0 {
+			v.fuaBuffer = bytes.NewBuffer([]byte{})
+			payload[0] = payload[0]&0b10000001 | (naluType << 1)
+			v.fuaBuffer.Write(payload[:2])
+		}
+		if v.fuaBuffer != nil {
+			if v.fuaBuffer.Write(payload[offset:]); fuheader&fuaEndBitmask != 0 {
+				result = &RTPNalu{Payload: v.fuaBuffer.Bytes(), PTS: v.PTS}
+				v.fuaBuffer = nil
+			}
+		}
+	default:
+		return &RTPNalu{Payload: payload, PTS: v.PTS}
 	}
 	return
 }
+
+// func (p *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
+// 	var h265 codecs.H265Packet
+// 	if _, err := h265.Unmarshal(payload); err == nil {
+// 		switch v := h265.Packet().(type) {
+// 		case (*codecs.H265FragmentationUnitPacket):
+// 			if v.FuHeader().S() {
+// 				p.fuaBuffer = bytes.NewBuffer([]byte{})
+// 				payload[0] = payload[0]&0b10000001 | ((byte(v.FuHeader()) & 0b00111111) << 1)
+// 				p.fuaBuffer.Write(payload[:2])
+// 			}
+// 			p.fuaBuffer.Write(v.Payload())
+// 			if v.FuHeader().E() {
+// 				result = &RTPNalu{Payload: p.fuaBuffer.Bytes(), PTS: p.Timestamp}
+// 				p.fuaBuffer = nil
+// 			}
+// 		case (*codecs.H265AggregationPacket):
+// 			head := &RTPNalu{Payload: v.FirstUnit().NalUnit(), PTS: p.Timestamp}
+// 			for _, nalu := range v.OtherUnits() {
+// 				head.Next = &RTPNalu{Payload: nalu.NalUnit(), PTS: p.Timestamp}
+// 				head = head.Next
+// 			}
+// 			return head
+// 		case (*codecs.H265PACIPacket):
+// 			return &RTPNalu{Payload: v.Payload(), PTS: p.Timestamp}
+// 		case (*codecs.H265SingleNALUnitPacket):
+// 			return &RTPNalu{Payload: v.Payload(), PTS: p.Timestamp}
+// 		}
+// 	}
+// 	return
+// }
 
 // func (p *RTPVideo) _demux(ts uint32, payload []byte) {
 // 	p.timestamp = time.Now()
@@ -309,6 +311,7 @@ func (p *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
 // }
 
 func (p *RTPVideo) _demux(ts uint32, payload []byte) {
+	
 	if nalus := p.demuxNalu(payload); nalus != nil {
 		startPTS := nalus.PTS
 		dtsEst := NewDTSEstimator()
