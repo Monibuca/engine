@@ -44,14 +44,18 @@ func (s *Subscriber) Close() {
 
 //Subscribe 开始订阅 将Subscriber与Stream关联
 func (s *Subscriber) Subscribe(streamPath string) error {
-	u, _ := url.Parse(streamPath)
-	s.SubscribeArgs, _ = url.ParseQuery(u.RawQuery)
-	streamPath = u.Path
+	if u, err := url.Parse(streamPath); err != nil {
+		return err
+	} else if s.SubscribeArgs, err = url.ParseQuery(u.RawQuery); err != nil {
+		return err
+	} else {
+		streamPath = u.Path
+	}
 	if stream := FindStream(streamPath); stream == nil {
-		return errors.Errorf("Stream not found:%s", streamPath)
+		return errors.Errorf("subscribe %s faild :stream not found", streamPath)
 	} else {
 		if stream.Subscribe(s); s.Context == nil {
-			return errors.Errorf("stream not exist:%s", streamPath)
+			return errors.Errorf("subscribe %s faild :stream closed", streamPath)
 		}
 	}
 	return nil
