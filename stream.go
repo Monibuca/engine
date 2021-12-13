@@ -100,7 +100,7 @@ type Stream struct {
 	VideoTracks    Tracks
 	AudioTracks    Tracks
 	DataTracks     Tracks
-	AutoCloseAfter *int               //当无人订阅时延迟N秒后自动停止发布
+	AutoCloseAfter *int              //当无人订阅时延迟N秒后自动停止发布
 	Transcoding    map[string]string //转码配置，key：目标编码，value：发布者提供的编码
 	subscribeMutex sync.Mutex
 	OnClose        func()      `json:"-"`
@@ -142,6 +142,12 @@ func (r *Stream) Publish() bool {
 	if r.AutoCloseAfter == nil {
 		r.AutoCloseAfter = &config.AutoCloseAfter
 	}
+	var closeChann <-chan time.Time
+	if *r.AutoCloseAfter > 0 {
+		r.closeDelay = time.NewTimer(time.Duration(*r.AutoCloseAfter) * time.Second)
+		r.closeDelay.Stop()
+		closeChann = r.closeDelay.C
+	}
 	r.Context, r.cancel = context.WithCancel(Ctx)
 	r.VideoTracks.Init(r)
 	r.AudioTracks.Init(r)
@@ -149,21 +155,17 @@ func (r *Stream) Publish() bool {
 	r.StartTime = time.Now()
 	Streams.m[r.StreamPath] = r
 	utils.Print(Green("Stream publish:"), BrightCyan(r.StreamPath))
+	go r.waitClose(closeChann)
 	//触发钩子
 	TriggerHook(HOOK_PUBLISH, r)
-	go r.waitClose()
 	return true
 }
 
 // 等待流关闭
-func (r *Stream) waitClose() {
+func (r *Stream) waitClose(closeChann <-chan time.Time) {
 	r.timeout = time.NewTimer(config.PublishTimeout)
 	defer r.timeout.Stop()
-	var closeChann <-chan time.Time
-	if *r.AutoCloseAfter > 0 {
-		r.closeDelay = time.NewTimer(time.Duration(*r.AutoCloseAfter) * time.Second)
-		r.closeDelay.Stop()
-		closeChann = r.closeDelay.C
+	if r.closeDelay != nil {
 		defer r.closeDelay.Stop()
 	}
 	select {
