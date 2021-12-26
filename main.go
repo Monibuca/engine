@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -35,6 +36,7 @@ var (
 	Plugins       = make(map[string]*PluginConfig) // Plugins 所有的插件配置
 	HasTranscoder bool
 	Ctx           context.Context
+	settingDir    string
 )
 
 //PluginConfig 插件配置定义
@@ -45,6 +47,11 @@ type PluginConfig struct {
 	Dir       string                       //插件代码路径
 	Run       func()                       //插件启动函数
 	HotConfig map[string]func(interface{}) //热修改配置
+}
+
+func (opt *PluginConfig) Install(run func()) {
+	opt.Run = run
+	InstallPlugin(opt)
 }
 
 // InstallPlugin 安装插件
@@ -67,10 +74,17 @@ func init() {
 // Run 启动Monibuca引擎
 func Run(ctx context.Context, configFile string) (err error) {
 	Ctx = ctx
-	util.CreateShutdownScript()
+	if err := util.CreateShutdownScript(); err != nil {
+		utils.Print(Red("create shutdown script error:"), err)
+	}
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
 		utils.Print(Red("read config file error:"), err)
+		return
+	}
+	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
+	if err = os.MkdirAll(settingDir, 0755); err != nil {
+		utils.Print(Red("create dir .m7s error:"), err)
 		return
 	}
 	utils.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
@@ -85,6 +99,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		}
 		for name, config := range Plugins {
 			if cfg, ok := cg[name]; ok {
+				config.updateSettings(cfg.(map[string]interface{}))
 				b, _ := json.Marshal(cfg)
 				if err = json.Unmarshal(b, config.Config); err != nil {
 					log.Println(err)
@@ -101,4 +116,37 @@ func Run(ctx context.Context, configFile string) (err error) {
 		utils.Print(Red("decode config file error:"), err)
 	}
 	return
+}
+func objectAssign(target, source map[string]interface{}) {
+	for k, v := range source {
+		if _, ok := target[k]; !ok {
+			target[k] = v
+		} else {
+			switch v := v.(type) {
+			case map[string]interface{}:
+				objectAssign(target[k].(map[string]interface{}), v)
+			default:
+				target[k] = v
+			}
+		}
+	}
+}
+func (opt *PluginConfig) updateSettings(cfg map[string]interface{}) {
+	if setting, err := ioutil.ReadFile(opt.settingPath()); err == nil {
+		var cg map[string]interface{}
+		if _, err = toml.Decode(string(setting), &cg); err == nil {
+			objectAssign(cfg, cg)
+		}
+	}
+}
+func (opt *PluginConfig) settingPath() string {
+	return filepath.Join(settingDir, opt.Name+".toml")
+}
+func (opt *PluginConfig) Save() error {
+	file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY, 0644)
+	if err == nil {
+		defer file.Close()
+		err = toml.NewEncoder(file).Encode(opt.Config)
+	}
+	return err
 }
