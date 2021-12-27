@@ -92,6 +92,7 @@ func (r *StreamContext) Update() {
 
 // Stream 流定义
 type Stream struct {
+	URL            string //远程地址，仅远程拉流有值
 	StreamContext  `json:"-"`
 	StreamPath     string
 	Type           string        //流类型，来自发布者
