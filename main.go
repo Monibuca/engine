@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +14,7 @@ import (
 	"time" // colorable
 
 	"github.com/Monibuca/utils/v3"
+	"github.com/google/uuid"
 
 	"github.com/Monibuca/engine/v3/util"
 
@@ -115,7 +118,22 @@ func Run(ctx context.Context, configFile string) (err error) {
 	} else {
 		utils.Print(Red("decode config file error:"), err)
 	}
-	return
+	UUID := uuid.NewString()
+	reportTimer := time.NewTimer(time.Minute)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
+	req.Header.Set("os", runtime.GOOS)
+	req.Header.Set("version", Version)
+	req.Header.Set("uuid", UUID)
+	var c http.Client
+	for {
+		req.Header.Set("streams", fmt.Sprintf("%d", len(Streams.m)))
+		c.Do(req)
+		select {
+		case <-ctx.Done():
+			return
+		case <-reportTimer.C:
+		}
+	}
 }
 func objectAssign(target, source map[string]interface{}) {
 	for k, v := range source {
