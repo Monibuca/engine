@@ -70,8 +70,8 @@ func (t *AVTrack) resetBPS() {
 func (t *AVTrack) GetBPS() {
 	t.PacketCount++
 	t.Sequence = t.PacketCount
-	if delta := int(t.Timestamp.Sub(t.ts).Seconds()); delta != 0 {
-		t.BPS = t.bytes / delta
+	if delta := int(t.Timestamp.Sub(t.ts).Milliseconds()); delta != 0 {
+		t.BPS = t.bytes * 1000 / delta
 	}
 }
 

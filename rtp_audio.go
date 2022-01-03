@@ -16,6 +16,9 @@ func (s *Stream) NewRTPAudio(codec byte) (r *RTPAudio) {
 	r = &RTPAudio{
 		AudioTrack: s.NewAudioTrack(codec),
 	}
+	if config.RTPReorder {
+		r.orderMap = make(map[uint16]RTPNalu)
+	}
 	r.timeBase = &r.timebase
 	r.OnDemux = r.push
 	return

@@ -3,6 +3,7 @@ package engine
 import (
 	"container/list"
 	"container/ring"
+	"encoding/binary"
 	"time"
 
 	"github.com/Monibuca/utils/v3"
@@ -117,8 +118,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 		utils.BigEndian.PutUint24(tmp, vt.CompositionTime)
 		vt.Buffer.Write(tmp[:3])
 		for _, nalu := range vt.NALUs {
-			utils.BigEndian.PutUint32(tmp, uint32(len(nalu)))
-			vt.Buffer.Write(tmp)
+			binary.Write(&vt.Buffer, binary.BigEndian, uint32(len(nalu)))
 			vt.Buffer.Write(nalu)
 		}
 		vt.Bytes2Payload()
@@ -156,6 +156,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 				//已完成SPS和PPS 组装，重置push函数，接收视频数据
 				vt.PushNalu = func(ts uint32, cts uint32, nalus ...[]byte) {
 					var nonIDRs int
+					var IDRs int
 					for _, nalu := range nalus {
 						naluLen := len(nalu)
 						if naluLen == 0 {
@@ -171,22 +172,18 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							vt.ExtraData.Payload = codec.BuildH264SeqHeaderFromSpsPps(vt.ExtraData.NALUs[0], vt.ExtraData.NALUs[1])
 						case codec.NALU_Access_Unit_Delimiter:
 						case codec.NALU_IDR_Picture:
-							if nonIDRs > 0 {
-								vt.push()
-								nonIDRs = 0
-							}
 							vt.addBytes(naluLen)
-							vt.setIDR(true)
-							vt.setTS(ts)
-							vt.CompositionTime = cts
-							vt.SetNalu0(nalu)
-							vt.push()
+							if IDRs == 0 {
+								vt.setIDR(true)
+								vt.SetNalu0(nalu)
+							} else {
+								vt.NALUs = append(vt.NALUs, nalu)
+							}
+							IDRs++
 						case codec.NALU_Non_IDR_Picture:
 							vt.addBytes(naluLen)
-							vt.setIDR(false)
-							vt.setTS(ts)
-							vt.CompositionTime = cts
 							if nonIDRs == 0 {
+								vt.setIDR(false)
 								vt.SetNalu0(nalu)
 							} else {
 								vt.NALUs = append(vt.NALUs, nalu)
@@ -198,7 +195,9 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							utils.Printf("%s,nalType not support yet:%d,[0]=0x%X", vt.Stream.StreamPath, naluType, nalu[0])
 						}
 					}
-					if nonIDRs > 0 {
+					if nonIDRs + IDRs > 0  {
+						vt.setTS(ts)
+						vt.CompositionTime = cts
 						vt.push()
 					}
 				}
@@ -345,10 +344,9 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 		for nalus := payload[5:]; len(nalus) > vt.nalulenSize; {
 			nalulen := 0
 			for i := 0; i < vt.nalulenSize; i++ {
-				nalulen += int(nalus[i]) << (8 * (vt.nalulenSize - i - 1))
+				nalulen += int(nalus[i]) << ((vt.nalulenSize - i - 1) << 3)
 			}
-			end := nalulen + vt.nalulenSize
-			if len(nalus) >= end {
+			if end := nalulen + vt.nalulenSize; len(nalus) >= end {
 				vt.NALUs = append(vt.NALUs, nalus[vt.nalulenSize:end])
 				nalus = nalus[end:]
 			} else {
@@ -380,6 +378,9 @@ func (vt *VideoTrack) setIDR(idr bool) {
 	vt.IDR = idr
 }
 func (vt *VideoTrack) push() {
+	if len(vt.NALUs) == 0 {
+		panic("push error,nalus is empty")
+	}
 	if vt.Stream != nil {
 		vt.Stream.Update()
 	}

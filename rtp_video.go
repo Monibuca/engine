@@ -42,6 +42,9 @@ func (s *Stream) NewRTPVideo(codecID byte) (r *RTPVideo) {
 	r = &RTPVideo{
 		VideoTrack: s.NewVideoTrack(codecID),
 	}
+	if config.RTPReorder {
+		r.orderMap = make(map[uint16]RTPNalu)
+	}
 	r.timeBase = &r.timebase
 	switch codecID {
 	case codec.CodecID_H264:
@@ -311,22 +314,29 @@ func (v *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
 // }
 
 func (p *RTPVideo) _demux(ts uint32, payload []byte) {
-	
 	if nalus := p.demuxNalu(payload); nalus != nil {
 		startPTS := nalus.PTS
 		dtsEst := NewDTSEstimator()
 		dts := dtsEst.Feed(0)
 		p.PushNalu(dts, 0, nalus.Payload)
+		var cache [][]byte
+		pts := startPTS
 		for nalus = nalus.Next; nalus != nil; nalus = nalus.Next {
-			pts := nalus.PTS - startPTS
-			dts := dtsEst.Feed(pts)
+			pts = nalus.PTS - startPTS
+			dts = dtsEst.Feed(pts)
 			p.PushNalu(dts, pts-dts, nalus.Payload)
 		}
 		p.OnDemux = func(ts uint32, payload []byte) {
 			for nalus := p.demuxNalu(p.Payload); nalus != nil; nalus = nalus.Next {
-				pts := nalus.PTS - startPTS
-				dts := dtsEst.Feed(pts)
-				p.PushNalu(dts, pts-dts, nalus.Payload)
+				if len(cache) == 0 {
+					pts = nalus.PTS - startPTS
+					dts = dtsEst.Feed(pts)
+				}
+				cache = append(cache, nalus.Payload)
+				if p.Marker {
+					p.PushNalu(dts, pts-dts, cache...)
+					cache = cache[:0]
+				}
 			}
 		}
 	}
