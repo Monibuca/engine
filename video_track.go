@@ -354,7 +354,9 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 				break
 			}
 		}
-		vt.push()
+		if len(vt.NALUs) > 0 {
+			vt.push()
+		}
 	}
 }
 
