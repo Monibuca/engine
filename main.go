@@ -52,19 +52,15 @@ type PluginConfig struct {
 	HotConfig map[string]func(interface{}) //热修改配置
 }
 
+// InstallPlugin 安装插件
 func (opt *PluginConfig) Install(run func()) {
 	opt.Run = run
-	InstallPlugin(opt)
-}
-
-// InstallPlugin 安装插件
-func InstallPlugin(opt *PluginConfig) {
-	Plugins[opt.Name] = opt
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	opt.Dir = filepath.Dir(pluginFilePath)
 	if parts := strings.Split(opt.Dir, "@"); len(parts) > 1 {
 		opt.Version = parts[len(parts)-1]
 	}
+	Plugins[opt.Name] = opt
 	utils.Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
 }
 
