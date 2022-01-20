@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bytes"
 	"container/ring"
 	"context"
 	"encoding/json"
@@ -27,12 +26,7 @@ func (t *BaseTrack) addBytes(size int) {
 }
 
 type AVPack struct {
-	bytes.Buffer
 	Payload []byte // 字节流格式的媒体数据，如果是需要拼接而成的，则等同于Buffer里面的值
-}
-
-func (pack *AVPack) Bytes2Payload() {
-	pack.Payload = pack.Bytes()
 }
 
 type AVTrack struct {

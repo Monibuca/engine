@@ -91,17 +91,16 @@ func (at *AudioTrack) pushRaw(ts uint32, payload []byte) {
 	switch at.CodecID {
 	case 10:
 		at.writeByteStream = func() {
-			at.Reset()
-			at.Buffer.Write([]byte{at.ExtraData[0], 1})
-			at.Buffer.Write(at.Raw)
-			at.Bytes2Payload()
+			at.Payload = make([]byte, 2+len(at.Raw))
+			at.Payload[0] = at.ExtraData[0]
+			at.Payload[1] = 1
+			copy(at.Payload[2:], at.Raw)
 		}
 	default:
 		at.writeByteStream = func() {
-			at.Reset()
-			at.WriteByte(at.ExtraData[0])
-			at.Buffer.Write(at.Raw)
-			at.Bytes2Payload()
+			at.Payload = make([]byte, 1+len(at.Raw))
+			at.Payload[0] = at.ExtraData[0]
+			copy(at.Payload[1:], at.Raw)
 		}
 	}
 	at.PushRaw = func(ts uint32, payload []byte) {

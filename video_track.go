@@ -3,7 +3,6 @@ package engine
 import (
 	"container/list"
 	"container/ring"
-	"encoding/binary"
 	"time"
 
 	"github.com/Monibuca/utils/v3"
@@ -104,24 +103,24 @@ func (vt *VideoTrack) PushAnnexB(ts uint32, cts uint32, payload []byte) {
 func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 	idrBit := 0x10 | vt.CodecID
 	nIdrBit := 0x20 | vt.CodecID
-	tmp := make([]byte, 4)
+
 	// 缓冲中只包含Nalu数据所以写入rtmp格式时需要按照ByteStream格式写入
 	vt.writeByteStream = func() {
-		vt.Reset()
+		tmp := make([]byte, 5)
 		if vt.IDR {
 			tmp[0] = idrBit
 		} else {
 			tmp[0] = nIdrBit
 		}
 		tmp[1] = 1
-		vt.Buffer.Write(tmp[:2])
-		utils.BigEndian.PutUint24(tmp, vt.CompositionTime)
-		vt.Buffer.Write(tmp[:3])
+		utils.BigEndian.PutUint24(tmp[2:], vt.CompositionTime)
 		for _, nalu := range vt.NALUs {
-			binary.Write(&vt.Buffer, binary.BigEndian, uint32(len(nalu)))
-			vt.Buffer.Write(nalu)
+			tmp1 := make([]byte, 4)
+			utils.BigEndian.PutUint32(tmp1, uint32(len(nalu)))
+			tmp1 = append(tmp1, nalu...)
+			tmp = append(tmp, tmp1...)
 		}
-		vt.Bytes2Payload()
+		vt.Payload = tmp
 	}
 	switch vt.CodecID {
 	case codec.CodecID_H264:
@@ -195,7 +194,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							utils.Printf("%s,nalType not support yet:%d,[0]=0x%X", vt.Stream.StreamPath, naluType, nalu[0])
 						}
 					}
-					if nonIDRs + IDRs > 0  {
+					if nonIDRs+IDRs > 0 {
 						vt.setTS(ts)
 						vt.CompositionTime = cts
 						vt.push()
