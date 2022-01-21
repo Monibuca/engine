@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bytes"
 	"encoding/binary"
 
 	"github.com/Monibuca/utils/v3"
@@ -34,8 +33,8 @@ type RTPNalu struct {
 type RTPVideo struct {
 	RTPDemuxer `json:"-"`
 	*VideoTrack
-	fuaBuffer *bytes.Buffer
-	demuxNalu func([]byte) *RTPNalu
+	fuaPayload []byte
+	demuxNalu  func([]byte) *RTPNalu
 }
 
 func (s *Stream) NewRTPVideo(codecID byte) (r *RTPVideo) {
@@ -131,13 +130,13 @@ func (v *RTPVideo) demuxH264(payload []byte) (result *RTPNalu) {
 			return
 		}
 		if payload[1]&fuaStartBitmask != 0 {
-			v.fuaBuffer = bytes.NewBuffer([]byte{})
-			v.fuaBuffer.WriteByte((payload[0] & naluRefIdcBitmask) | (payload[1] & naluTypeBitmask))
+			v.fuaPayload = make([]byte, 1)
+			v.fuaPayload[0] = (payload[0] & naluRefIdcBitmask) | (payload[1] & naluTypeBitmask)
 		}
-		if v.fuaBuffer != nil {
-			if v.fuaBuffer.Write(payload[lenSize:]); payload[1]&fuaEndBitmask != 0 {
-				result = &RTPNalu{Payload: v.fuaBuffer.Bytes(), PTS: v.PTS}
-				v.fuaBuffer = nil
+		if v.fuaPayload != nil {
+			if v.fuaPayload = append(v.fuaPayload, payload[lenSize:]...); payload[1]&fuaEndBitmask != 0 {
+				result = &RTPNalu{Payload: v.fuaPayload, PTS: v.PTS}
+				v.fuaPayload = nil
 			}
 		}
 	default:
@@ -224,14 +223,14 @@ func (v *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
 		}
 		fuheader := payload[2]
 		if naluType = fuheader & 0b00111111; fuheader&fuaStartBitmask != 0 {
-			v.fuaBuffer = bytes.NewBuffer([]byte{})
+			v.fuaPayload = make([]byte, 2)
 			payload[0] = payload[0]&0b10000001 | (naluType << 1)
-			v.fuaBuffer.Write(payload[:2])
+			copy(v.fuaPayload, payload[:2])
 		}
-		if v.fuaBuffer != nil {
-			if v.fuaBuffer.Write(payload[offset:]); fuheader&fuaEndBitmask != 0 {
-				result = &RTPNalu{Payload: v.fuaBuffer.Bytes(), PTS: v.PTS}
-				v.fuaBuffer = nil
+		if v.fuaPayload != nil {
+			if v.fuaPayload = append(v.fuaPayload, payload[offset:]...); payload[1]&fuaEndBitmask != 0 {
+				result = &RTPNalu{Payload: v.fuaPayload, PTS: v.PTS}
+				v.fuaPayload = nil
 			}
 		}
 	default:
