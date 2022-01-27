@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"container/list"
 	"container/ring"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 const (
 	naluTypeBitmask      = 0b0001_1111
 	naluTypeBitmask_hevc = 0x7E
+	defaultRingSize      = 75 //the maximum GOP size by default
 )
 
 type VideoPack struct {
@@ -39,18 +39,16 @@ func (v *VideoPack) SetNalu0(nalu []byte) {
 type VideoTrack struct {
 	IDRing *ring.Ring `json:"-"` //最近的关键帧位置，首屏渲染
 	AVTrack
-	SPSInfo         codec.SPSInfo
-	GOP             int           //关键帧间隔
-	ExtraData       *VideoPack    `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS)
-	WaitIDR         chan struct{} `json:"-"`
-	revIDR          func()
-	PushNalu        func(ts uint32, cts uint32, nalus ...[]byte) `json:"-"`
-	UsingDonlField  bool
-	writeByteStream func()
-	idrCount        int //处于缓冲中的关键帧数量
-	nalulenSize     int
-	*VideoPack      `json:"-"` //当前写入的视频数据
-	keyFrameBuffers *list.List //用于作为关键帧缓存的对象池，缓冲中每个节点都有buffer，但是关键帧的长度较长，会导致每个节点都可能增长空间
+	SPSInfo        codec.SPSInfo
+	GOP            int           //关键帧间隔
+	ExtraData      *VideoPack    `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS)
+	WaitIDR        chan struct{} `json:"-"`
+	revIDR         func()
+	PushNalu       func(ts uint32, cts uint32, nalus ...[]byte) `json:"-"`
+	UsingDonlField bool
+	idrCount       int //处于缓冲中的关键帧数量
+	nalulenSize    int
+	*VideoPack     `json:"-"` //当前写入的视频数据
 }
 
 func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
@@ -71,7 +69,6 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 					vt.Unlink(l).Do(func(v interface{}) {
 						if v.(*AVItem).Value.(*VideoPack).IDR {
 							// 将关键帧的缓存放入对象池
-							vt.keyFrameBuffers.PushBack(v.(*AVItem).Value)
 							vt.idrCount--
 						}
 					})
@@ -81,13 +78,12 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 				vt.resetBPS()
 			}
 		},
-		keyFrameBuffers: list.New(),
 	}
 	vt.timebase = 90000
 	vt.PushNalu = vt.pushNalu
 	vt.Stream = s
 	vt.CodecID = codec
-	vt.Init(s.Context, 256)
+	vt.Init(s.Context, defaultRingSize)
 	vt.poll = time.Millisecond * 20
 	vt.Do(func(v interface{}) {
 		v.(*AVItem).Value = new(VideoPack)
@@ -99,29 +95,32 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 func (vt *VideoTrack) PushAnnexB(ts uint32, cts uint32, payload []byte) {
 	vt.PushNalu(ts, cts, codec.SplitH264(payload)...)
 }
+func (vt *VideoTrack) writeByteStream() {
+	totalLen := 0
+	for _, s := range vt.NALUs {
+		totalLen += len(s)
+	}
+	tmp := make([]byte, 5+totalLen+4*len(vt.NALUs))
+	if vt.IDR {
+		tmp[0] = 0x10 | vt.CodecID
+	} else {
+		tmp[0] = 0x20 | vt.CodecID
+	}
+	tmp[1] = 1
+	utils.BigEndian.PutUint24(tmp[2:], vt.CompositionTime)
+	i := 5
+	for _, nalu := range vt.NALUs {
+		utils.BigEndian.PutUint32(tmp[i:], uint32(len(nalu)))
+		i += 4
+		i += copy(tmp[i:], nalu)
+	}
+	vt.Payload = tmp
+}
 
 func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
-	idrBit := 0x10 | vt.CodecID
-	nIdrBit := 0x20 | vt.CodecID
 
 	// 缓冲中只包含Nalu数据所以写入rtmp格式时需要按照ByteStream格式写入
-	vt.writeByteStream = func() {
-		tmp := make([]byte, 5)
-		if vt.IDR {
-			tmp[0] = idrBit
-		} else {
-			tmp[0] = nIdrBit
-		}
-		tmp[1] = 1
-		utils.BigEndian.PutUint24(tmp[2:], vt.CompositionTime)
-		for _, nalu := range vt.NALUs {
-			tmp1 := make([]byte, 4)
-			utils.BigEndian.PutUint32(tmp1, uint32(len(nalu)))
-			tmp1 = append(tmp1, nalu...)
-			tmp = append(tmp, tmp1...)
-		}
-		vt.Payload = tmp
-	}
+
 	switch vt.CodecID {
 	case codec.CodecID_H264:
 		{
@@ -365,17 +364,6 @@ func (vt *VideoTrack) setIDR(idr bool) {
 	if idr == vt.IDR {
 		return
 	}
-	// 原来是非关键帧，现在是关键帧，需要从关键帧池里面拿出一个缓存
-	if idr {
-		if cache := vt.keyFrameBuffers.Back(); cache != nil {
-			vt.AVItem.Value = vt.keyFrameBuffers.Remove(cache)
-			vt.VideoPack = vt.AVItem.Value.(*VideoPack) //设置当前操作的指针
-		}
-	} else { //原来是关键帧，现在是非关键帧，把原来的关键帧缓存放回去
-		vt.keyFrameBuffers.PushBack(vt.AVItem.Value)
-		vt.VideoPack = new(VideoPack) //设置当前操作的指针
-		vt.AVItem.Value = vt.VideoPack
-	}
 	vt.IDR = idr
 }
 func (vt *VideoTrack) push() {
@@ -385,9 +373,7 @@ func (vt *VideoTrack) push() {
 	if vt.Stream != nil {
 		vt.Stream.Update()
 	}
-	if vt.writeByteStream != nil {
-		vt.writeByteStream()
-	}
+	vt.writeByteStream()
 	if vt.GetBPS(); vt.IDR {
 		vt.revIDR()
 	}
