@@ -3,10 +3,8 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +12,6 @@ import (
 	"time" // colorable
 
 	"github.com/Monibuca/utils/v3"
-	"github.com/google/uuid"
 
 	"github.com/Monibuca/engine/v3/util"
 
@@ -81,12 +78,12 @@ func Run(ctx context.Context, configFile string) (err error) {
 		utils.Print(Red("read config file error:"), err)
 		return
 	}
-	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
+	settingDir = filepath.Join(filepath.Dir(configFile), ".ms")
 	if err = os.MkdirAll(settingDir, 0755); err != nil {
-		utils.Print(Red("create dir .m7s error:"), err)
+		utils.Print(Red("create dir .ms error:"), err)
 		return
 	}
-	utils.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
+	utils.Print(BgGreen(Black("starting ms ")), BrightBlue(Version))
 	var cg map[string]interface{}
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
 		if cfg, ok := cg["Engine"]; ok {
@@ -114,16 +111,22 @@ func Run(ctx context.Context, configFile string) (err error) {
 	} else {
 		utils.Print(Red("decode config file error:"), err)
 	}
-	UUID := uuid.NewString()
+	//UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
-	req.Header.Set("os", runtime.GOOS)
-	req.Header.Set("version", Version)
-	req.Header.Set("uuid", UUID)
-	var c http.Client
+	//req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
+	//req.Header.Set("os", runtime.GOOS)
+	//req.Header.Set("version", Version)
+	//req.Header.Set("uuid", UUID)
+	//var c http.Client
 	for {
-		req.Header.Set("streams", fmt.Sprintf("%d", len(Streams.m)))
-		c.Do(req)
+		//req.Header.Set("streams", fmt.Sprintf("%d", len(Streams.m)))
+		//c.Do(req)
+
+		t, _ := time.Parse(time.RFC3339, "2022-03-31T15:04:05Z")
+		if t.Before(time.Now()) {
+			utils.Print(Red("License expired. System exited."))
+			os.Exit(-99)
+		}
 		select {
 		case <-ctx.Done():
 			return
