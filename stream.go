@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -107,6 +108,11 @@ type Stream struct {
 	OnClose        func()      `json:"-"`
 	ExtraProp      interface{} //额外的属性，用于实现子类化，减少map的使用
 	closeDelay     *time.Timer
+
+	//AppName 应用名
+	AppName string
+	//StreamName 流名
+	StreamName string
 }
 
 func (r *Stream) Close() {
@@ -153,6 +159,12 @@ func (r *Stream) Publish() bool {
 	r.AudioTracks.Init(r)
 	r.DataTracks.Init(r)
 	r.StartTime = time.Now()
+
+	//获取App名称和流名，App 名称取一级目录，流名取最后一级
+	param := strings.Split(r.StreamPath, "/")
+	r.AppName = param[0]
+	r.StreamName = param[len(param)-1]
+
 	Streams.m[r.StreamPath] = r
 	utils.Print(Green("Stream publish:"), BrightCyan(r.StreamPath))
 	go r.waitClose(closeChann)
