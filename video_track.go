@@ -2,6 +2,7 @@ package engine
 
 import (
 	"container/ring"
+	"github.com/Monibuca/engine/v3/util"
 	"time"
 
 	"github.com/Monibuca/utils/v3"
@@ -66,14 +67,14 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 				if l := vt.Size - vt.GOP - 5; l > 5 {
 					vt.Size -= l
 					//缩小缓冲环节省内存
-					vt.Unlink(l).Do(func(v interface{}) {
+					vt.AVRing.Unlink(l).Do(func(v interface{}) {
 						if v.(*AVItem).Value.(*VideoPack).IDR {
 							// 将关键帧的缓存放入对象池
 							vt.idrCount--
 						}
 					})
 				}
-				vt.IDRing = vt.Ring
+				vt.IDRing = vt.AVRing.Ring
 				idrSequence = vt.Sequence
 				vt.resetBPS()
 			}
@@ -83,9 +84,9 @@ func (s *Stream) NewVideoTrack(codec byte) (vt *VideoTrack) {
 	vt.PushNalu = vt.pushNalu
 	vt.Stream = s
 	vt.CodecID = codec
-	vt.Init(s.Context, defaultRingSize)
+	vt.AVRing.Init(s.Context, defaultRingSize)
 	vt.poll = time.Millisecond * 20
-	vt.Do(func(v interface{}) {
+	vt.AVRing.Do(func(v interface{}) {
 		v.(*AVItem).Value = new(VideoPack)
 	})
 	vt.setCurrent()
@@ -114,7 +115,7 @@ func (vt *VideoTrack) writeByteStream() {
 		i += 4
 		i += copy(tmp[i:], nalu)
 	}
-	vt.Payload = tmp
+	vt.VideoPack.Payload = tmp
 }
 
 func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
@@ -278,7 +279,7 @@ func (vt *VideoTrack) pushNalu(ts uint32, cts uint32, nalus ...[]byte) {
 							vt.CompositionTime = cts
 							vt.SetNalu0(nalu)
 							vt.addBytes(naluLen)
-							vt.push()
+							vt.push() //always push a new VideoPack for IDR frame
 						case 0, 1, 2, 3, 4, 5, 6, 7, 9:
 							nonIDRs = append(nonIDRs, nalu)
 							vt.addBytes(naluLen)
@@ -336,7 +337,7 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 		vt.addBytes(len(payload))
 		vt.IDR = payload[0]>>4 == 1
 		vt.setTS(ts)
-		vt.Payload = payload
+		vt.VideoPack.Payload = payload
 		vt.CompositionTime = utils.BigEndian.Uint24(payload[2:])
 		vt.ResetNALUs()
 		for nalus := payload[5:]; len(nalus) > vt.nalulenSize; {
@@ -361,11 +362,12 @@ func (vt *VideoTrack) PushByteStream(ts uint32, payload []byte) {
 // 设置关键帧信息，主要是为了判断缓存之前是否是关键帧，用来调度缓存
 func (vt *VideoTrack) setIDR(idr bool) {
 	// 如果当前帧的类型和需要设置的类型相同，则不需要操作
-	if idr == vt.IDR {
+	if idr == vt.VideoPack.IDR {
 		return
 	}
-	vt.IDR = idr
+	vt.VideoPack.IDR = idr
 }
+
 func (vt *VideoTrack) push() {
 	if len(vt.NALUs) == 0 {
 		panic("push error,nalus is empty")
@@ -374,23 +376,24 @@ func (vt *VideoTrack) push() {
 		vt.Stream.Update()
 	}
 	vt.writeByteStream()
-	if vt.GetBPS(); vt.IDR {
+	vt.AVTrack.GetBPS()
+	if vt.IDR {
 		vt.revIDR()
 	}
-	if nextPack := vt.NextValue().(*VideoPack); nextPack.IDR {
+	if nextPack := vt.AVRing.NextValue().(*VideoPack); nextPack.IDR {
 		if vt.idrCount == 1 {
-			if vt.Size < config.MaxRingSize {
-				exRing := ring.New(5)
+			if min := util.Min(config.MaxRingSize, vt.GOP+5); vt.AVRing.Size < min {
+				exRing := ring.New(min - vt.AVRing.Size)
 				for x := exRing; x.Value == nil; x = x.Next() {
 					x.Value = &AVItem{DataItem: DataItem{Value: new(VideoPack)}}
 				}
-				vt.Link(exRing) // 扩大缓冲环
+				vt.AVRing.Link(exRing) // 扩大缓冲环
 			}
 		} else {
 			vt.idrCount--
 		}
 	}
-	vt.Step()
+	vt.AVRing.Step()
 	vt.setCurrent()
 }
 
@@ -402,8 +405,8 @@ func (vt *VideoTrack) Play(onVideo func(uint32, *VideoPack), exit1, exit2 <-chan
 	case <-exit2: //可能等不到关键帧就退出了
 		return
 	}
-	vr := vt.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
-	realSt := vt.PreItem().Timestamp // 当前时间戳
+	vr := vt.AVRing.SubRing(vt.IDRing)      //从关键帧开始读取，首屏秒开
+	realSt := vt.AVRing.PreItem().Timestamp // 当前时间戳
 	item, vp := vr.Read()
 	startTimestamp := item.Timestamp
 	for chase := true; ; item, vp = vr.Read() {
