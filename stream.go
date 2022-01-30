@@ -111,9 +111,10 @@ type Stream struct {
 
 func (r *Stream) Close() {
 	Streams.Lock()
+	delete(Streams.m, r.StreamPath)
+	Streams.Unlock()
 	//如果没有发布过，就不需要进行处理
 	if r.cancel == nil {
-		Streams.Unlock()
 		return
 	}
 	if r.closeDelay != nil {
@@ -121,15 +122,13 @@ func (r *Stream) Close() {
 	}
 	r.cancel()
 	r.cancel = nil
-	delete(Streams.m, r.StreamPath)
-	Streams.Unlock()
 	r.VideoTracks.Dispose()
 	r.AudioTracks.Dispose()
 	r.DataTracks.Dispose()
 	if r.OnClose != nil {
 		r.OnClose()
 	}
-	TriggerHook(HOOK_STREAMCLOSE, r)
+	TriggerHook(HOOK_STREAMCLOSE, r.StreamPath)
 	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
 }
 

@@ -1,10 +1,7 @@
 package engine
 
 import (
-	"context"
-	"reflect"
-	"runtime"
-	"sync"
+	"github.com/asaskevich/EventBus"
 )
 
 type TransCodeReq struct {
@@ -20,79 +17,18 @@ const (
 	HOOK_REQUEST_TRANSAUDIO = "RequestTransAudio"
 )
 
-var Hooks = make(map[string]*RingBuffer)
-var hookLocker sync.Mutex
+var bus = EventBus.New()
 
-func addHookRing(name string) (r *RingBuffer) {
-	r = r.Init(context.TODO(), 10)
-	Hooks[name] = r
-	return
-}
-
-func AddHooks(hooks map[string]interface{}) {
-	hookLocker.Lock()
-	for name, hook := range hooks {
-		rl, ok := Hooks[name]
-		if !ok {
-			rl = addHookRing(name)
-		}
-		vf := reflect.ValueOf(hook)
-		if vf.Kind() != reflect.Func {
-			panic("callback is not a function")
-		}
-		go rl.Clone().ReadLoop(vf.Call, false)
-	}
-	hookLocker.Unlock()
-}
-
-func addHook(name string, callback interface{}, async bool) {
-	hookLocker.Lock()
-	rl, ok := Hooks[name]
-	if !ok {
-		rl = addHookRing(name)
-	}
-	hookLocker.Unlock()
-	vf := reflect.ValueOf(callback)
-	if vf.Kind() != reflect.Func {
-		panic("callback is not a function")
-	}
-	rl.Clone().ReadLoop(vf.Call, async)
-}
-
+// AddHook add a new hook func and wait for the trigger
 func AddHook(name string, callback interface{}) {
-	addHook(name, callback, false)
+	bus.Subscribe(name, callback)
+
 }
 
 func AddHookGo(name string, callback interface{}) {
-	addHook(name, callback, true)
-}
-
-func AddHookConditional(name string, callback interface{}, goon func() bool) {
-	hookLocker.Lock()
-	rl, ok := Hooks[name]
-	if !ok {
-		rl = addHookRing(name)
-	}
-	hookLocker.Unlock()
-	vf := reflect.ValueOf(callback)
-	if vf.Kind() != reflect.Func {
-		panic("callback is not a function")
-	}
-	rl.Clone().ReadLoopConditional(vf.Call, goon)
+	bus.Subscribe(name, callback)
 }
 
 func TriggerHook(name string, payload ...interface{}) {
-	args := make([]reflect.Value, len(payload))
-	for i, arg := range payload {
-		args[i] = reflect.ValueOf(arg)
-	}
-	defer runtime.Gosched() //防止连续写入
-	hookLocker.Lock()
-	defer hookLocker.Unlock()
-	if rl, ok := Hooks[name]; ok {
-		rl.Write(args)
-	} else {
-		rl = addHookRing(name)
-		rl.Write(args)
-	}
+	bus.Publish(name, payload...)
 }
