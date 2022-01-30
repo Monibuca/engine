@@ -21,12 +21,12 @@ var bus = EventBus.New()
 
 // AddHook add a new hook func and wait for the trigger
 func AddHook(name string, callback interface{}) {
-	bus.Subscribe(name, callback)
+	bus.SubscribeAsync(name, callback, false)
 
 }
 
 func AddHookGo(name string, callback interface{}) {
-	bus.Subscribe(name, callback)
+	bus.SubscribeAsync(name, callback, false)
 }
 
 func TriggerHook(name string, payload ...interface{}) {
