@@ -135,7 +135,7 @@ func (r *Stream) Close() {
 		r.OnClose()
 	}
 	TriggerHook(HOOK_STREAMCLOSE, r.StreamPath)
-	utils.Print(Yellow("Stream destoryed :"), BrightCyan(r.StreamPath))
+	utils.Print(Yellow("Stream destroyed :"), BrightCyan(r.StreamPath))
 }
 
 // Publish 发布者进行发布操作
