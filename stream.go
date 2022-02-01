@@ -55,7 +55,7 @@ func init() {
 var Streams StreamCollection
 var StreamTimeoutError = errors.New("timeout")
 
-//FindStream 根据流路径查找流
+// FindStream 根据流路径查找流
 func FindStream(streamPath string) *Stream {
 	return Streams.GetStream(streamPath)
 }
@@ -93,21 +93,34 @@ func (r *StreamContext) Update() {
 
 // Stream 流定义
 type Stream struct {
-	URL            string //远程地址，仅远程拉流有值
-	StreamContext  `json:"-"`
-	StreamPath     string
-	Type           string        //流类型，来自发布者
-	StartTime      time.Time     //流的创建时间
-	Subscribers    []*Subscriber // 订阅者
-	VideoTracks    Tracks
-	AudioTracks    Tracks
-	DataTracks     Tracks
-	AutoCloseAfter *int              //当无人订阅时延迟N秒后自动停止发布
-	Transcoding    map[string]string //转码配置，key：目标编码，value：发布者提供的编码
+	//URL 远程地址，仅远程拉流有值
+	URL           string
+	StreamContext `json:"-"`
+	StreamPath    string
+
+	//Type 流类型，来自发布者
+	Type string
+
+	//StartTime 流的创建时间
+	StartTime time.Time
+
+	//Subscribers 订阅者
+	Subscribers []*Subscriber
+	VideoTracks Tracks
+	AudioTracks Tracks
+	DataTracks  Tracks
+
+	//AutoCloseAfter 当无人订阅时延迟N秒后自动停止发布
+	AutoCloseAfter *int
+
+	//Transcoding 转码配置，key：目标编码，value：发布者提供的编码
+	Transcoding    map[string]string
 	subscribeMutex sync.Mutex
-	OnClose        func()      `json:"-"`
-	ExtraProp      interface{} //额外的属性，用于实现子类化，减少map的使用
-	closeDelay     *time.Timer
+	OnClose        func() `json:"-"`
+
+	//ExtraProp 额外的属性，用于实现子类化，减少map的使用
+	ExtraProp  interface{}
+	closeDelay *time.Timer
 
 	//AppName 应用名
 	AppName string
