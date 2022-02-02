@@ -13,33 +13,45 @@ import (
 	"strings"
 	"time" // colorable
 
-	"github.com/Monibuca/utils/v3"
 	"github.com/google/uuid"
 
-	"github.com/Monibuca/engine/v3/util"
+	"github.com/Monibuca/engine/v4/util"
 
 	"github.com/BurntSushi/toml"
 	. "github.com/logrusorgru/aurora"
 )
 
-var Version = "3.2.2"
+var Version = "4.0.0"
+
+type Second int
+
+func (s Second) Duration() time.Duration {
+	return time.Duration(s) * time.Second
+}
+
+// StreamConfig 流的三级覆盖配置（全局，插件，流）
+type StreamConfig struct {
+	EnableAudio      bool
+	EnableVideo      bool
+	AutoReconnect    bool   // 自动重连
+	PullOnStart      bool   // 启动时拉流
+	PullOnSubscribe  bool   // 订阅时自动拉流
+	PublishTimeout   Second // 发布无数据超时
+	WaitTimeout      Second // 等待流超时
+	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
+}
 
 var (
 	config = &struct {
-		EnableAudio    bool
-		EnableVideo    bool
-		PublishTimeout time.Duration
-		MaxRingSize    int
-		AutoCloseAfter int
-		RTPReorder     bool
-	}{true, true, 60, 256, -1, false}
+		StreamConfig
+		RTPReorder bool
+	}{StreamConfig{true, true, true, true, true, 10, 10, 0}, false}
 	// ConfigRaw 配置信息的原始数据
-	ConfigRaw     []byte
-	StartTime     time.Time                        //启动时间
-	Plugins       = make(map[string]*PluginConfig) // Plugins 所有的插件配置
-	HasTranscoder bool
-	Ctx           context.Context
-	settingDir    string
+	ConfigRaw  []byte
+	StartTime  time.Time                        //启动时间
+	Plugins    = make(map[string]*PluginConfig) // Plugins 所有的插件配置
+	Ctx        context.Context
+	settingDir string
 )
 
 //PluginConfig 插件配置定义
@@ -61,11 +73,11 @@ func (opt *PluginConfig) Install(run func()) {
 		opt.Version = parts[len(parts)-1]
 	}
 	Plugins[opt.Name] = opt
-	utils.Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
+	util.Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
 }
 
 func init() {
-	if parts := strings.Split(utils.CurrentDir(), "@"); len(parts) > 1 {
+	if parts := strings.Split(util.CurrentDir(), "@"); len(parts) > 1 {
 		Version = parts[len(parts)-1]
 	}
 }
@@ -74,19 +86,19 @@ func init() {
 func Run(ctx context.Context, configFile string) (err error) {
 	Ctx = ctx
 	if err := util.CreateShutdownScript(); err != nil {
-		utils.Print(Red("create shutdown script error:"), err)
+		util.Print(Red("create shutdown script error:"), err)
 	}
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		utils.Print(Red("read config file error:"), err)
+		util.Print(Red("read config file error:"), err)
 		return
 	}
 	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
 	if err = os.MkdirAll(settingDir, 0755); err != nil {
-		utils.Print(Red("create dir .m7s error:"), err)
+		util.Print(Red("create dir .m7s error:"), err)
 		return
 	}
-	utils.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
+	util.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
 	var cg map[string]interface{}
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
 		if cfg, ok := cg["Engine"]; ok {
@@ -94,7 +106,6 @@ func Run(ctx context.Context, configFile string) (err error) {
 			if err = json.Unmarshal(b, config); err != nil {
 				log.Println(err)
 			}
-			config.PublishTimeout *= time.Second
 		}
 		for name, config := range Plugins {
 			if cfg, ok := cg[name]; ok {
@@ -112,7 +123,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 			}
 		}
 	} else {
-		utils.Print(Red("decode config file error:"), err)
+		util.Print(Red("decode config file error:"), err)
 	}
 	UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
@@ -122,7 +133,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	req.Header.Set("uuid", UUID)
 	var c http.Client
 	for {
-		req.Header.Set("streams", fmt.Sprintf("%d", len(Streams.m)))
+		req.Header.Set("streams", fmt.Sprintf("%d", Streams.Len()))
 		c.Do(req)
 		select {
 		case <-ctx.Done():

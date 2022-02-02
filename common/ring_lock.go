@@ -1,92 +1,46 @@
-package engine
+package common
 
 import (
-	"container/ring"
 	"context"
 	"reflect"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
-type DataItem struct {
-	Timestamp time.Time
-	Sequence  int
-	Value     interface{}
-}
-
-// TODO: 池化，泛型
-
-type LockItem struct {
-	DataItem
+type LockFrame[T any] struct {
+	DataFrame[T]
 	sync.RWMutex
 }
 
-type RingBuffer struct {
-	*ring.Ring
-	Size int
+type LockRing[T any] struct {
+	RingBuffer[LockFrame[T]]
+	ctx context.Context
 	Flag *int32
-	context.Context
 }
 
-func (rb *RingBuffer) Init(ctx context.Context, n int) *RingBuffer {
+func (lr *LockRing[T]) Init(ctx context.Context, n int) *LockRing[T] {
 	var flag int32
-	if rb == nil {
-		rb = &RingBuffer{Context: ctx, Ring: ring.New(n), Flag: &flag}
-	} else {
-		rb.Ring = ring.New(n)
-		rb.Size = n
-		rb.Context = ctx
-		rb.Flag = &flag
+	if lr == nil {
+		lr = &LockRing[T]{}
 	}
-	for x := rb.Ring; x.Value == nil; x = x.Next() {
-		x.Value = new(LockItem)
-	}
-	rb.Current().Lock()
-	return rb
+	lr.ctx = ctx
+	lr.RingBuffer.Init(n)
+	lr.Flag = &flag
+	lr.Value.Lock()
+	return lr
 }
 
-func (rb RingBuffer) Clone() *RingBuffer {
-	return &rb
-}
-
-func (rb RingBuffer) SubRing(rr *ring.Ring) *RingBuffer {
-	rb.Ring = rr
-	return &rb
-}
-
-func (rb *RingBuffer) CurrentValue() interface{} {
-	return rb.Current().Value
-}
-
-func (rb *RingBuffer) NextValue() interface{} {
-	return rb.Next().Value.(*LockItem).Value
-}
-
-func (rb *RingBuffer) Current() *LockItem {
-	return rb.Ring.Value.(*LockItem)
-}
-
-func (rb *RingBuffer) MoveNext() {
-	rb.Ring = rb.Next()
-}
-
-func (rb *RingBuffer) GetNext() *LockItem {
-	rb.MoveNext()
-	return rb.Current()
-}
-
-func (rb *RingBuffer) Read() interface{} {
-	current := rb.Current()
+func (rb *LockRing[T]) Read() *DataFrame[T] {
+	current := rb.Value
 	current.RLock()
 	defer current.RUnlock()
-	return current.Value
+	return &current.DataFrame
 }
 
-func (rb *RingBuffer) Step() {
-	last := rb.Current()
+func (rb *LockRing[T]) Step() {
+	last := &rb.Value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
-		current := rb.GetNext()
+		current := rb.MoveNext()
 		current.Lock()
 		last.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
@@ -96,11 +50,11 @@ func (rb *RingBuffer) Step() {
 	}
 }
 
-func (rb *RingBuffer) Write(value interface{}) {
-	last := rb.Current()
+func (rb *LockRing[T]) Write(value T) {
+	last := &rb.Value
 	last.Value = value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
-		current := rb.GetNext()
+		current := rb.MoveNext()
 		current.Lock()
 		last.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
@@ -110,8 +64,8 @@ func (rb *RingBuffer) Write(value interface{}) {
 	}
 }
 
-func (rb *RingBuffer) Dispose() {
-	current := rb.Current()
+func (rb *LockRing[T]) Dispose() {
+	current := &rb.Value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 2) {
 		current.Unlock()
 	} else if atomic.CompareAndSwapInt32(rb.Flag, 1, 2) {
@@ -121,22 +75,22 @@ func (rb *RingBuffer) Dispose() {
 	}
 }
 
-func (rb *RingBuffer) read() reflect.Value {
+func (rb *LockRing[T]) read() reflect.Value {
 	return reflect.ValueOf(rb.Read())
 }
 
-func (rb *RingBuffer) nextRead() reflect.Value {
+func (rb *LockRing[T]) nextRead() reflect.Value {
 	rb.MoveNext()
 	return rb.read()
 }
 
-func (rb *RingBuffer) condition() bool {
-	return rb.Err() == nil && *rb.Flag != 2
+func (rb *LockRing[T]) condition() bool {
+	return rb.ctx.Err() == nil && *rb.Flag != 2
 }
 
 // ReadLoop 循环读取，采用了反射机制，不适用高性能场景
 // handler入参可以传入回调函数或者channel
-func (rb *RingBuffer) ReadLoop(handler interface{}, async bool) {
+func (rb *LockRing[T]) ReadLoop(handler interface{}, async bool) {
 	if async {
 		rb.ReadLoopConditionalGo(handler, rb.condition)
 	} else {
@@ -145,7 +99,7 @@ func (rb *RingBuffer) ReadLoop(handler interface{}, async bool) {
 }
 
 // goon判断函数用来判断是否继续读取,返回false将终止循环
-func (rb *RingBuffer) ReadLoopConditional(handler interface{}, goon func() bool) {
+func (rb *LockRing[T]) ReadLoopConditional(handler interface{}, goon func() bool) {
 	switch t := reflect.ValueOf(handler); t.Kind() {
 	case reflect.Chan:
 		for v := rb.read(); goon(); v = rb.nextRead() {
@@ -159,7 +113,7 @@ func (rb *RingBuffer) ReadLoopConditional(handler interface{}, goon func() bool)
 }
 
 // goon判断函数用来判断是否继续读取,返回false将终止循环
-func (r *RingBuffer) ReadLoopConditionalGo(handler interface{}, goon func() bool) {
+func (r *LockRing[T]) ReadLoopConditionalGo(handler interface{}, goon func() bool) {
 	switch t := reflect.ValueOf(handler); t.Kind() {
 	case reflect.Chan:
 		for v := r.read(); goon(); v = r.nextRead() {
