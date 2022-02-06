@@ -10,8 +10,17 @@ func PutBE[T constraints.Integer](b []byte, num T) []byte {
 }
 
 func ReadBE[T constraints.Integer](b []byte) (num T) {
+	num = 0
 	for i, n := 0, len(b); i < n; i++ {
 		num += T(b[i]) << ((n - i - 1) << 3)
 	}
 	return
+}
+
+func GetBE[T constraints.Integer](b []byte, num *T) T {
+	*num = 0
+	for i, n := 0, len(b); i < n; i++ {
+		*num += T(b[i]) << ((n - i - 1) << 3)
+	}
+	return *num
 }

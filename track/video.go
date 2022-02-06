@@ -1,6 +1,8 @@
 package track
 
 import (
+	"bytes"
+	"net"
 	"strings"
 
 	"github.com/Monibuca/engine/v4/codec"
@@ -8,13 +10,7 @@ import (
 	"github.com/Monibuca/engine/v4/util"
 )
 
-type Video interface {
-	AVTrack
-	ReadRing() *AVRing[NALUSlice]
-	Play(onVideo func(*AVFrame[NALUSlice]) bool)
-}
-
-type H264H265 struct {
+type Video struct {
 	Media[NALUSlice]
 	IDRing      *util.Ring[AVFrame[NALUSlice]] `json:"-"` //最近的关键帧位置，首屏渲染
 	SPSInfo     codec.SPSInfo
@@ -23,7 +19,14 @@ type H264H265 struct {
 	idrCount    int //缓存中包含的idr数量
 }
 
-func (t *H264H265) ComputeGOP() {
+func (t *Video) GetName() string {
+	if t.Name == "" {
+		return strings.ToLower(codec.CodecID[t.CodecID])
+	}
+	return t.Name
+}
+
+func (t *Video) ComputeGOP() {
 	t.idrCount++
 	if t.IDRing != nil {
 		t.GOP = int(t.Value.SeqInTrack - t.IDRing.Value.SeqInTrack)
@@ -41,7 +44,38 @@ func (t *H264H265) ComputeGOP() {
 	t.IDRing = t.Ring
 }
 
-func (vt *H264H265) WriteAVCC(ts uint32, frame AVCCFrame) {
+func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
+	for len(annexb) > 0 {
+		before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
+		if !found {
+			vt.WriteSlice(NALUSlice{annexb})
+			return
+		}
+		if len(before) > 0 {
+			vt.WriteSlice(NALUSlice{before})
+		}
+		annexb = after
+	}
+}
+
+func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
+	for len(frame) > 0 {
+		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)
+		if !found {
+			vt.writeAnnexBSlice(frame)
+			if len(vt.Value.Raw) > 0 {
+				vt.Value.PTS = pts
+				vt.Value.DTS = dts
+			}
+			return
+		}
+		if len(before) > 0 {
+			vt.writeAnnexBSlice(AnnexBFrame(before))
+		}
+		frame = after
+	}
+}
+func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	vt.Media.WriteAVCC(ts, frame)
 	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
 		nalulen := util.ReadBE[int](nalus[:vt.nalulenSize])
@@ -53,10 +87,9 @@ func (vt *H264H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 			break
 		}
 	}
-	vt.Flush()
 }
 
-func (vt *H264H265) Flush() {
+func (vt *Video) Flush() {
 	// AVCC格式补完
 	if vt.Value.AVCC == nil {
 		b := []byte{vt.CodecID, 1, 0, 0, 0}
@@ -69,7 +102,7 @@ func (vt *H264H265) Flush() {
 		util.PutBE(b[2:5], vt.SampleRate.ToMini(vt.Value.PTS-vt.Value.DTS))
 		vt.Value.AppendAVCC(b)
 		for _, nalu := range vt.Value.Raw {
-			vt.Value.AppendAVCC(util.PutBE(make([]byte, 4), SizeOfBuffers(nalu)))
+			vt.Value.AppendAVCC(util.PutBE(make([]byte, 4), util.SizeOfBuffers(net.Buffers(nalu))))
 			vt.Value.AppendAVCC(nalu...)
 		}
 	}
@@ -86,12 +119,12 @@ func (vt *H264H265) Flush() {
 	}
 	vt.Media.Flush()
 }
-func (vt *H264H265) ReadRing() *AVRing[NALUSlice] {
+func (vt *Video) ReadRing() *AVRing[NALUSlice] {
 	vr := util.Clone(vt.AVRing)
 	vr.Ring = vt.IDRing
 	return vr
 }
-func (vt *H264H265) Play(onVideo func(*AVFrame[NALUSlice]) bool) {
+func (vt *Video) Play(onVideo func(*AVFrame[NALUSlice]) bool) {
 	vr := vt.ReadRing()
 	for vp := vr.Read(); vt.Stream.Err() == nil; vp = vr.Read() {
 		if !onVideo(vp) {
@@ -104,9 +137,24 @@ func (vt *H264H265) Play(onVideo func(*AVFrame[NALUSlice]) bool) {
 type UnknowVideo struct {
 	Name   string
 	Stream IStream
-	Know   Video
+	Know   AVTrack
 }
 
+/*
+Access Unit的首个nalu是4字节起始码。
+这里举个例子说明，用JM可以生成这样一段码流（不要使用JM8.6，它在这部分与标准不符），这个码流可以见本楼附件：
+    SPS          （4字节头）
+    PPS          （4字节头）
+    SEI          （4字节头）
+    I0(slice0)     （4字节头）
+    I0(slice1)   （3字节头）
+    P1(slice0)     （4字节头）
+    P1(slice1)   （3字节头）
+    P2(slice0)     （4字节头）
+    P2(slice1)   （3字节头）
+I0(slice0)是序列第一帧（I帧）的第一个slice，是当前Access Unit的首个nalu，所以是4字节头。而I0(slice1)表示第一帧的第二个slice，所以是3字节头。P1(slice0) 、P1(slice1)同理。
+
+*/
 func (vt *UnknowVideo) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 
 }
@@ -123,12 +171,10 @@ func (vt *UnknowVideo) WriteAVCC(ts uint32, frame AVCCFrame) {
 				v := NewH264(vt.Stream)
 				vt.Know = v
 				v.WriteAVCC(0, frame)
-				v.Stream.AddTrack(v.Name, v)
 			case codec.CodecID_H265:
 				v := NewH265(vt.Stream)
 				vt.Know = v
 				v.WriteAVCC(0, frame)
-				v.Stream.AddTrack(v.Name, v)
 			}
 		}
 	} else {

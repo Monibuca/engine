@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	. "github.com/Monibuca/engine/v4/common"
+	"github.com/Monibuca/engine/v4/util"
 )
 
 type Tracks struct {
@@ -27,16 +28,18 @@ func (ts *Tracks) Init(ctx context.Context) {
 	ts.Context = ctx
 }
 
-func (ts *Tracks) AddTrack(name string, t Track) {
+func (ts *Tracks) AddTrack(t Track) {
 	ts.Lock()
 	defer ts.Unlock()
+	name := t.GetName()
 	if _, ok := ts.m[name]; !ok {
+		util.Println("Track", name, "added")
 		if ts.m[name] = t; ts.Err() == nil {
-			for i, ch := range ts.waiters[name] {
-				if ch != nil {
+			for _, ch := range ts.waiters[name] {
+				if *ch != nil {
 					*ch <- t
 					close(*ch)
-					ts.waiters[name][i] = nil //通过设置为nil，防止重复通知
+					*ch = nil //通过设置为nil，防止重复通知
 				}
 			}
 		}
@@ -54,10 +57,10 @@ func (ts *Tracks) WaitDone() {
 	ts.Lock()
 	defer ts.Unlock()
 	for _, chs := range ts.waiters {
-		for i, ch := range chs {
-			if ch != nil {
+		for _, ch := range chs {
+			if *ch != nil {
 				close(*ch)
-				chs[i] = nil //通过设置为nil，防止重复关闭
+				*ch = nil //通过设置为nil，防止重复关闭
 			}
 		}
 	}

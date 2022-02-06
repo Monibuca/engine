@@ -20,11 +20,9 @@ func NewG711(stream IStream, alaw bool) (g711 *G711) {
 	return
 }
 
-type G711 struct {
-	BaseAudio
-}
+type G711 Audio
 
 func (g711 *G711) WriteAVCC(ts uint32, frame AVCCFrame) {
 	g711.Value.AppendRaw(AudioSlice(frame[1:]))
-	g711.BaseAudio.WriteAVCC(ts, frame)
+	(*Audio)(g711).WriteAVCC(ts, frame)
 }

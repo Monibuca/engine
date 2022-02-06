@@ -1,14 +1,19 @@
 package util
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
-	"os"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 )
+
+type TCPListener interface {
+	context.Context
+	Process(*net.TCPConn)
+}
 
 // ListenAddrs Listen http and https
 func ListenAddrs(addr, addTLS, cert, key string, handler http.Handler) {
@@ -26,15 +31,18 @@ func ListenAddrs(addr, addTLS, cert, key string, handler http.Handler) {
 	}
 }
 
-func ListenTCP(addr string, process func(net.Conn)) error {
-	listener, err := net.Listen("tcp", addr)
+func ListenTCP(addr string, process TCPListener) error {
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
+	go func() {
+		<-process.Done()
+		l.Close()
+	}()
 	var tempDelay time.Duration
 	for {
-		conn, err := listener.Accept()
-		conn.(*net.TCPConn).SetNoDelay(false)
+		conn, err := l.Accept()
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				if tempDelay == 0 {
@@ -51,8 +59,9 @@ func ListenTCP(addr string, process func(net.Conn)) error {
 			}
 			return err
 		}
+		conn.(*net.TCPConn).SetNoDelay(false)
 		tempDelay = 0
-		go process(conn)
+		go process.Process(conn.(*net.TCPConn))
 	}
 }
 
@@ -82,11 +91,4 @@ func CORS(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Access-Control-Allow-Origin", origin[0])
 	}
-}
-
-// 检查文件或目录是否存在
-// 如果由 filename 指定的文件或目录存在则返回 true，否则返回 false
-func Exist(filename string) bool {
-	_, err := os.Stat(filename)
-	return err == nil || os.IsExist(err)
 }

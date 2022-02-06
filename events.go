@@ -10,6 +10,7 @@ type TransCodeReq struct {
 }
 
 const (
+	Event_REQUEST_PUBLISH    = "RequestPublish" //当前流丢失发布者，或者订阅者订阅了空流时触发
 	Event_SUBSCRIBE          = "Subscribe"
 	Event_UNSUBSCRIBE        = "UnSubscibe"
 	Event_STREAMCLOSE        = "StreamClose"

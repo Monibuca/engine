@@ -3,14 +3,13 @@ package common
 import "time"
 
 type Track interface {
-	Get(size int) (result []byte)
-	Put(b []byte)
+	GetName() string
 }
 
 type AVTrack interface {
 	Track
 	WriteAVCC(ts uint32, frame AVCCFrame) //写入AVCC格式的数据
-	Flush()     
+	Flush()
 }
 
 type BPS struct {

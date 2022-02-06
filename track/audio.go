@@ -8,22 +8,25 @@ import (
 	"github.com/Monibuca/engine/v4/util"
 )
 
-type Audio interface {
-	AVTrack
-	ReadRing() *AVRing[AudioSlice]
-	Play(onAudio func(*AVFrame[AudioSlice]) bool)
-}
-
-type BaseAudio struct {
+type Audio struct {
 	Media[AudioSlice]
 	Channels byte
 	avccHead []byte
 }
 
-func (at *BaseAudio) ReadRing() *AVRing[AudioSlice] {
+func (av *Audio) GetName() string {
+	if av.Name == "" {
+		return strings.ToLower(codec.SoundFormat[av.CodecID])
+	}
+	return av.Name
+}
+func (at *Audio) GetInfo() *Audio {
+	return at
+}
+func (at *Audio) ReadRing() *AVRing[AudioSlice] {
 	return util.Clone(at.AVRing)
 }
-func (at *BaseAudio) Play(onAudio func(*AVFrame[AudioSlice]) bool) {
+func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) bool) {
 	ar := at.ReadRing()
 	for ap := ar.Read(); at.Stream.Err() == nil; ap = ar.Read() {
 		if !onAudio(ap) {
@@ -33,12 +36,12 @@ func (at *BaseAudio) Play(onAudio func(*AVFrame[AudioSlice]) bool) {
 	}
 }
 
-func (at *BaseAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
+func (at *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 	at.Media.WriteAVCC(ts, frame)
 	at.Flush()
 }
 
-func (at *BaseAudio) Flush() {
+func (at *Audio) Flush() {
 	if at.Value.AVCC == nil {
 		at.Value.AppendAVCC(at.avccHead)
 		for _, raw := range at.Value.Raw {
@@ -51,7 +54,7 @@ func (at *BaseAudio) Flush() {
 type UnknowAudio struct {
 	Name   string
 	Stream IStream
-	Know   Audio
+	Know   AVTrack
 }
 
 func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
@@ -69,7 +72,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			at.Know = a
 			a.avccHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
-			a.Stream.AddTrack(a.Name, a)
+			a.Stream.AddTrack(a)
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
 			alaw := true
@@ -81,7 +84,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			a.SampleRate = HZ(codec.SoundRate[(frame[0]&0x0c)>>2])
 			a.Channels = frame[0]&0x01 + 1
 			a.avccHead = frame[:1]
-			a.Stream.AddTrack(a.Name, a)
+			a.Stream.AddTrack(a)
 		}
 	} else {
 		at.Know.WriteAVCC(ts, frame)

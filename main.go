@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"time" // colorable
@@ -30,50 +31,75 @@ func (s Second) Duration() time.Duration {
 }
 
 // StreamConfig 流的三级覆盖配置（全局，插件，流）
-type StreamConfig struct {
+
+type PublishConfig struct {
 	EnableAudio      bool
 	EnableVideo      bool
+	KillExit         bool   // 是否踢掉已经存在的发布者
 	AutoReconnect    bool   // 自动重连
 	PullOnStart      bool   // 启动时拉流
 	PullOnSubscribe  bool   // 订阅时自动拉流
 	PublishTimeout   Second // 发布无数据超时
-	WaitTimeout      Second // 等待流超时
 	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
 }
 
+type SubscribeConfig struct {
+	EnableAudio bool
+	EnableVideo bool
+	IFrameOnly  bool   // 只要关键帧
+	WaitTimeout Second // 等待流超时
+}
+
 var (
+	DefaultPublishConfig = PublishConfig{
+		true, true, false, true, true, true, 10, 10,
+	}
+	DefaultSubscribeConfig = SubscribeConfig{
+		true, true, false, 10,
+	}
 	config = &struct {
-		StreamConfig
+		Publish    PublishConfig
+		Subscribe  SubscribeConfig
 		RTPReorder bool
-	}{StreamConfig{true, true, true, true, true, 10, 10, 0}, false}
+	}{DefaultPublishConfig, DefaultSubscribeConfig, false}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw  []byte
-	StartTime  time.Time                        //启动时间
-	Plugins    = make(map[string]*PluginConfig) // Plugins 所有的插件配置
+	StartTime  time.Time                  //启动时间
+	Plugins    = make(map[string]*Plugin) // Plugins 所有的插件配置
 	Ctx        context.Context
 	settingDir string
 )
 
-//PluginConfig 插件配置定义
-type PluginConfig struct {
-	Name      string                       //插件名称
-	Config    interface{}                  //插件配置
-	Version   string                       //插件版本
-	Dir       string                       //插件代码路径
-	Run       func()                       //插件启动函数
-	HotConfig map[string]func(interface{}) //热修改配置
+type PluginConfig interface {
+	Update(map[string]any)
 }
 
-// InstallPlugin 安装插件
-func (opt *PluginConfig) Install(run func()) {
-	opt.Run = run
-	_, pluginFilePath, _, _ := runtime.Caller(1)
-	opt.Dir = filepath.Dir(pluginFilePath)
-	if parts := strings.Split(opt.Dir, "@"); len(parts) > 1 {
-		opt.Version = parts[len(parts)-1]
+func InstallPlugin(config PluginConfig) *Plugin {
+	name := strings.TrimSuffix(reflect.TypeOf(config).Elem().Name(), "Config")
+	plugin := &Plugin{
+		Name:     name,
+		Config:   config,
+		Modified: make(map[string]any),
 	}
-	Plugins[opt.Name] = opt
-	util.Print(Green("install plugin"), BrightCyan(opt.Name), BrightBlue(opt.Version))
+	_, pluginFilePath, _, _ := runtime.Caller(1)
+	configDir := filepath.Dir(pluginFilePath)
+	if parts := strings.Split(configDir, "@"); len(parts) > 1 {
+		plugin.Version = parts[len(parts)-1]
+	}
+	if _, ok := Plugins[name]; ok {
+		return nil
+	}
+	Plugins[name] = plugin
+	log.Print(Green("install plugin"), BrightCyan(name), BrightBlue(plugin.Version))
+	return plugin
+}
+
+// Plugin 插件配置定义
+type Plugin struct {
+	Name     string         //插件名称
+	Config   PluginConfig   //插件配置
+	Version  string         //插件版本
+	Modified map[string]any //修改过的配置项
 }
 
 func init() {
@@ -86,20 +112,20 @@ func init() {
 func Run(ctx context.Context, configFile string) (err error) {
 	Ctx = ctx
 	if err := util.CreateShutdownScript(); err != nil {
-		util.Print(Red("create shutdown script error:"), err)
+		log.Print(Red("create shutdown script error:"), err)
 	}
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		util.Print(Red("read config file error:"), err)
+		log.Print(Red("read config file error:"), err)
 		return
 	}
 	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
 	if err = os.MkdirAll(settingDir, 0755); err != nil {
-		util.Print(Red("create dir .m7s error:"), err)
+		log.Print(Red("create dir .m7s error:"), err)
 		return
 	}
 	util.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
-	var cg map[string]interface{}
+	var cg map[string]any
 	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
 		if cfg, ok := cg["Engine"]; ok {
 			b, _ := json.Marshal(cfg)
@@ -107,23 +133,13 @@ func Run(ctx context.Context, configFile string) (err error) {
 				log.Println(err)
 			}
 		}
-		for name, config := range Plugins {
-			if cfg, ok := cg[name]; ok {
-				config.updateSettings(cfg.(map[string]interface{}))
-				b, _ := json.Marshal(cfg)
-				if err = json.Unmarshal(b, config.Config); err != nil {
-					log.Println(err)
-					continue
-				}
-			} else if config.Config != nil {
-				continue
-			}
-			if config.Run != nil {
-				go config.Run()
-			}
+	}
+	for name, config := range Plugins {
+		var cfg map[string]any
+		if v, ok := cg[name]; ok {
+			cfg = v.(map[string]any)
 		}
-	} else {
-		util.Print(Red("decode config file error:"), err)
+		config.Update(cfg)
 	}
 	UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
@@ -142,36 +158,54 @@ func Run(ctx context.Context, configFile string) (err error) {
 		}
 	}
 }
-func objectAssign(target, source map[string]interface{}) {
+func objectAssign(target, source map[string]any) {
 	for k, v := range source {
 		if _, ok := target[k]; !ok {
 			target[k] = v
 		} else {
 			switch v := v.(type) {
-			case map[string]interface{}:
-				objectAssign(target[k].(map[string]interface{}), v)
+			case map[string]any:
+				objectAssign(target[k].(map[string]any), v)
 			default:
 				target[k] = v
 			}
 		}
 	}
 }
-func (opt *PluginConfig) updateSettings(cfg map[string]interface{}) {
+
+// Update 更新配置
+func (opt *Plugin) Update(cfg map[string]any) {
 	if setting, err := ioutil.ReadFile(opt.settingPath()); err == nil {
 		var cg map[string]interface{}
 		if _, err = toml.Decode(string(setting), &cg); err == nil {
-			objectAssign(cfg, cg)
+			if cfg == nil {
+				cfg = cg
+			} else {
+				objectAssign(cfg, cg)
+			}
 		}
 	}
+	// TODO: map转成struct优化
+	if cfg != nil {
+		b, _ := json.Marshal(cfg)
+		for k, v := range cfg {
+			opt.Modified[k] = v
+		}
+		if err := json.Unmarshal(b, opt.Config); err != nil {
+			log.Println(err)
+		}
+	}
+	go opt.Config.Update(cfg)
 }
-func (opt *PluginConfig) settingPath() string {
+func (opt *Plugin) settingPath() string {
 	return filepath.Join(settingDir, opt.Name+".toml")
 }
-func (opt *PluginConfig) Save() error {
+
+func (opt *Plugin) Save() error {
 	file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		defer file.Close()
-		err = toml.NewEncoder(file).Encode(opt.Config)
+		err = toml.NewEncoder(file).Encode(opt.Modified)
 	}
 	return err
 }

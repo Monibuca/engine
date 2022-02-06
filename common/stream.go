@@ -5,5 +5,5 @@ import "context"
 type IStream interface {
 	context.Context
 	Update() uint32
-	AddTrack(string, Track)
+	AddTrack(Track)
 }

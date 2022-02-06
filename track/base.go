@@ -13,6 +13,10 @@ type Base struct {
 	BPS
 }
 
+func (bt *Base) GetName() string {
+	return bt.Name
+}
+
 func (bt *Base) Flush(bf *BaseFrame) {
 	bt.ComputeBPS(bf.BytesIn)
 	bf.SeqInStream = bt.Stream.Update()
@@ -26,6 +30,7 @@ type Media[T RawSlice] struct {
 	SampleRate           HZ
 	DecoderConfiguration AVFrame[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	util.BytesPool                  //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
+	lastAvccTS           uint32     //上一个avcc帧的时间戳
 }
 
 func (av *Media[T]) WriteRTP(raw []byte) {
@@ -44,6 +49,11 @@ func (av *Media[T]) WriteSlice(slice T) {
 	av.Value.AppendRaw(slice)
 }
 func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
+	if av.lastAvccTS == 0 {
+		av.lastAvccTS = ts
+	} else {
+		av.Value.DeltaTime = ts - av.lastAvccTS
+	}
 	av.Value.BytesIn = len(frame)
 	av.Value.AppendAVCC(frame)
 	av.Value.DTS = av.SampleRate.ToNTS(ts)

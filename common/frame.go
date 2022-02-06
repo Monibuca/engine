@@ -11,16 +11,6 @@ import (
 type NALUSlice net.Buffers
 type H264Slice NALUSlice
 type H265Slice NALUSlice
-type BuffersType interface {
-	NALUSlice | net.Buffers
-}
-
-func SizeOfBuffers[T BuffersType](buf T) (size int) {
-	for _, b := range buf {
-		size += len(b)
-	}
-	return
-}
 
 type H264NALU []NALUSlice
 type H265NALU []NALUSlice
@@ -34,14 +24,11 @@ type RawSlice interface {
 	NALUSlice | AudioSlice
 }
 
-func (nalu H264NALU) IFrame() bool {
-	return H264Slice(nalu[0]).Type() == codec.NALU_IDR_Picture
-}
 func (nalu *H264NALU) Append(slice ...NALUSlice) {
 	*nalu = append(*nalu, slice...)
 }
 func (nalu H264Slice) Type() byte {
-	return nalu[0][0] & 0b0001_1111
+	return nalu[0][0] & 0x1F
 }
 func (nalu H265Slice) Type() byte {
 	return nalu[0][0] & 0x7E >> 1
@@ -124,3 +111,30 @@ func (avcc AVCCFrame) VideoCodecID() byte {
 func (avcc AVCCFrame) AudioCodecID() byte {
 	return avcc[0] >> 4
 }
+
+// func (annexb AnnexBFrame) ToSlices() (ret []NALUSlice) {
+// 	for len(annexb) > 0 {
+// 		before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
+// 		if !found {
+// 			return append(ret, NALUSlice{annexb})
+// 		}
+// 		if len(before) > 0 {
+// 			ret = append(ret, NALUSlice{before})
+// 		}
+// 		annexb = after
+// 	}
+// 	return
+// }
+// func (annexb AnnexBFrame) ToNALUs() (ret [][]NALUSlice) {
+// 	for len(annexb) > 0 {
+// 		before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
+// 		if !found {
+// 			return append(ret, annexb.ToSlices())
+// 		}
+// 		if len(before) > 0 {
+// 			ret = append(ret, AnnexBFrame(before).ToSlices())
+// 		}
+// 		annexb = after
+// 	}
+// 	return
+// }

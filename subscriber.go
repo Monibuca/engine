@@ -3,12 +3,10 @@ package engine
 import (
 	"context"
 	"net/url"
-	"sync"
 	"time"
 
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/track"
-	"github.com/pkg/errors"
 )
 
 type AudioFrame AVFrame[AudioSlice]
@@ -18,7 +16,8 @@ type VideoFrame AVFrame[NALUSlice]
 type Subscriber struct {
 	context.Context `json:"-"`
 	cancel          context.CancelFunc
-	*Stream         `json:"-"`
+	Config          SubscribeConfig
+	Stream          *Stream `json:"-"`
 	ID              string
 	TotalDrop       int //总丢帧
 	TotalPacket     int
@@ -29,44 +28,36 @@ type Subscriber struct {
 	SubscribeArgs   url.Values
 	OnAudio         func(*AudioFrame) bool `json:"-"`
 	OnVideo         func(*VideoFrame) bool `json:"-"`
-	closeOnce       sync.Once
 }
 
-func (s *Subscriber) close() {
-	if s.Stream != nil {
-		s.UnSubscribe(s)
-	}
+// Close 关闭订阅者
+func (s *Subscriber) Close() {
+	s.Stream.UnSubscribe(s)
 	if s.cancel != nil {
 		s.cancel()
 	}
 }
 
-// Close 关闭订阅者
-func (s *Subscriber) Close() {
-	s.closeOnce.Do(s.close)
-}
-
 //Subscribe 开始订阅 将Subscriber与Stream关联
-func (s *Subscriber) Subscribe(streamPath string) error {
-	if u, err := url.Parse(streamPath); err != nil {
-		return err
-	} else if s.SubscribeArgs, err = url.ParseQuery(u.RawQuery); err != nil {
-		return err
-	} else {
-		streamPath = u.Path
+func (sub *Subscriber) Subscribe(streamPath string, config SubscribeConfig) bool {
+	Streams.Lock()
+	defer Streams.Unlock()
+	s, created := findOrCreateStream(streamPath, config.WaitTimeout.Duration())
+	if s.IsClosed() {
+		return false
 	}
-	if stream := Streams.Get(streamPath); stream == nil {
-		return errors.Errorf("subscribe %s faild :stream not found", streamPath)
-	} else {
-		if stream.Subscribe(s); s.Context == nil {
-			return errors.Errorf("subscribe %s faild :stream closed", streamPath)
-		}
+	if created {
+		Bus.Publish(Event_REQUEST_PUBLISH, s)
+		go s.run()
 	}
-	return nil
+	if s.Subscribe(sub); sub.Stream != nil {
+		sub.Config = config
+	}
+	return true
 }
 
 //Play 开始播放
-func (s *Subscriber) Play(at track.Audio, vt track.Video) {
+func (s *Subscriber) Play(at *track.Audio, vt *track.Video) {
 	defer s.Close()
 	if vt == nil && at == nil {
 		return
@@ -83,14 +74,18 @@ func (s *Subscriber) Play(at track.Audio, vt track.Video) {
 	vp := vr.Read()
 	ap := ar.TryRead()
 	// chase := true
-	for {
+	for s.Err() == nil {
 		if ap == nil && vp == nil {
 			time.Sleep(time.Millisecond * 10)
 		} else if ap != nil && (vp == nil || vp.SeqInStream > ap.SeqInStream) {
-			s.onAudio(ap)
+			if !s.onAudio(ap) {
+				return
+			}
 			ar.MoveNext()
 		} else if vp != nil && (ap == nil || ap.SeqInStream > vp.SeqInStream) {
-			s.onVideo(vp)
+			if !s.onVideo(vp) {
+				return
+			}
 			// if chase {
 			// 	if add10 := vst.Add(time.Millisecond * 10); realSt.After(add10) {
 			// 		vst = add10
@@ -111,9 +106,42 @@ func (s *Subscriber) onAudio(af *AVFrame[AudioSlice]) bool {
 func (s *Subscriber) onVideo(vf *AVFrame[NALUSlice]) bool {
 	return s.OnVideo((*VideoFrame)(vf))
 }
-func (s *Subscriber) PlayAudio(vt track.Audio) {
+func (s *Subscriber) PlayAudio(vt *track.Audio) {
 	vt.Play(s.onAudio)
 }
-func (s *Subscriber) PlayVideo(vt track.Video) {
+func (s *Subscriber) PlayVideo(vt *track.Video) {
 	vt.Play(s.onVideo)
+}
+func (r *Subscriber) WaitVideoTrack(names ...string) *track.Video {
+	if !r.Config.EnableVideo {
+		return nil
+	}
+	if t := <-r.Stream.WaitTrack(names...); t == nil {
+		return nil
+	} else {
+		switch vt := t.(type) {
+		case *track.H264:
+			return (*track.Video)(vt)
+		case *track.H265:
+			return (*track.Video)(vt)
+		}
+		return nil
+	}
+}
+
+func (r *Subscriber) WaitAudioTrack(names ...string) *track.Audio {
+	if !r.Config.EnableAudio {
+		return nil
+	}
+	if t := <-r.Stream.WaitTrack(names...); t == nil {
+		return nil
+	} else {
+		switch at := t.(type) {
+		case *track.AAC:
+			return (*track.Audio)(at)
+		case *track.G711:
+			return (*track.Audio)(at)
+		}
+		return nil
+	}
 }

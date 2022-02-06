@@ -1,13 +1,15 @@
 package track
 
 import (
+	"time"
+
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
-	"time"
 )
 
 func NewAAC(stream IStream) (aac *AAC) {
 	aac = &AAC{}
+	aac.Name = "aac"
 	aac.Stream = stream
 	aac.CodecID = codec.CodecID_AAC
 	aac.Init(stream, 32)
@@ -15,9 +17,7 @@ func NewAAC(stream IStream) (aac *AAC) {
 	return
 }
 
-type AAC struct {
-	BaseAudio
-}
+type AAC Audio
 
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
@@ -33,6 +33,6 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 		aac.SampleRate = HZ(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
 		aac.DecoderConfiguration.AppendRaw(AudioSlice(frame[2:]))
 	} else {
-		aac.BaseAudio.WriteAVCC(ts, frame)
+		(*Audio)(aac).WriteAVCC(ts, frame)
 	}
 }

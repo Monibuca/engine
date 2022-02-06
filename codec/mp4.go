@@ -80,7 +80,7 @@ type FileTypeBox struct {
 
 func NewFileTypeBox() (box *FileTypeBox) {
 	box = new(FileTypeBox)
-	box.MP4BoxHeader.BoxType = util.ReadBE[uint32]([]byte("ftyp"))
+	util.GetBE([]byte("ftyp"), &box.MP4BoxHeader.BoxType)
 	return
 }
 
@@ -121,9 +121,7 @@ type MovieBox struct {
 
 func NewMovieBox() (box *MovieBox) {
 	box = new(MovieBox)
-
-	box.MP4BoxHeader.BoxType = util.ReadBE[uint32]([]byte("moov"))
-
+	util.GetBE([]byte("moov"), &box.MP4BoxHeader.BoxType)
 	return
 }
 
