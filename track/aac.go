@@ -30,7 +30,7 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 		// 3 AAC SSR 	ISO/IEC 14496-3 subpart 4
 		// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
 		aac.Channels = ((config2 >> 3) & 0x0F) //声道
-		aac.SampleRate = HZ(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
+		aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
 		aac.DecoderConfiguration.AppendRaw(AudioSlice(frame[2:]))
 		aac.DecoderConfiguration.FillFLV(codec.FLV_TAG_TYPE_AUDIO, 0)
 	} else {

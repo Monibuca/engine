@@ -35,7 +35,13 @@ func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) error) {
 		ar.MoveNext()
 	}
 }
-
+func (at *Audio) WriteADTS(adts []byte) {
+	at.SampleRate = uint32(codec.SamplingFrequencies[(adts[2]&0x3c)>>2])
+	at.Channels = ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
+	at.DecoderConfiguration.AppendAVCC(codec.ADTSToAudioSpecificConfig(adts))
+	at.DecoderConfiguration.AppendRaw(at.DecoderConfiguration.AVCC[0][2:])
+	at.DecoderConfiguration.FillFLV(codec.FLV_TAG_TYPE_AUDIO, 0)
+}
 func (at *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 	at.Media.WriteAVCC(ts, frame)
 	at.Flush()
@@ -50,7 +56,7 @@ func (at *Audio) Flush() {
 	}
 	// FLV tag 补完
 	if at.Value.FLV == nil {
-		at.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, at.SampleRate.ToMini(at.Value.DTS))
+		at.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, at.Value.DTS/90)
 	}
 	at.Media.Flush()
 }
@@ -86,7 +92,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			a := NewG711(at.Stream, alaw)
 			at.Know = a
-			a.SampleRate = HZ(codec.SoundRate[(frame[0]&0x0c)>>2])
+			a.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
 			a.SampleSize = 16
 			if frame[0]&0x02 == 0 {
 				a.SampleSize = 8

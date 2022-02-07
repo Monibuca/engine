@@ -99,7 +99,7 @@ func (vt *Video) Flush() {
 			b[0] |= 0x20
 		}
 		// 写入CTS
-		util.PutBE(b[2:5], vt.SampleRate.ToMini(vt.Value.PTS-vt.Value.DTS))
+		util.PutBE(b[2:5], (vt.Value.PTS-vt.Value.DTS)/90)
 		vt.Value.AppendAVCC(b)
 		for _, nalu := range vt.Value.Raw {
 			vt.Value.AppendAVCC(util.PutBE(make([]byte, 4), util.SizeOfBuffers(net.Buffers(nalu))))
@@ -108,7 +108,7 @@ func (vt *Video) Flush() {
 	}
 	// FLV tag 补完
 	if vt.Value.FLV == nil {
-		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.SampleRate.ToMini(vt.Value.DTS))
+		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.Value.DTS/90)
 	}
 	// 下一帧为I帧，即将覆盖
 	if vt.Next().Value.IFrame {

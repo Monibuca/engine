@@ -44,7 +44,7 @@ func (b *Buffer) WriteUint24(v uint32) {
 func (b *Buffer) WriteUint16(v uint16) {
 	binary.BigEndian.PutUint16(b.Malloc(2), v)
 }
-func (b *Buffer) WriteUint8(v byte) {
+func (b *Buffer) WriteByte(v byte) {
 	b.Malloc(1)[0] = v
 }
 func (b *Buffer) WriteString(a string) {

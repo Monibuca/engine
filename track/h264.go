@@ -26,7 +26,7 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	vt.Flush()
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
-	switch H264Slice(slice).Type() {
+	switch slice.H264Type() {
 	case codec.NALU_SPS:
 		vt.DecoderConfiguration.Reset()
 		vt.DecoderConfiguration.AppendRaw(slice)

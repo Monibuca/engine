@@ -25,13 +25,3 @@ func (bps *BPS) ComputeBPS(bytes int) {
 		bps.ts = time.Now()
 	}
 }
-
-type HZ uint32
-
-func (hz HZ) ToMini(nts uint32) uint32 {
-	return nts / (uint32(hz) / 1000)
-}
-
-func (hz HZ) ToNTS(mini uint32) uint32 {
-	return mini * (uint32(hz) / 1000)
-}

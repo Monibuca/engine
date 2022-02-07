@@ -4,51 +4,52 @@ import (
 	"net"
 	"time"
 
-	"github.com/Monibuca/engine/v4/codec"
 	"github.com/Monibuca/engine/v4/util"
 	"github.com/pion/rtp"
 )
 
 type NALUSlice net.Buffers
-type H264Slice NALUSlice
-type H265Slice NALUSlice
+// type H264Slice NALUSlice
+// type H265Slice NALUSlice
 
-type H264NALU []NALUSlice
-type H265NALU []NALUSlice
+// type H264NALU []H264Slice
+// type H265NALU []H265Slice
 
 type AudioSlice []byte
-type AACSlice AudioSlice
-type G711Slice AudioSlice
+
+// type AACSlice AudioSlice
+// type G711Slice AudioSlice
 
 // 裸数据片段
 type RawSlice interface {
-	NALUSlice | AudioSlice
+	~[][]byte | ~[]byte
 }
 
-func (nalu *H264NALU) Append(slice ...NALUSlice) {
-	*nalu = append(*nalu, slice...)
-}
-func (nalu H264Slice) Type() byte {
+// func (nalu *H264NALU) Append(slice ...NALUSlice) {
+// 	*nalu = append(*nalu, slice...)
+// }
+func (nalu NALUSlice) H264Type() byte {
 	return nalu[0][0] & 0x1F
 }
-func (nalu H265Slice) Type() byte {
+func (nalu NALUSlice) H265Type() byte {
 	return nalu[0][0] & 0x7E >> 1
 }
-func (nalu *H265NALU) Append(slice ...NALUSlice) {
-	*nalu = append(*nalu, slice...)
-}
-func (nalu H265NALU) IFrame() bool {
-	switch H265Slice(nalu[0]).Type() {
-	case codec.NAL_UNIT_CODED_SLICE_BLA,
-		codec.NAL_UNIT_CODED_SLICE_BLANT,
-		codec.NAL_UNIT_CODED_SLICE_BLA_N_LP,
-		codec.NAL_UNIT_CODED_SLICE_IDR,
-		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
-		codec.NAL_UNIT_CODED_SLICE_CRA:
-		return true
-	}
-	return false
-}
+
+// func (nalu *H265NALU) Append(slice ...NALUSlice) {
+// 	*nalu = append(*nalu, slice...)
+// }
+// func (nalu H265NALU) IFrame() bool {
+// 	switch H265Slice(nalu[0]).Type() {
+// 	case codec.NAL_UNIT_CODED_SLICE_BLA,
+// 		codec.NAL_UNIT_CODED_SLICE_BLANT,
+// 		codec.NAL_UNIT_CODED_SLICE_BLA_N_LP,
+// 		codec.NAL_UNIT_CODED_SLICE_IDR,
+// 		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
+// 		codec.NAL_UNIT_CODED_SLICE_CRA:
+// 		return true
+// 	}
+// 	return false
+// }
 
 type AVCCFrame []byte   // 一帧AVCC格式的数据
 type AnnexBFrame []byte // 一帧AnnexB格式数据
@@ -81,15 +82,14 @@ func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }
 func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
-	b := make([]byte, 15)
-	b[0] = t
+	b := util.Buffer(make([]byte, 0, 15))
+	b.WriteByte(t)
 	dataSize := util.SizeOfBuffers(av.AVCC)
-	util.PutBE(b[1:4], dataSize)
-	util.PutBE(b[4:7], ts)
-	b[7] = byte(ts >> 24)
-	av.FLV = append(av.FLV, b[:11])
-	av.FLV = append(av.FLV, av.AVCC...)
-	av.FLV = append(av.FLV, util.PutBE(b[11:15], dataSize+11))
+	b.WriteUint24(uint32(dataSize))
+	b.WriteUint24(ts)
+	b.WriteByte(byte(ts >> 24))
+	b.WriteUint24(0)
+	av.FLV = append(append(append(av.FLV, b), av.AVCC...), util.PutBE(b.Malloc(4), dataSize+11))
 }
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)

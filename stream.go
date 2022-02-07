@@ -256,12 +256,16 @@ func (r *Stream) NewAudioTrack() (at *track.UnknowAudio) {
 	}
 	return
 }
-func (r *Stream) NewH264Track() (vt *track.H264) {
+func (r *Stream) NewH264Track() *track.H264 {
 	return track.NewH264(r)
 }
 
-func (r *Stream) NewH265Track() (vt *track.H265) {
+func (r *Stream) NewH265Track() *track.H265 {
 	return track.NewH265(r)
+}
+
+func (r *Stream) NewAACTrack() *track.AAC {
+	return track.NewAAC(r)
 }
 
 // func (r *Stream) WaitDataTrack(names ...string) DataTrack {
