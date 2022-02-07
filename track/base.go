@@ -28,6 +28,7 @@ type Media[T RawSlice] struct {
 	AVRing[T]            `json:"-"`
 	CodecID              byte
 	SampleRate           HZ
+	SampleSize           byte
 	DecoderConfiguration AVFrame[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	util.BytesPool                  //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
 	lastAvccTS           uint32     //上一个avcc帧的时间戳

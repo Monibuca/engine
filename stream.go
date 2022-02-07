@@ -36,6 +36,7 @@ const (
 var StreamFSM = [STATE_DESTROYED + 1]map[StreamAction]StreamState{
 	{
 		ACTION_PUBLISH:   STATE_WAITTRACK,
+		ACTION_TIMEOUT:   STATE_CLOSED,
 		ACTION_LASTLEAVE: STATE_CLOSED,
 		ACTION_CLOSE:     STATE_CLOSED,
 	},
@@ -83,7 +84,6 @@ type Stream struct {
 	State       StreamState
 	timeout     *time.Timer //当前状态的超时定时器
 	actionChan  chan any
-	RemoteURL   string                  //远程地址，仅远程拉流有值
 	StartTime   time.Time               //流的创建时间
 	Subscribers util.Slice[*Subscriber] // 订阅者
 	Tracks

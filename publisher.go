@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"net/url"
 	"time"
 )
 
@@ -10,8 +11,10 @@ type IPublisher interface {
 }
 
 type Publisher struct {
-	Stream *Stream
-	Config PublishConfig
+	Type    string
+	PullURL *url.URL
+	*Stream `json:"-"`
+	Config  PublishConfig
 }
 
 func (pub *Publisher) Publish(streamPath string, realPub IPublisher) bool {

@@ -26,10 +26,10 @@ func (at *Audio) GetInfo() *Audio {
 func (at *Audio) ReadRing() *AVRing[AudioSlice] {
 	return util.Clone(at.AVRing)
 }
-func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) bool) {
+func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) error) {
 	ar := at.ReadRing()
 	for ap := ar.Read(); at.Stream.Err() == nil; ap = ar.Read() {
-		if !onAudio(ap) {
+		if onAudio(ap) != nil {
 			break
 		}
 		ar.MoveNext()
@@ -47,6 +47,10 @@ func (at *Audio) Flush() {
 		for _, raw := range at.Value.Raw {
 			at.Value.AppendAVCC(raw)
 		}
+	}
+	// FLV tag 补完
+	if at.Value.FLV == nil {
+		at.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, at.SampleRate.ToMini(at.Value.DTS))
 	}
 	at.Media.Flush()
 }
@@ -70,6 +74,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			a := NewAAC(at.Stream)
 			at.Know = a
+			a.SampleSize = 16
 			a.avccHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
 			a.Stream.AddTrack(a)
@@ -82,6 +87,10 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			a := NewG711(at.Stream, alaw)
 			at.Know = a
 			a.SampleRate = HZ(codec.SoundRate[(frame[0]&0x0c)>>2])
+			a.SampleSize = 16
+			if frame[0]&0x02 == 0 {
+				a.SampleSize = 8
+			}
 			a.Channels = frame[0]&0x01 + 1
 			a.avccHead = frame[:1]
 			a.Stream.AddTrack(a)

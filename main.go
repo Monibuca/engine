@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,54 +13,30 @@ import (
 	"strings"
 	"time" // colorable
 
+	"github.com/Monibuca/engine/v4/util"
 	"github.com/google/uuid"
 
-	"github.com/Monibuca/engine/v4/util"
-
-	"github.com/BurntSushi/toml"
 	. "github.com/logrusorgru/aurora"
+	"gopkg.in/yaml.v3"
 )
 
 var Version = "4.0.0"
 
-type Second int
-
-func (s Second) Duration() time.Duration {
-	return time.Duration(s) * time.Second
-}
-
-// StreamConfig 流的三级覆盖配置（全局，插件，流）
-
-type PublishConfig struct {
-	EnableAudio      bool
-	EnableVideo      bool
-	KillExit         bool   // 是否踢掉已经存在的发布者
-	AutoReconnect    bool   // 自动重连
-	PullOnStart      bool   // 启动时拉流
-	PullOnSubscribe  bool   // 订阅时自动拉流
-	PublishTimeout   Second // 发布无数据超时
-	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
-}
-
-type SubscribeConfig struct {
-	EnableAudio bool
-	EnableVideo bool
-	IFrameOnly  bool   // 只要关键帧
-	WaitTimeout Second // 等待流超时
-}
-
 var (
 	DefaultPublishConfig = PublishConfig{
-		true, true, false, true, true, true, 10, 10,
+		true, true, false, 10, 10,
 	}
 	DefaultSubscribeConfig = SubscribeConfig{
 		true, true, false, 10,
 	}
-	config = &struct {
-		Publish    PublishConfig
-		Subscribe  SubscribeConfig
-		RTPReorder bool
-	}{DefaultPublishConfig, DefaultSubscribeConfig, false}
+	config = &EngineConfig{
+		http.NewServeMux(),
+		Ctx,
+		DefaultPublishConfig,
+		DefaultSubscribeConfig,
+		HTTPConfig{ListenAddr: ":8080", CORS: true},
+		false, true, true, true,
+	}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw  []byte
 	StartTime  time.Time                  //启动时间
@@ -70,16 +45,12 @@ var (
 	settingDir string
 )
 
-type PluginConfig interface {
-	Update(map[string]any)
-}
-
 func InstallPlugin(config PluginConfig) *Plugin {
 	name := strings.TrimSuffix(reflect.TypeOf(config).Elem().Name(), "Config")
 	plugin := &Plugin{
 		Name:     name,
 		Config:   config,
-		Modified: make(map[string]any),
+		Modified: make(Config),
 	}
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	configDir := filepath.Dir(pluginFilePath)
@@ -96,10 +67,11 @@ func InstallPlugin(config PluginConfig) *Plugin {
 
 // Plugin 插件配置定义
 type Plugin struct {
-	Name     string         //插件名称
-	Config   PluginConfig   //插件配置
-	Version  string         //插件版本
-	Modified map[string]any //修改过的配置项
+	Name      string       //插件名称
+	Config    PluginConfig //插件配置
+	Version   string       //插件版本
+	RawConfig Config       //配置的map形式方便查询
+	Modified  Config       //修改过的配置项
 }
 
 func init() {
@@ -117,7 +89,6 @@ func Run(ctx context.Context, configFile string) (err error) {
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
 		log.Print(Red("read config file error:"), err)
-		return
 	}
 	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
 	if err = os.MkdirAll(settingDir, 0755); err != nil {
@@ -125,22 +96,23 @@ func Run(ctx context.Context, configFile string) (err error) {
 		return
 	}
 	util.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
-	var cg map[string]any
-	if _, err = toml.Decode(string(ConfigRaw), &cg); err == nil {
-		if cfg, ok := cg["Engine"]; ok {
-			b, _ := json.Marshal(cfg)
-			if err = json.Unmarshal(b, config); err != nil {
-				log.Println(err)
+	var cg Config
+	var engineCg Config
+	if ConfigRaw != nil {
+		if err = yaml.Unmarshal(ConfigRaw, &cg); err == nil {
+			if cfg, ok := cg["engine"]; ok {
+				engineCg = cfg.(Config)
 			}
 		}
 	}
+	go config.Update(engineCg)
 	for name, config := range Plugins {
-		var cfg map[string]any
-		if v, ok := cg[name]; ok {
-			cfg = v.(map[string]any)
+		if v, ok := cg[strings.ToLower(name)]; ok {
+			config.RawConfig = v.(Config)
 		}
-		config.Update(cfg)
+		config.merge()
 	}
+
 	UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
@@ -158,54 +130,49 @@ func Run(ctx context.Context, configFile string) (err error) {
 		}
 	}
 }
-func objectAssign(target, source map[string]any) {
-	for k, v := range source {
-		if _, ok := target[k]; !ok {
-			target[k] = v
-		} else {
-			switch v := v.(type) {
-			case map[string]any:
-				objectAssign(target[k].(map[string]any), v)
-			default:
-				target[k] = v
-			}
-		}
+
+func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	var cors bool
+	if v, ok := opt.RawConfig["cors"]; ok {
+		cors = v.(bool)
+	} else if config.HTTP.CORS {
+		cors = true
 	}
+	config.HandleFunc("/"+strings.ToLower(opt.Name)+pattern, func(rw http.ResponseWriter, r *http.Request) {
+		if cors {
+			util.CORS(rw, r)
+		}
+		handler(rw, r)
+	})
 }
 
-// Update 更新配置
-func (opt *Plugin) Update(cfg map[string]any) {
-	if setting, err := ioutil.ReadFile(opt.settingPath()); err == nil {
-		var cg map[string]interface{}
-		if _, err = toml.Decode(string(setting), &cg); err == nil {
-			if cfg == nil {
-				cfg = cg
+func (opt *Plugin) HandleApi(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	opt.HandleFunc("/api"+pattern, handler)
+}
+
+// 读取独立配置合并入总配置中
+func (opt *Plugin) merge() {
+	f, err := os.Open(opt.settingPath())
+	if err == nil {
+		if err = yaml.NewDecoder(f).Decode(&opt.Modified); err == nil {
+			if opt.RawConfig == nil {
+				opt.RawConfig = opt.Modified
 			} else {
-				objectAssign(cfg, cg)
+				opt.RawConfig.Assign(opt.Modified)
 			}
 		}
 	}
-	// TODO: map转成struct优化
-	if cfg != nil {
-		b, _ := json.Marshal(cfg)
-		for k, v := range cfg {
-			opt.Modified[k] = v
-		}
-		if err := json.Unmarshal(b, opt.Config); err != nil {
-			log.Println(err)
-		}
-	}
-	go opt.Config.Update(cfg)
+	go opt.Config.Update(opt.RawConfig)
 }
 func (opt *Plugin) settingPath() string {
-	return filepath.Join(settingDir, opt.Name+".toml")
+	return filepath.Join(settingDir, strings.ToLower(opt.Name)+".yaml")
 }
 
 func (opt *Plugin) Save() error {
 	file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		defer file.Close()
-		err = toml.NewEncoder(file).Encode(opt.Modified)
+		err = yaml.NewEncoder(file).Encode(opt.Modified)
 	}
 	return err
 }

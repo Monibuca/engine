@@ -62,6 +62,7 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
 			vt.DecoderConfiguration.AppendRaw(NALUSlice{info.SequenceParameterSetNALUnit}, NALUSlice{info.PictureParameterSetNALUnit})
 		}
+		vt.DecoderConfiguration.FillFLV(codec.FLV_TAG_TYPE_VIDEO, 0)
 	} else {
 		(*Video)(vt).WriteAVCC(ts, frame)
 		vt.Value.IFrame = frame.IsIDR()

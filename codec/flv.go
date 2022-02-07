@@ -74,13 +74,13 @@ var (
 		12: "H265"}
 )
 
-var FLVHeader = []byte{0x46, 0x4c, 0x56, 0x01, 0x05, 0, 0, 0, 9, 0, 0, 0, 0}
+var FLVHeader = []byte{'F', 'L', 'V', 0x01, 0x05, 0, 0, 0, 9, 0, 0, 0, 0}
 
 func WriteFLVTag(w io.Writer, t byte, timestamp uint32, payload net.Buffers) (err error) {
 	head := make([]byte, 11)
 	tail := make([]byte, 4)
 	head[0] = t
-	dataSize := uint32(len(payload))
+	dataSize := uint32(util.SizeOfBuffers(payload))
 	util.PutBE(tail, dataSize+11)
 	util.PutBE(head[1:4], dataSize)
 	head[4] = byte(timestamp >> 16)

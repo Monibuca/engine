@@ -26,8 +26,8 @@ type Subscriber struct {
 	Delay           uint32
 	SubscribeTime   time.Time
 	SubscribeArgs   url.Values
-	OnAudio         func(*AudioFrame) bool `json:"-"`
-	OnVideo         func(*VideoFrame) bool `json:"-"`
+	OnAudio         func(*AudioFrame) error `json:"-"`
+	OnVideo         func(*VideoFrame) error `json:"-"`
 }
 
 // Close 关闭订阅者
@@ -78,12 +78,12 @@ func (s *Subscriber) Play(at *track.Audio, vt *track.Video) {
 		if ap == nil && vp == nil {
 			time.Sleep(time.Millisecond * 10)
 		} else if ap != nil && (vp == nil || vp.SeqInStream > ap.SeqInStream) {
-			if !s.onAudio(ap) {
+			if s.onAudio(ap) != nil {
 				return
 			}
 			ar.MoveNext()
 		} else if vp != nil && (ap == nil || ap.SeqInStream > vp.SeqInStream) {
-			if !s.onVideo(vp) {
+			if s.onVideo(vp) != nil {
 				return
 			}
 			// if chase {
@@ -100,21 +100,24 @@ func (s *Subscriber) Play(at *track.Audio, vt *track.Video) {
 		vp = vr.TryRead()
 	}
 }
-func (s *Subscriber) onAudio(af *AVFrame[AudioSlice]) bool {
+func (s *Subscriber) onAudio(af *AVFrame[AudioSlice]) error {
 	return s.OnAudio((*AudioFrame)(af))
 }
-func (s *Subscriber) onVideo(vf *AVFrame[NALUSlice]) bool {
+func (s *Subscriber) onVideo(vf *AVFrame[NALUSlice]) error {
 	return s.OnVideo((*VideoFrame)(vf))
 }
-func (s *Subscriber) PlayAudio(vt *track.Audio) {
-	vt.Play(s.onAudio)
+func (s *Subscriber) PlayAudio(at *track.Audio) {
+	at.Play(s.onAudio)
 }
 func (s *Subscriber) PlayVideo(vt *track.Video) {
 	vt.Play(s.onVideo)
 }
 func (r *Subscriber) WaitVideoTrack(names ...string) *track.Video {
-	if !r.Config.EnableVideo {
+	if !r.Config.SubVideo {
 		return nil
+	}
+	if len(names) == 0 {
+		names = []string{"h264", "h265"}
 	}
 	if t := <-r.Stream.WaitTrack(names...); t == nil {
 		return nil
@@ -130,8 +133,11 @@ func (r *Subscriber) WaitVideoTrack(names ...string) *track.Video {
 }
 
 func (r *Subscriber) WaitAudioTrack(names ...string) *track.Audio {
-	if !r.Config.EnableAudio {
+	if !r.Config.SubAudio {
 		return nil
+	}
+	if len(names) == 0 {
+		names = []string{"aac", "pcma", "pcmu"}
 	}
 	if t := <-r.Stream.WaitTrack(names...); t == nil {
 		return nil

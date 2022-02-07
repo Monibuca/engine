@@ -56,12 +56,8 @@ func NewSSE(w http.ResponseWriter, ctx context.Context) *SSE {
 	}
 }
 
-func (sse *SSE) WriteJSON(data interface{}) error {
-	jsonData, err := json.Marshal(data)
-	if err == nil {
-		_, err = sse.Write(jsonData)
-	}
-	return err
+func (sse *SSE) WriteJSON(data any) error {
+	return json.NewEncoder(sse).Encode(data)
 }
 func (sse *SSE) WriteExec(cmd *exec.Cmd) error {
 	cmd.Stderr = sse

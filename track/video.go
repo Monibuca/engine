@@ -106,6 +106,10 @@ func (vt *Video) Flush() {
 			vt.Value.AppendAVCC(nalu...)
 		}
 	}
+	// FLV tag 补完
+	if vt.Value.FLV == nil {
+		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.SampleRate.ToMini(vt.Value.DTS))
+	}
 	// 下一帧为I帧，即将覆盖
 	if vt.Next().Value.IFrame {
 		// 仅存一枚I帧，需要扩环
@@ -124,10 +128,10 @@ func (vt *Video) ReadRing() *AVRing[NALUSlice] {
 	vr.Ring = vt.IDRing
 	return vr
 }
-func (vt *Video) Play(onVideo func(*AVFrame[NALUSlice]) bool) {
+func (vt *Video) Play(onVideo func(*AVFrame[NALUSlice]) error) {
 	vr := vt.ReadRing()
 	for vp := vr.Read(); vt.Stream.Err() == nil; vp = vr.Read() {
-		if !onVideo(vp) {
+		if onVideo(vp) != nil {
 			break
 		}
 		vr.MoveNext()

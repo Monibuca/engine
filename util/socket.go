@@ -2,12 +2,11 @@ package util
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
 type TCPListener interface {
@@ -15,55 +14,26 @@ type TCPListener interface {
 	Process(*net.TCPConn)
 }
 
-// ListenAddrs Listen http and https
-func ListenAddrs(addr, addTLS, cert, key string, handler http.Handler) {
-	var g errgroup.Group
-	if addTLS != "" {
-		g.Go(func() error {
-			return http.ListenAndServeTLS(addTLS, cert, key, handler)
-		})
-	}
-	if addr != "" {
-		g.Go(func() error { return http.ListenAndServe(addr, handler) })
-	}
-	if err := g.Wait(); err != nil {
-		log.Fatal(err)
+func GetJsonHandler[T any](fetch func() T, tickDur time.Duration) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("json") != "" {
+			if err := json.NewEncoder(rw).Encode(fetch()); err != nil {
+				rw.WriteHeader(500)
+			}
+			return
+		}
+		sse := NewSSE(rw, r.Context())
+		tick := time.NewTicker(tickDur)
+		for range tick.C {
+			if sse.WriteJSON(fetch()) != nil {
+				tick.Stop()
+				break
+			}
+		}
 	}
 }
 
-func ListenTCP(addr string, process TCPListener) error {
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-	go func() {
-		<-process.Done()
-		l.Close()
-	}()
-	var tempDelay time.Duration
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				if tempDelay == 0 {
-					tempDelay = 5 * time.Millisecond
-				} else {
-					tempDelay *= 2
-				}
-				if max := 1 * time.Second; tempDelay > max {
-					tempDelay = max
-				}
-				Printf("%s: Accept error: %v; retrying in %v", addr, err, tempDelay)
-				time.Sleep(tempDelay)
-				continue
-			}
-			return err
-		}
-		conn.(*net.TCPConn).SetNoDelay(false)
-		tempDelay = 0
-		go process.Process(conn.(*net.TCPConn))
-	}
-}
+
 
 func ListenUDP(address string, networkBuffer int) (*net.UDPConn, error) {
 	addr, err := net.ResolveUDPAddr("udp", address)

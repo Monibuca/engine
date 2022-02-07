@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/util"
 	"github.com/pion/rtp"
 )
 
@@ -68,6 +69,7 @@ type AVFrame[T RawSlice] struct {
 	IFrame     bool
 	PTS        uint32
 	DTS        uint32
+	FLV        net.Buffers // 打包好的FLV Tag
 	AVCC       net.Buffers // 打包好的AVCC格式
 	RTP        net.Buffers // 打包好的RTP格式
 	RTPPackets []rtp.Packet
@@ -78,7 +80,17 @@ type AVFrame[T RawSlice] struct {
 func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }
-
+func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
+	b := make([]byte, 15)
+	b[0] = t
+	dataSize := util.SizeOfBuffers(av.AVCC)
+	util.PutBE(b[1:4], dataSize)
+	util.PutBE(b[4:7], ts)
+	b[7] = byte(ts >> 24)
+	av.FLV = append(av.FLV, b[:11])
+	av.FLV = append(av.FLV, av.AVCC...)
+	av.FLV = append(av.FLV, util.PutBE(b[11:15], dataSize+11))
+}
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)
 }
@@ -90,6 +102,7 @@ func (av *AVFrame[T]) AppendRTPPackets(rtp rtp.Packet) {
 }
 
 func (av *AVFrame[T]) Reset() {
+	av.FLV = nil
 	av.AVCC = nil
 	av.RTP = nil
 	av.RTPPackets = nil
