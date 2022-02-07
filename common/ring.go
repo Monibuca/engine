@@ -19,11 +19,11 @@ func (rb *RingBuffer[T]) Init(n int) *RingBuffer[T] {
 	return rb
 }
 
-func (rb RingBuffer[T]) SubRing(rr *util.Ring[T]) *RingBuffer[T] {
-	rb.Ring = rr
-	rb.MoveCount = 0
-	return &rb
-}
+// func (rb RingBuffer[T]) SubRing(rr *util.Ring[T]) *RingBuffer[T] {
+// 	rb.Ring = rr
+// 	rb.MoveCount = 0
+// 	return &rb
+// }
 
 func (rb *RingBuffer[T]) MoveNext() *T {
 	rb.Ring = rb.Next()
