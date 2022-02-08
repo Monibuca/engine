@@ -1,6 +1,7 @@
 package track
 
 import (
+	"net"
 	"time"
 
 	"github.com/Monibuca/engine/v4/codec"
@@ -26,17 +27,23 @@ func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 func (vt *H265) WriteSlice(slice NALUSlice) {
 	switch slice.H265Type() {
 	case codec.NAL_UNIT_VPS:
-		vt.DecoderConfiguration.Reset()
-		vt.DecoderConfiguration.AppendRaw(slice)
+		if len(vt.DecoderConfiguration.Raw) > 0 {
+			vt.DecoderConfiguration.Raw = vt.DecoderConfiguration.Raw[:0]
+		}
+		vt.DecoderConfiguration.Raw = append(vt.DecoderConfiguration.Raw, slice[0])
 	case codec.NAL_UNIT_SPS:
-		vt.DecoderConfiguration.AppendRaw(slice)
+		vt.DecoderConfiguration.Raw = append(vt.DecoderConfiguration.Raw, slice[0])
 		vt.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
 	case codec.NAL_UNIT_PPS:
-		vt.DecoderConfiguration.AppendRaw(slice)
-		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.DecoderConfiguration.Raw[0][0], vt.DecoderConfiguration.Raw[1][0], vt.DecoderConfiguration.Raw[2][0])
+		vt.DecoderConfiguration.Raw = append(vt.DecoderConfiguration.Raw, slice[0])
+		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.DecoderConfiguration.Raw[0], vt.DecoderConfiguration.Raw[1], vt.DecoderConfiguration.Raw[2])
 		if err == nil {
-			vt.DecoderConfiguration.AppendAVCC(extraData)
+			if len(vt.DecoderConfiguration.AVCC) > 0 {
+				vt.DecoderConfiguration.AVCC = vt.DecoderConfiguration.AVCC[:0]
+			}
+			vt.DecoderConfiguration.AVCC = append(vt.DecoderConfiguration.AVCC, extraData)
 		}
+		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
 	case
 		codec.NAL_UNIT_CODED_SLICE_BLA,
 		codec.NAL_UNIT_CODED_SLICE_BLANT,
@@ -52,15 +59,16 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
-		vt.DecoderConfiguration.Reset()
-		vt.DecoderConfiguration.SeqInTrack = vt.Value.SeqInTrack
-		vt.DecoderConfiguration.AppendAVCC(frame)
+		if len(vt.DecoderConfiguration.AVCC) > 0 {
+			vt.DecoderConfiguration.AVCC = vt.DecoderConfiguration.AVCC[:0]
+		}
+		vt.DecoderConfiguration.AVCC = append(vt.DecoderConfiguration.AVCC, frame)
 		if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(frame); err == nil {
 			vt.SPSInfo, _ = codec.ParseHevcSPS(frame)
 			vt.nalulenSize = int(frame[26]) & 0x03
-			vt.DecoderConfiguration.AppendRaw(NALUSlice{vps}, NALUSlice{sps}, NALUSlice{pps})
+			vt.DecoderConfiguration.Raw = NALUSlice{vps, sps, pps}
 		}
-		vt.DecoderConfiguration.FillFLV(codec.FLV_TAG_TYPE_VIDEO, 0)
+		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
 	} else {
 		(*Video)(vt).WriteAVCC(ts, frame)
 		vt.Value.IFrame = frame.IsIDR()

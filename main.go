@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time" // colorable
 
+	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
 	"github.com/google/uuid"
 
@@ -20,37 +21,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "4.0.0"
-
 var (
-	DefaultPublishConfig = PublishConfig{
-		true, true, false, 10, 10,
-	}
-	DefaultSubscribeConfig = SubscribeConfig{
-		true, true, false, 10,
-	}
-	config = &EngineConfig{
-		http.NewServeMux(),
-		Ctx,
-		DefaultPublishConfig,
-		DefaultSubscribeConfig,
-		HTTPConfig{ListenAddr: ":8080", CORS: true},
-		false, true, true, true,
-	}
 	// ConfigRaw 配置信息的原始数据
-	ConfigRaw  []byte
-	StartTime  time.Time                  //启动时间
-	Plugins    = make(map[string]*Plugin) // Plugins 所有的插件配置
-	Ctx        context.Context
-	settingDir string
+	ConfigRaw    []byte
+	StartTime    time.Time                  //启动时间
+	Plugins      = make(map[string]*Plugin) // Plugins 所有的插件配置
+	settingDir   string
+	EngineConfig = &GlobalConfig{
+		Engine:   config.Global,
+		ServeMux: http.NewServeMux(),
+	}
+	Engine = InstallPlugin(EngineConfig)
 )
 
-func InstallPlugin(config PluginConfig) *Plugin {
-	name := strings.TrimSuffix(reflect.TypeOf(config).Elem().Name(), "Config")
+func InstallPlugin[T config.Plugin](config T) *Plugin {
+	t := reflect.TypeOf(config).Elem()
+	name := strings.TrimSuffix(t.Name(), "Config")
 	plugin := &Plugin{
-		Name:     name,
-		Config:   config,
-		Modified: make(Config),
+		Name:   name,
+		Config: config,
 	}
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	configDir := filepath.Dir(pluginFilePath)
@@ -65,24 +54,20 @@ func InstallPlugin(config PluginConfig) *Plugin {
 	return plugin
 }
 
-// Plugin 插件配置定义
+// Plugin 插件信息
 type Plugin struct {
-	Name      string       //插件名称
-	Config    PluginConfig //插件配置
-	Version   string       //插件版本
-	RawConfig Config       //配置的map形式方便查询
-	Modified  Config       //修改过的配置项
-}
-
-func init() {
-	if parts := strings.Split(util.CurrentDir(), "@"); len(parts) > 1 {
-		Version = parts[len(parts)-1]
-	}
+	context.Context    `json:"-"`
+	context.CancelFunc `json:"-"`
+	Name               string        //插件名称
+	Config             config.Plugin //插件配置
+	Version            string        //插件版本
+	RawConfig          config.Config //配置的map形式方便查询
+	Modified           config.Config //修改过的配置项
 }
 
 // Run 启动Monibuca引擎
 func Run(ctx context.Context, configFile string) (err error) {
-	Ctx = ctx
+	Engine.Context = ctx
 	if err := util.CreateShutdownScript(); err != nil {
 		log.Print(Red("create shutdown script error:"), err)
 	}
@@ -95,29 +80,24 @@ func Run(ctx context.Context, configFile string) (err error) {
 		log.Print(Red("create dir .m7s error:"), err)
 		return
 	}
-	util.Print(BgGreen(Black("Ⓜ starting m7s ")), BrightBlue(Version))
-	var cg Config
-	var engineCg Config
+	util.Print(BgGreen(White("Ⓜ starting m7s ")))
+	var cg config.Config
 	if ConfigRaw != nil {
 		if err = yaml.Unmarshal(ConfigRaw, &cg); err == nil {
-			if cfg, ok := cg["engine"]; ok {
-				engineCg = cfg.(Config)
-			}
+			Engine.RawConfig = cg.GetChild("global")
 		}
 	}
-	go config.Update(engineCg)
+	Engine.registerHandler()
+	go EngineConfig.Update(Engine.RawConfig)
 	for name, config := range Plugins {
-		if v, ok := cg[strings.ToLower(name)]; ok {
-			config.RawConfig = v.(Config)
-		}
-		config.merge()
+		config.RawConfig = cg.GetChild(name)
+		config.assign()
 	}
-
 	UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
 	req.Header.Set("os", runtime.GOOS)
-	req.Header.Set("version", Version)
+	req.Header.Set("version", Engine.Version)
 	req.Header.Set("uuid", UUID)
 	var c http.Client
 	for {
@@ -132,13 +112,19 @@ func Run(ctx context.Context, configFile string) (err error) {
 }
 
 func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+	if opt == nil {
+		return
+	}
 	var cors bool
 	if v, ok := opt.RawConfig["cors"]; ok {
 		cors = v.(bool)
-	} else if config.HTTP.CORS {
+	} else if EngineConfig.CORS {
 		cors = true
 	}
-	config.HandleFunc("/"+strings.ToLower(opt.Name)+pattern, func(rw http.ResponseWriter, r *http.Request) {
+	if opt != Engine {
+		pattern = "/" + strings.ToLower(opt.Name) + pattern
+	}
+	Engine.HandleFunc(pattern, func(rw http.ResponseWriter, r *http.Request) {
 		if cors {
 			util.CORS(rw, r)
 		}
@@ -147,11 +133,16 @@ func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, 
 }
 
 func (opt *Plugin) HandleApi(pattern string, handler func(http.ResponseWriter, *http.Request)) {
-	opt.HandleFunc("/api"+pattern, handler)
+	if opt == nil {
+		return
+	}
+	pattern = "/api" + pattern
+	util.Println("http handle added:", pattern)
+	opt.HandleFunc(pattern, handler)
 }
 
 // 读取独立配置合并入总配置中
-func (opt *Plugin) merge() {
+func (opt *Plugin) assign() {
 	f, err := os.Open(opt.settingPath())
 	if err == nil {
 		if err = yaml.NewDecoder(f).Decode(&opt.Modified); err == nil {
@@ -162,8 +153,45 @@ func (opt *Plugin) merge() {
 			}
 		}
 	}
+	t := reflect.TypeOf(opt.Config).Elem()
+	// 用全局配置覆盖没有设置的配置
+	for i, j := 0, t.NumField(); i < j; i++ {
+		fname := t.Field(i).Name
+		if Engine.RawConfig.Has(fname) {
+			if !opt.RawConfig.Has(fname) {
+				opt.RawConfig.Set(fname, Engine.RawConfig[fname])
+			} else if opt.RawConfig.HasChild(fname) {
+				opt.RawConfig.GetChild(fname).Merge(Engine.RawConfig.GetChild(fname))
+			}
+		}
+	}
+	opt.registerHandler()
+	opt.Update()
+}
+
+func (opt *Plugin) Update() {
+	if opt.CancelFunc != nil {
+		opt.CancelFunc()
+	}
+	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	go opt.Config.Update(opt.RawConfig)
 }
+
+func (opt *Plugin) registerHandler() {
+	t := reflect.TypeOf(opt.Config).Elem()
+	v := reflect.ValueOf(opt.Config).Elem()
+	// 注册http响应
+	for i, j := 0, t.NumMethod(); i < j; i++ {
+		mt := t.Method(i)
+		if strings.HasPrefix(mt.Name, "API") {
+			parts := strings.Split(mt.Name, "_")
+			parts[0] = ""
+			patten := reflect.ValueOf(strings.Join(parts, "/"))
+			reflect.ValueOf(opt.HandleApi).Call([]reflect.Value{patten, v.Method(i)})
+		}
+	}
+}
+
 func (opt *Plugin) settingPath() string {
 	return filepath.Join(settingDir, strings.ToLower(opt.Name)+".yaml")
 }

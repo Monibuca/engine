@@ -6,6 +6,7 @@ import (
 	"time"
 
 	. "github.com/Monibuca/engine/v4/common"
+	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/track"
 )
 
@@ -16,7 +17,7 @@ type VideoFrame AVFrame[NALUSlice]
 type Subscriber struct {
 	context.Context `json:"-"`
 	cancel          context.CancelFunc
-	Config          SubscribeConfig
+	Config          config.Subscribe
 	Stream          *Stream `json:"-"`
 	ID              string
 	TotalDrop       int //总丢帧
@@ -39,7 +40,7 @@ func (s *Subscriber) Close() {
 }
 
 //Subscribe 开始订阅 将Subscriber与Stream关联
-func (sub *Subscriber) Subscribe(streamPath string, config SubscribeConfig) bool {
+func (sub *Subscriber) Subscribe(streamPath string, config config.Subscribe) bool {
 	Streams.Lock()
 	defer Streams.Unlock()
 	s, created := findOrCreateStream(streamPath, config.WaitTimeout.Duration())

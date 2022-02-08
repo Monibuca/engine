@@ -2,15 +2,16 @@ package codec
 
 import (
 	"errors"
+
 )
 
 const (
 	ADTS_HEADER_SIZE = 7
 	CodecID_AAC      = 0xA
 	CodecID_PCMA     = 7
-	CodecID_PCMU		 = 8
-	CodecID_H264		 = 7
-	CodecID_H265		 = 0xC
+	CodecID_PCMU     = 8
+	CodecID_H264     = 7
+	CodecID_H265     = 0xC
 )
 
 // ISO/IEC 14496-3 38(52)/page
@@ -134,14 +135,7 @@ type ADTSVariableHeader struct {
 // NumberOfRawDataBlockInFrame, 表示ADTS帧中有number_of_raw_data_blocks_in_frame + 1个AAC原始帧
 
 // 所以说number_of_raw_data_blocks_in_frame == 0 表示说ADTS帧中有一个AAC数据块并不是说没有。(一个AAC原始帧包含一段时间内1024个采样及相关数据)
-func ADTSToAudioSpecificConfig(data []byte) []byte {
-	profile := ((data[2] & 0xc0) >> 6) + 1
-	sampleRate := (data[2] & 0x3c) >> 2
-	channel := ((data[2] & 0x1) << 2) | ((data[3] & 0xc0) >> 6)
-	config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
-	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
-	return []byte{0xAF, 0x00, config1, config2}
-}
+
 func AudioSpecificConfigToADTS(asc AudioSpecificConfig, rawDataLength int) (adts ADTS, adtsByte []byte, err error) {
 	if asc.ChannelConfiguration > 8 || asc.FrameLengthFlag > 13 {
 		err = errors.New("Reserved field.")
@@ -218,3 +212,5 @@ func ParseRTPAAC(payload []byte) (result [][]byte) {
 	}
 	return
 }
+
+

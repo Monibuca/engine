@@ -4,11 +4,12 @@ import (
 	"net"
 	"time"
 
-	"github.com/Monibuca/engine/v4/util"
+	"github.com/Monibuca/engine/v4/codec"
 	"github.com/pion/rtp"
 )
 
 type NALUSlice net.Buffers
+
 // type H264Slice NALUSlice
 // type H265Slice NALUSlice
 
@@ -82,14 +83,8 @@ func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }
 func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
-	b := util.Buffer(make([]byte, 0, 15))
-	b.WriteByte(t)
-	dataSize := util.SizeOfBuffers(av.AVCC)
-	b.WriteUint24(uint32(dataSize))
-	b.WriteUint24(ts)
-	b.WriteByte(byte(ts >> 24))
-	b.WriteUint24(0)
-	av.FLV = append(append(append(av.FLV, b), av.AVCC...), util.PutBE(b.Malloc(4), dataSize+11))
+	av.FLV = codec.VideoAVCC2FLV(av.AVCC, ts)
+	av.FLV[0][0] = t
 }
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)
@@ -151,3 +146,8 @@ func (avcc AVCCFrame) AudioCodecID() byte {
 // 	}
 // 	return
 // }
+type DecoderConfiguration[T RawSlice] struct {
+	AVCC T
+	Raw  T
+	FLV  net.Buffers
+}

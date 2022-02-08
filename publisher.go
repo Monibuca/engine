@@ -1,8 +1,11 @@
 package engine
 
 import (
+	"io"
 	"net/url"
 	"time"
+
+	"github.com/Monibuca/engine/v4/config"
 )
 
 type IPublisher interface {
@@ -12,26 +15,28 @@ type IPublisher interface {
 
 type Publisher struct {
 	Type    string
-	PullURL *url.URL
 	*Stream `json:"-"`
-	Config  PublishConfig
 }
 
-func (pub *Publisher) Publish(streamPath string, realPub IPublisher) bool {
+func (pub *Publisher) Publish(streamPath string, realPub IPublisher, config config.Publish) bool {
 	Streams.Lock()
 	defer Streams.Unlock()
 	s, created := findOrCreateStream(streamPath, time.Second)
 	if s.IsClosed() {
 		return false
 	}
-	if s.Publisher != nil && pub.Config.KillExit {
-		s.Publisher.Close()
+	if s.Publisher != nil {
+		if config.KillExit {
+			s.Publisher.Close()
+		} else {
+			return false
+		}
 	}
 	pub.Stream = s
 	s.Publisher = realPub
 	if created {
-		s.PublishTimeout = pub.Config.PublishTimeout.Duration()
-		s.WaitCloseTimeout = pub.Config.WaitCloseTimeout.Duration()
+		s.PublishTimeout = config.PublishTimeout.Duration()
+		s.WaitCloseTimeout = config.WaitCloseTimeout.Duration()
 		go s.run()
 	}
 	s.actionChan <- PublishAction{}
@@ -40,4 +45,15 @@ func (pub *Publisher) Publish(streamPath string, realPub IPublisher) bool {
 
 func (pub *Publisher) OnStateChange(oldState StreamState, newState StreamState) bool {
 	return true
+}
+
+// 用于远程拉流的发布者
+type Puller struct {
+	Publisher
+	RemoteURL *url.URL
+	io.ReadCloser
+}
+
+func (puller *Puller) Close() {
+	puller.ReadCloser.Close()
 }

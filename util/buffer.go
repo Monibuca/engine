@@ -95,6 +95,7 @@ func SizeOfBuffers(buf net.Buffers) (size int) {
 func CutBuffers(buf net.Buffers, size int) {
 
 }
+
 // SplitBuffers 按照一定大小分割 Buffers
 func SplitBuffers(buf net.Buffers, size int) (result []net.Buffers) {
 	for total := SizeOfBuffers(buf); total > 0; {
@@ -122,3 +123,5 @@ func SplitBuffers(buf net.Buffers, size int) (result []net.Buffers) {
 	}
 	return
 }
+
+

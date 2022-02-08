@@ -65,6 +65,17 @@ var StreamFSM = [STATE_DESTROYED + 1]map[StreamAction]StreamState{
 // Streams 所有的流集合
 var Streams = util.Map[string, *Stream]{Map: make(map[string]*Stream)}
 
+func FilterStreams[T IPublisher]() (ss []*Stream) {
+	Streams.RLock()
+	defer Streams.RUnlock()
+	for _, s := range Streams.Map {
+		if _, ok := s.Publisher.(T); ok {
+			ss = append(ss, s)
+		}
+	}
+	return
+}
+
 type UnSubscibeAction *Subscriber
 type PublishAction struct{}
 type UnPublishAction struct{}
@@ -125,7 +136,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s.actionChan = make(chan any, 1)
 		s.StartTime = time.Now()
 		s.timeout = time.NewTimer(waitTimeout)
-		s.Context, s.cancel = context.WithCancel(Ctx)
+		s.Context, s.cancel = context.WithCancel(Engine)
 		s.Init(s)
 		return s, true
 	}

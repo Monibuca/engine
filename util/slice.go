@@ -19,3 +19,14 @@ func (s *Slice[T]) Delete(v T) bool {
 	}
 	return false
 }
+
+func (s *Slice[T]) Reset() {
+	if len(*s) > 0 {
+		*s = (*s)[:0]
+	}
+}
+
+func (s *Slice[T]) ResetAppend(first T) {
+	s.Reset()
+	s.Add(first)
+}

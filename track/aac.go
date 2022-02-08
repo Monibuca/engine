@@ -1,6 +1,7 @@
 package track
 
 import (
+	"net"
 	"time"
 
 	"github.com/Monibuca/engine/v4/codec"
@@ -21,8 +22,7 @@ type AAC Audio
 
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
-		aac.DecoderConfiguration.Reset()
-		aac.DecoderConfiguration.AppendAVCC(frame)
+		aac.DecoderConfiguration.AVCC = AudioSlice(frame)
 		config1, config2 := frame[2], frame[3]
 		//audioObjectType = (config1 & 0xF8) >> 3
 		// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4
@@ -31,8 +31,8 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 		// 4 AAC LTP 	ISO/IEC 14496-3 subpart 4
 		aac.Channels = ((config2 >> 3) & 0x0F) //声道
 		aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
-		aac.DecoderConfiguration.AppendRaw(AudioSlice(frame[2:]))
-		aac.DecoderConfiguration.FillFLV(codec.FLV_TAG_TYPE_AUDIO, 0)
+		aac.DecoderConfiguration.Raw = AudioSlice(frame[2:])
+		aac.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
 	} else {
 		(*Audio)(aac).WriteAVCC(ts, frame)
 	}

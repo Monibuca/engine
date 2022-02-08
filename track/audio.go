@@ -1,12 +1,16 @@
 package track
 
 import (
+	"net"
 	"strings"
 
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/util"
 )
+
+var adcflv1 = []byte{codec.FLV_TAG_TYPE_AUDIO, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0}
+var adcflv2 = []byte{0, 0, 0, 15}
 
 type Audio struct {
 	Media[AudioSlice]
@@ -36,12 +40,18 @@ func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) error) {
 	}
 }
 func (at *Audio) WriteADTS(adts []byte) {
-	at.SampleRate = uint32(codec.SamplingFrequencies[(adts[2]&0x3c)>>2])
-	at.Channels = ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
-	at.DecoderConfiguration.AppendAVCC(codec.ADTSToAudioSpecificConfig(adts))
-	at.DecoderConfiguration.AppendRaw(at.DecoderConfiguration.AVCC[0][2:])
-	at.DecoderConfiguration.FillFLV(codec.FLV_TAG_TYPE_AUDIO, 0)
+	profile := ((adts[2] & 0xc0) >> 6) + 1
+	sampleRate := (adts[2] & 0x3c) >> 2
+	channel := ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
+	config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
+	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
+	at.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
+	at.Channels = channel
+	at.DecoderConfiguration.AVCC = []byte{0xAF, 0x00, config1, config2}
+	at.DecoderConfiguration.Raw = at.DecoderConfiguration.AVCC[:2]
+	at.DecoderConfiguration.FLV = net.Buffers{adcflv1, at.DecoderConfiguration.AVCC, adcflv2}
 }
+
 func (at *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 	at.Media.WriteAVCC(ts, frame)
 	at.Flush()
