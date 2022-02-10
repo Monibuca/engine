@@ -3,7 +3,7 @@ package config
 type Publish struct {
 	PubAudio         bool
 	PubVideo         bool
-	KillExit         bool   // 是否踢掉已经存在的发布者
+	KickExsit         bool   // 是否踢掉已经存在的发布者
 	PublishTimeout   Second // 发布无数据超时
 	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
 }
@@ -34,10 +34,6 @@ type Engine struct {
 	EnableAVCC bool //启用AVCC格式，rtmp协议使用
 	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
 	EnableFLV  bool //开启FLV格式，hdl协议使用
-}
-
-func (g *Engine) Update(override Config) {
-	override.Unmarshal(g)
 }
 
 var Global = &Engine{

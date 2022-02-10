@@ -8,6 +8,7 @@ import (
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/track"
+	log "github.com/sirupsen/logrus"
 )
 
 type AudioFrame AVFrame[AudioSlice]
@@ -29,6 +30,7 @@ type Subscriber struct {
 	SubscribeArgs   url.Values
 	OnAudio         func(*AudioFrame) error `json:"-"`
 	OnVideo         func(*VideoFrame) error `json:"-"`
+	*log.Entry
 }
 
 // Close 关闭订阅者
@@ -43,13 +45,15 @@ func (s *Subscriber) Close() {
 func (sub *Subscriber) Subscribe(streamPath string, config config.Subscribe) bool {
 	Streams.Lock()
 	defer Streams.Unlock()
+	log.Info(sub.ID, "try to subscribe", streamPath)
 	s, created := findOrCreateStream(streamPath, config.WaitTimeout.Duration())
 	if s.IsClosed() {
+		log.Warnln("stream is closed")
 		return false
 	}
+	sub.Entry = s.Entry.WithField("suber", sub.ID)
 	if created {
 		Bus.Publish(Event_REQUEST_PUBLISH, s)
-		go s.run()
 	}
 	if s.Subscribe(sub); sub.Stream != nil {
 		sub.Config = config

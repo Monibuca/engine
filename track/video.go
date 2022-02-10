@@ -7,6 +7,7 @@ import (
 
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
+	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
 )
 
@@ -32,6 +33,7 @@ func (t *Video) ComputeGOP() {
 		t.GOP = int(t.Value.SeqInTrack - t.IDRing.Value.SeqInTrack)
 		if l := t.Size - t.GOP - 5; l > 5 {
 			t.Size -= l
+			t.Stream.Debugf("resize %s ringbuffer %d-%d=%d", t.Name, t.Size+l, l, t.Size)
 			//缩小缓冲环节省内存
 			t.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
 				if v.IFrame {
@@ -59,6 +61,7 @@ func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
 }
 
 func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
+	vt.Stream.Tracef("WriteAnnexB:pts %d,dts %d,len %d", pts, dts, len(frame))
 	for len(frame) > 0 {
 		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)
 		if !found {
@@ -83,7 +86,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
 			nalus = nalus[end:]
 		} else {
-			util.Printf("WriteAVCC error,len %d,nalulenSize:%d,end:%d", len(nalus), vt.nalulenSize, end)
+			vt.Stream.Errorln("WriteAVCC error,len %d,nalulenSize:%d,end:%d", len(nalus), vt.nalulenSize, end)
 			break
 		}
 	}
@@ -91,7 +94,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (vt *Video) Flush() {
 	// AVCC格式补完
-	if vt.Value.AVCC == nil {
+	if vt.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
 		b := []byte{vt.CodecID, 1, 0, 0, 0}
 		if vt.Value.IFrame {
 			b[0] |= 0x10
@@ -107,7 +110,7 @@ func (vt *Video) Flush() {
 		}
 	}
 	// FLV tag 补完
-	if vt.Value.FLV == nil {
+	if vt.Value.FLV == nil && config.Global.EnableFLV {
 		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.Value.DTS/90)
 	}
 	// 下一帧为I帧，即将覆盖

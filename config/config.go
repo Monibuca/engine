@@ -44,7 +44,12 @@ func (config Config) Unmarshal(s any) {
 		el = el.Elem()
 	}
 	t := el.Type()
-
+	if t.Kind() == reflect.Map {
+		for k, v := range config {
+			el.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v).Convert(t.Elem()))
+		}
+		return
+	}
 	//字段映射，小写对应的大写
 	nameMap := make(map[string]string)
 	for i, j := 0, t.NumField(); i < j; i++ {
@@ -52,12 +57,11 @@ func (config Config) Unmarshal(s any) {
 		nameMap[strings.ToLower(name)] = name
 	}
 	for k, v := range config {
-		value := reflect.ValueOf(v)
 		// 需要被写入的字段
 		fv := el.FieldByName(nameMap[k])
-		if t.Kind() == reflect.Slice {
+		if value := reflect.ValueOf(v); value.Kind() == reflect.Slice {
 			l := value.Len()
-			s := reflect.MakeSlice(t.Elem(), l, value.Cap())
+			s := reflect.MakeSlice(fv.Type(), l, value.Cap())
 			for i := 0; i < l; i++ {
 				fv := value.Field(i)
 				if fv.Type() == reflect.TypeOf(config) {
@@ -68,6 +72,11 @@ func (config Config) Unmarshal(s any) {
 			}
 			fv.Set(s)
 		} else if child, ok := v.(Config); ok {
+			if fv.Kind() == reflect.Map {
+				if fv.IsNil() {
+					fv.Set(reflect.MakeMap(fv.Type()))
+				}
+			}
 			child.Unmarshal(fv)
 		} else {
 			fv.Set(value)
@@ -116,10 +125,14 @@ func (config Config) HasChild(key string) (ok bool) {
 }
 
 func (config Config) GetChild(key string) Config {
-	return config[strings.ToLower(key)].(Config)
+	if v, ok := config[strings.ToLower(key)]; ok {
+		return v.(Config)
+	}
+	return nil
 }
 
 func Struct2Config(s any) (config Config) {
+	config = make(Config)
 	var t reflect.Type
 	var v reflect.Value
 	if vv, ok := s.(reflect.Value); ok {
@@ -141,9 +154,6 @@ func Struct2Config(s any) (config Config) {
 		case reflect.Slice:
 			fallthrough
 		default:
-			if config == nil {
-				config = make(Config)
-			}
 			reflect.ValueOf(config).SetMapIndex(reflect.ValueOf(strings.ToLower(ft.Name)), v.Field(i))
 		}
 	}

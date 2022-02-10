@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	. "github.com/Monibuca/engine/v4/common"
-	"github.com/Monibuca/engine/v4/util"
 )
 
 type Tracks struct {
@@ -28,14 +27,14 @@ func (ts *Tracks) Init(ctx context.Context) {
 	ts.Context = ctx
 }
 
-func (ts *Tracks) AddTrack(t Track) {
-	ts.Lock()
-	defer ts.Unlock()
+func (s *Stream) AddTrack(t Track) {
+	s.Tracks.Lock()
+	defer s.Tracks.Unlock()
 	name := t.GetName()
-	if _, ok := ts.m[name]; !ok {
-		util.Println("Track", name, "added")
-		if ts.m[name] = t; ts.Err() == nil {
-			for _, ch := range ts.waiters[name] {
+	if _, ok := s.Tracks.m[name]; !ok {
+		s.Infoln("Track", name, "added")
+		if s.Tracks.m[name] = t; s.Tracks.Err() == nil {
+			for _, ch := range s.Tracks.waiters[name] {
 				if *ch != nil {
 					*ch <- t
 					close(*ch)
@@ -46,11 +45,11 @@ func (ts *Tracks) AddTrack(t Track) {
 	}
 }
 
-func (ts *Tracks) GetTrack(name string) Track {
-	ts.RLock()
-	defer ts.RUnlock()
-	return ts.m[name]
-}
+// func (ts *Tracks) GetTrack(name string) Track {
+// 	ts.RLock()
+// 	defer ts.RUnlock()
+// 	return ts.m[name]
+// }
 
 // WaitDone 当等待结束时需要调用该函数，防止订阅者无限等待Track
 func (ts *Tracks) WaitDone() {

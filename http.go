@@ -3,9 +3,8 @@ package engine
 import (
 	"encoding/json"
 	"net/http"
-
+	log "github.com/sirupsen/logrus"
 	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -15,9 +14,8 @@ type GlobalConfig struct {
 }
 
 func (cfg *GlobalConfig) Update(override config.Config) {
-	cfg.Engine.Update(override)
 	Engine.RawConfig = config.Struct2Config(cfg.Engine)
-	util.Print(Green("api server start at "), BrightBlue(cfg.ListenAddr), BrightBlue(cfg.ListenAddrTLS))
+	log.Infoln(Green("api server start at"), BrightBlue(cfg.ListenAddr), BrightBlue(cfg.ListenAddrTLS))
 	cfg.Listen(Engine, cfg)
 }
 

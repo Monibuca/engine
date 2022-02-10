@@ -10,6 +10,7 @@ import (
 	"github.com/Monibuca/engine/v4/track"
 	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
+	log "github.com/sirupsen/logrus"
 )
 
 type StreamState byte
@@ -101,6 +102,7 @@ type Stream struct {
 	FrameCount uint32 //帧总数
 	AppName    string
 	StreamName string
+	*log.Entry `json:"-"`
 }
 
 func (s *Stream) UnPublish() {
@@ -117,20 +119,21 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 	}
 	p := strings.Split(u.Path, "/")
 	if len(p) < 2 {
-		util.Println(Red("Stream Path Format Error:"), streamPath)
+		log.Warnln(Red("Stream Path Format Error:"), streamPath)
 		return nil, false
 	}
 	if s, ok := Streams.Map[u.Path]; ok {
-		util.Println(Green("Stream Found:"), u.Path)
+		s.Debugln(Green("Stream Found"))
 		return s, false
 	} else {
-		util.Println(Green("Stream Created:"), u.Path)
 		p := strings.Split(u.Path, "/")
 		s = &Stream{
 			URL:        u,
 			AppName:    p[0],
 			StreamName: p[len(p)-1],
+			Entry:      log.WithField("stream", u.Path),
 		}
+		s.Infoln("created:", streamPath)
 		s.WaitTimeout = waitTimeout
 		Streams.Map[u.Path] = s
 		s.actionChan = make(chan any, 1)
@@ -138,6 +141,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s.timeout = time.NewTimer(waitTimeout)
 		s.Context, s.cancel = context.WithCancel(Engine)
 		s.Init(s)
+		go s.run()
 		return s, true
 	}
 }
@@ -145,13 +149,17 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 func (r *Stream) action(action StreamAction) bool {
 	if next, ok := StreamFSM[r.State][action]; ok {
 		if r.Publisher == nil || r.Publisher.OnStateChange(r.State, next) {
-			util.Print(Yellow("Stream "), BrightCyan(r.Path), action, " :", r.State, "->", next)
+			defer r.Publisher.OnStateChanged(r.State, next)
+			r.Debugln(action, " :", r.State, "->", next)
 			r.State = next
 			switch next {
 			case STATE_WAITPUBLISH:
 				r.Publisher = nil
 				Bus.Publish(Event_REQUEST_PUBLISH, r)
 				r.timeout.Reset(r.WaitTimeout)
+				if _, ok = PullOnSubscribeList[r.Path]; ok {
+					PullOnSubscribeList[r.Path].Pull(r.Path)
+				}
 			case STATE_WAITTRACK:
 				r.timeout.Reset(time.Second * 5)
 			case STATE_PUBLISHING:
@@ -194,22 +202,26 @@ func (r *Stream) Close() {
 }
 
 func (r *Stream) UnSubscribe(sub *Subscriber) {
+	r.Debugln("unsubscribe", sub.ID)
 	if !r.IsClosed() {
 		r.actionChan <- UnSubscibeAction(sub)
 	}
 }
 func (r *Stream) Subscribe(sub *Subscriber) {
+	r.Debugln("subscribe", sub.ID)
 	if !r.IsClosed() {
 		sub.Stream = r
 		sub.Context, sub.cancel = context.WithCancel(r)
 		r.actionChan <- sub
 	}
 }
+
+// 流状态处理中枢，包括接收订阅发布指令等
 func (r *Stream) run() {
 	for {
 		select {
 		case <-r.timeout.C:
-			util.Print(Yellow("Stream "), BrightCyan(r.Path), " timeout:", r.State)
+			r.Debugln(r.State, "timeout")
 			r.action(ACTION_TIMEOUT)
 		case <-r.Done():
 			r.action(ACTION_CLOSE)
@@ -226,14 +238,14 @@ func (r *Stream) run() {
 				case *Subscriber:
 					r.Subscribers.Add(v)
 					Bus.Publish(Event_SUBSCRIBE, v)
-					util.Print(Sprintf(Yellow("%s subscriber %s added remains:%d"), BrightCyan(r.Path), Cyan(v.ID), Blue(len(r.Subscribers))))
+					v.Infoln(Sprintf(Yellow("added remains:%d"), Cyan(v.ID), Blue(len(r.Subscribers))))
 					if r.Subscribers.Len() == 1 {
 						r.action(ACTION_FIRSTENTER)
 					}
 				case UnSubscibeAction:
 					if r.Subscribers.Delete(v) {
 						Bus.Publish(Event_UNSUBSCRIBE, v)
-						util.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.Path), Cyan(v.ID), Blue(len(r.Subscribers))))
+						(*Subscriber)(v).Infoln(Sprintf(Yellow("removed remains:%d"), Cyan(v.ID), Blue(len(r.Subscribers))))
 						if r.Subscribers.Len() == 0 && r.WaitCloseTimeout > 0 {
 							r.action(ACTION_LASTLEAVE)
 						}
@@ -249,6 +261,7 @@ func (r *Stream) run() {
 // Update 更新数据重置超时定时器
 func (r *Stream) Update() uint32 {
 	if r.State == STATE_PUBLISHING {
+		r.Traceln("update")
 		r.timeout.Reset(r.PublishTimeout)
 	}
 	return atomic.AddUint32(&r.FrameCount, 1)
@@ -256,26 +269,31 @@ func (r *Stream) Update() uint32 {
 
 // 如果暂时不知道编码格式可以用这个
 func (r *Stream) NewVideoTrack() (vt *track.UnknowVideo) {
+	r.Debugln("create unknow video track")
 	vt = &track.UnknowVideo{
 		Stream: r,
 	}
 	return
 }
 func (r *Stream) NewAudioTrack() (at *track.UnknowAudio) {
+	r.Debugln("create unknow audio track")
 	at = &track.UnknowAudio{
 		Stream: r,
 	}
 	return
 }
 func (r *Stream) NewH264Track() *track.H264 {
+	r.Debugln("create h264 track")
 	return track.NewH264(r)
 }
 
 func (r *Stream) NewH265Track() *track.H265 {
+	r.Debugln("create h265 track")
 	return track.NewH265(r)
 }
 
 func (r *Stream) NewAACTrack() *track.AAC {
+	r.Debugln("create aac track")
 	return track.NewAAC(r)
 }
 
