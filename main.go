@@ -49,27 +49,29 @@ func (p PullOnSubscribe) Pull(streamPath string) {
 func Run(ctx context.Context, configFile string) (err error) {
 	Engine.Context = ctx
 	if err := util.CreateShutdownScript(); err != nil {
-		log.Errorln("create shutdown script error:", err)
+		log.Error("create shutdown script error:", err)
 	}
 	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		log.Errorln("read config file error:", err)
+		log.Error("read config file error:", err)
 	}
 	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
 	if err = os.MkdirAll(settingDir, 0755); err != nil {
-		log.Errorln("create dir .m7s error:", err)
+		log.Error("create dir .m7s error:", err)
 		return
 	}
-	log.Infoln(BgGreen(White("Ⓜ starting m7s v4")))
+	log.Info(Blink("Ⓜ starting m7s v4"))
 	var cg config.Config
 	if ConfigRaw != nil {
 		if err = yaml.Unmarshal(ConfigRaw, &cg); err == nil {
 			Engine.RawConfig = cg.GetChild("global")
+			//将配置信息同步到结构体
 			Engine.RawConfig.Unmarshal(config.Global)
 		}
 	} else {
-		log.Warnln("no config file found , use default config values")
+		log.Warn("no config file found , use default config values")
 	}
+	Engine.Entry = log.WithContext(Engine)
 	Engine.registerHandler()
 	go EngineConfig.Update(Engine.RawConfig)
 	for name, plugin := range Plugins {

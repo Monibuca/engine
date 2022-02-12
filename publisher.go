@@ -13,7 +13,9 @@ type IPublisher interface {
 	Close() // 流关闭时或者被踢时触发
 	OnStateChange(oldState StreamState, newState StreamState) bool
 	OnStateChanged(oldState StreamState, newState StreamState)
+	Publish(streamPath string, specific IPublisher, config config.Publish) bool
 }
+
 type IPuller interface {
 	IPublisher
 	Pull(int)
@@ -35,10 +37,10 @@ func (pub *Publisher) Publish(streamPath string, specific IPublisher, config con
 	}
 	if s.Publisher != nil {
 		if config.KickExsit {
-			s.Warnln("kick", s.Publisher)
+			s.Warn("kick", s.Publisher)
 			s.Publisher.Close()
 		} else {
-			s.Warnln("publisher exsit", s.Publisher)
+			s.Warn("publisher exsit", s.Publisher)
 			return false
 		}
 	}

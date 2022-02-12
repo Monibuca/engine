@@ -2,7 +2,6 @@ package track
 
 import (
 	"net"
-	"strings"
 
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
@@ -15,15 +14,20 @@ var adcflv2 = []byte{0, 0, 0, 15}
 
 type Audio struct {
 	Media[AudioSlice]
+	CodecID codec.AudioCodecID
 	Channels byte
 	avccHead []byte
 }
 
-func (av *Audio) GetName() string {
-	if av.Name == "" {
-		return strings.ToLower(codec.SoundFormat[av.CodecID])
+func (at *Audio) Attach() {
+	at.Stream.AddTrack(at)
+}
+
+func (at *Audio) GetName() string {
+	if at.Name == "" {
+		return at.CodecID.String()
 	}
-	return av.Name
+	return at.Name
 }
 func (at *Audio) GetInfo() *Audio {
 	return at
@@ -81,16 +85,15 @@ func (at *Audio) Flush() {
 }
 
 type UnknowAudio struct {
-	Name   string
-	Stream IStream
-	Know   AVTrack
+	Base
+	AudioTrack
 }
 
 func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if at.Know == nil {
+	if at.AudioTrack == nil {
 		codecID := frame.AudioCodecID()
 		if at.Name == "" {
-			at.Name = strings.ToLower(codec.SoundFormat[codecID])
+			at.Name = codecID.String()
 		}
 		switch codecID {
 		case codec.CodecID_AAC:
@@ -98,11 +101,11 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 				return
 			}
 			a := NewAAC(at.Stream)
-			at.Know = a
+			at.AudioTrack = a
 			a.SampleSize = 16
 			a.avccHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
-			a.Stream.AddTrack(&a.Audio)
+			a.Attach()
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
 			alaw := true
@@ -110,7 +113,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 				alaw = false
 			}
 			a := NewG711(at.Stream, alaw)
-			at.Know = a
+			at.AudioTrack = a
 			a.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
 			a.SampleSize = 16
 			if frame[0]&0x02 == 0 {
@@ -118,9 +121,12 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			a.Channels = frame[0]&0x01 + 1
 			a.avccHead = frame[:1]
-			a.Stream.AddTrack(&a.Audio)
+			a.Attach()
+			at.AudioTrack.WriteAVCC(ts, frame)
+		default:
+			at.Stream.Errorf("audio codec not support yet:", codecID)
 		}
 	} else {
-		at.Know.WriteAVCC(ts, frame)
+		at.AudioTrack.WriteAVCC(ts, frame)
 	}
 }

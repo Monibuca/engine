@@ -26,7 +26,6 @@ func (bt *Base) Flush(bf *BaseFrame) {
 type Media[T RawSlice] struct {
 	Base
 	AVRing[T]            `json:"-"`
-	CodecID              byte
 	SampleRate           uint32
 	SampleSize           byte
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
@@ -110,7 +109,7 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 			av.lastSeq2 = av.lastSeq
 			av.lastSeq = frame.SequenceNumber
 			if av.lastSeq != av.lastSeq2+1 { //序号不连续
-				av.Stream.Warnln("RTP SequenceNumber error", av.lastSeq2, av.lastSeq)
+				av.Stream.Warn("RTP SequenceNumber error", av.lastSeq2, av.lastSeq)
 				return
 			}
 		}

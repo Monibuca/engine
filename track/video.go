@@ -3,7 +3,6 @@ package track
 import (
 	"bytes"
 	"net"
-	"strings"
 
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
@@ -13,6 +12,7 @@ import (
 
 type Video struct {
 	Media[NALUSlice]
+	CodecID     codec.VideoCodecID
 	IDRing      *util.Ring[AVFrame[NALUSlice]] `json:"-"` //最近的关键帧位置，首屏渲染
 	SPSInfo     codec.SPSInfo
 	GOP         int //关键帧间隔
@@ -20,9 +20,13 @@ type Video struct {
 	idrCount    int //缓存中包含的idr数量
 }
 
+func (t *Video) Attach() {
+	t.Stream.AddTrack(t)
+}
+
 func (t *Video) GetName() string {
 	if t.Name == "" {
-		return strings.ToLower(codec.CodecID[t.CodecID])
+		return t.CodecID.String()
 	}
 	return t.Name
 }
@@ -86,7 +90,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
 			nalus = nalus[end:]
 		} else {
-			vt.Stream.Errorln("WriteAVCC error,len %d,nalulenSize:%d,end:%d", len(nalus), vt.nalulenSize, end)
+			vt.Stream.Error("WriteAVCC error,len %d,nalulenSize:%d,end:%d", len(nalus), vt.nalulenSize, end)
 			break
 		}
 	}
@@ -100,7 +104,7 @@ func (vt *Video) Flush() {
 	}
 	// AVCC格式补完
 	if vt.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
-		b := []byte{vt.CodecID, 1, 0, 0, 0}
+		b := []byte{byte(vt.CodecID), 1, 0, 0, 0}
 		if vt.Value.IFrame {
 			b[0] |= 0x10
 		} else {
@@ -147,9 +151,8 @@ func (vt *Video) Play(onVideo func(*AVFrame[NALUSlice]) error) {
 }
 
 type UnknowVideo struct {
-	Name   string
-	Stream IStream
-	Know   AVTrack
+	Base
+	VideoTrack
 }
 
 /*
@@ -172,24 +175,27 @@ func (vt *UnknowVideo) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 }
 
 func (vt *UnknowVideo) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if vt.Know == nil {
+	if vt.VideoTrack == nil {
 		if frame.IsSequence() {
+			ts = 0
 			codecID := frame.VideoCodecID()
 			if vt.Name == "" {
-				vt.Name = strings.ToLower(codec.CodecID[codecID])
+				vt.Name = codecID.String()
 			}
 			switch codecID {
 			case codec.CodecID_H264:
-				v := NewH264(vt.Stream)
-				vt.Know = v
-				v.WriteAVCC(0, frame)
+				vt.VideoTrack = NewH264(vt.Stream)
 			case codec.CodecID_H265:
-				v := NewH265(vt.Stream)
-				vt.Know = v
-				v.WriteAVCC(0, frame)
+				vt.VideoTrack = NewH265(vt.Stream)
+			default:
+				vt.Stream.Error("video codecID not support: ", codecID)
+				return
 			}
+			vt.VideoTrack.WriteAVCC(ts, frame)
+		} else {
+			vt.Stream.Warnf("need sequence frame")
 		}
 	} else {
-		vt.Know.WriteAVCC(ts, frame)
+		vt.VideoTrack.WriteAVCC(ts, frame)
 	}
 }

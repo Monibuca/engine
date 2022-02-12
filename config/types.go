@@ -33,6 +33,13 @@ type Push struct {
 	PushList map[string]string // 自动推流列表
 }
 
+func (p *Push) AddPush(streamPath string, url string) {
+	if p.PushList == nil {
+		p.PushList = make(map[string]string)
+	}
+	p.PushList[streamPath] = url
+}
+
 type Engine struct {
 	Publish
 	Subscribe
@@ -44,7 +51,7 @@ type Engine struct {
 }
 
 var Global = &Engine{
-	Publish{true, true, false, 10, 10},
+	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true},
 	false, true, true, true,

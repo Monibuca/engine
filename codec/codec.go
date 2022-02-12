@@ -2,17 +2,41 @@ package codec
 
 import (
 	"errors"
-
 )
+
+type AudioCodecID byte
+type VideoCodecID byte
 
 const (
-	ADTS_HEADER_SIZE = 7
-	CodecID_AAC      = 0xA
-	CodecID_PCMA     = 7
-	CodecID_PCMU     = 8
-	CodecID_H264     = 7
-	CodecID_H265     = 0xC
+	ADTS_HEADER_SIZE              = 7
+	CodecID_AAC      AudioCodecID = 0xA
+	CodecID_PCMA     AudioCodecID = 7
+	CodecID_PCMU     AudioCodecID = 8
+	CodecID_H264     VideoCodecID = 7
+	CodecID_H265     VideoCodecID = 0xC
 )
+
+func (codecId AudioCodecID) String() string {
+	switch codecId {
+	case CodecID_AAC:
+		return "aac"
+	case CodecID_PCMA:
+		return "pcma"
+	case CodecID_PCMU:
+		return "pcmu"
+	}
+	return "unknow"
+}
+
+func (codecId VideoCodecID) String() string {
+	switch codecId {
+	case CodecID_H264:
+		return "h264"
+	case CodecID_H265:
+		return "h265"
+	}
+	return "unknow"
+}
 
 // ISO/IEC 14496-3 38(52)/page
 //
@@ -212,5 +236,3 @@ func ParseRTPAAC(payload []byte) (result [][]byte) {
 	}
 	return
 }
-
-

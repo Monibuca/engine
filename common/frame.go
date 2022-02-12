@@ -46,7 +46,7 @@ func (nalu NALUSlice) Bytes() (b []byte) {
 	return
 }
 
-func (nalu *NALUSlice) Reset() *NALUSlice{
+func (nalu *NALUSlice) Reset() *NALUSlice {
 	if len(*nalu) > 0 {
 		*nalu = (*nalu)[:0]
 	}
@@ -94,7 +94,7 @@ func (rtp *RTPFrame) Marshal() *RTPFrame {
 func (rtp *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 	rtp.Raw = raw
 	if err := rtp.Packet.Unmarshal(raw); err != nil {
-		logrus.Errorln(err)
+		logrus.Error(err)
 		return nil
 	}
 	return rtp
@@ -154,11 +154,11 @@ func (avcc AVCCFrame) IsSequence() bool {
 func (avcc AVCCFrame) CTS() uint32 {
 	return uint32(avcc[2])<<24 | uint32(avcc[3])<<8 | uint32(avcc[4])
 }
-func (avcc AVCCFrame) VideoCodecID() byte {
-	return avcc[0] & 0x0F
+func (avcc AVCCFrame) VideoCodecID() codec.VideoCodecID {
+	return codec.VideoCodecID(avcc[0] & 0x0F)
 }
-func (avcc AVCCFrame) AudioCodecID() byte {
-	return avcc[0] >> 4
+func (avcc AVCCFrame) AudioCodecID() codec.AudioCodecID {
+	return codec.AudioCodecID(avcc[0] >> 4)
 }
 
 // func (annexb AnnexBFrame) ToSlices() (ret []NALUSlice) {

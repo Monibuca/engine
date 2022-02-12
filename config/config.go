@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Config map[string]any
@@ -57,8 +59,13 @@ func (config Config) Unmarshal(s any) {
 		nameMap[strings.ToLower(name)] = name
 	}
 	for k, v := range config {
+		name, ok := nameMap[k]
+		if !ok {
+			logrus.Error("no config named:", k)
+			continue
+		}
 		// 需要被写入的字段
-		fv := el.FieldByName(nameMap[k])
+		fv := el.FieldByName(name)
 		if value := reflect.ValueOf(v); value.Kind() == reflect.Slice {
 			l := value.Len()
 			s := reflect.MakeSlice(fv.Type(), l, value.Cap())
@@ -110,8 +117,17 @@ func (config Config) Merge(source Config) {
 	}
 }
 
-func (config Config) Set(key string, value any) {
-	config[strings.ToLower(key)] = value
+func (config *Config) Set(key string, value any) {
+	if *config == nil {
+		*config = Config{strings.ToLower(key): value}
+	} else {
+		(*config)[strings.ToLower(key)] = value
+	}
+}
+
+func (config Config) Get(key string) any {
+	v, _ := config[strings.ToLower(key)]
+	return v
 }
 
 func (config Config) Has(key string) (ok bool) {
@@ -148,13 +164,14 @@ func Struct2Config(s any) (config Config) {
 	}
 	for i, j := 0, t.NumField(); i < j; i++ {
 		ft := t.Field(i)
+		name := strings.ToLower(ft.Name)
 		switch ft.Type.Kind() {
 		case reflect.Struct:
-			config[ft.Name] = Struct2Config(v.Field(i))
+			config[name] = Struct2Config(v.Field(i))
 		case reflect.Slice:
 			fallthrough
 		default:
-			reflect.ValueOf(config).SetMapIndex(reflect.ValueOf(strings.ToLower(ft.Name)), v.Field(i))
+			reflect.ValueOf(config).SetMapIndex(reflect.ValueOf(name), v.Field(i))
 		}
 	}
 	return

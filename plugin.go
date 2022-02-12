@@ -35,7 +35,7 @@ func InstallPlugin(config config.Plugin) *Plugin {
 	if config != EngineConfig {
 		plugin.Entry = log.WithField("plugin", name)
 		Plugins[name] = plugin
-		plugin.Infoln(Green("install"), BrightBlue(plugin.Version))
+		plugin.Info(Green("install"), BrightBlue(plugin.Version))
 	}
 	return plugin
 }
@@ -72,12 +72,12 @@ func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, 
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
 	}
-	opt.Infoln("http handle added:", pattern)
+	opt.Info("http handle added:", pattern)
 	EngineConfig.HandleFunc(pattern, func(rw http.ResponseWriter, r *http.Request) {
 		if cors {
 			util.CORS(rw, r)
 		}
-		opt.Debugln(r.RemoteAddr, " -> ", pattern)
+		opt.Debug(r.RemoteAddr, " -> ", pattern)
 		handler(rw, r)
 	})
 }
@@ -99,9 +99,9 @@ func (opt *Plugin) assign() {
 	// 用全局配置覆盖没有设置的配置
 	for _, fname := range MergeConfigs {
 		if _, ok := t.FieldByName(fname); ok {
-			if Engine.RawConfig.Has(fname) {
+			if v, ok := Engine.RawConfig[strings.ToLower(fname)]; ok {
 				if !opt.RawConfig.Has(fname) {
-					opt.RawConfig.Set(fname, Engine.RawConfig[fname])
+					opt.RawConfig.Set(fname, v)
 				} else if opt.RawConfig.HasChild(fname) {
 					opt.RawConfig.GetChild(fname).Merge(Engine.RawConfig.GetChild(fname))
 				}

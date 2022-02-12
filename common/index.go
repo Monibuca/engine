@@ -8,6 +8,7 @@ type Track interface {
 
 type AVTrack interface {
 	Track
+	Attach()
 	WriteAVCC(ts uint32, frame AVCCFrame) //写入AVCC格式的数据
 	Flush()
 }

@@ -113,7 +113,7 @@ func (vt *H264) WriteRTP(raw []byte) {
 func (vt *H264) Flush() {
 	if vt.Value.IFrame {
 		if vt.IDRing == nil {
-			defer vt.Stream.AddTrack(&vt.Video)
+			defer vt.Attach()
 		}
 		vt.Video.ComputeGOP()
 	}

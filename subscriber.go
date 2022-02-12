@@ -48,7 +48,7 @@ func (sub *Subscriber) Subscribe(streamPath string, config config.Subscribe) boo
 	log.Info(sub.ID, "try to subscribe", streamPath)
 	s, created := findOrCreateStream(streamPath, config.WaitTimeout.Duration())
 	if s.IsClosed() {
-		log.Warnln("stream is closed")
+		log.Warn("stream is closed")
 		return false
 	}
 	sub.Entry = s.Entry.WithField("suber", sub.ID)

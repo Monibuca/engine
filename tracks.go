@@ -32,7 +32,7 @@ func (s *Stream) AddTrack(t Track) {
 	defer s.Tracks.Unlock()
 	name := t.GetName()
 	if _, ok := s.Tracks.m[name]; !ok {
-		s.Infoln("Track", name, "added")
+		s.Infof("Track '%s' added", name)
 		if s.Tracks.m[name] = t; s.Tracks.Err() == nil {
 			for _, ch := range s.Tracks.waiters[name] {
 				if *ch != nil {
