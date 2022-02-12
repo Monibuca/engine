@@ -11,6 +11,21 @@ type AVTrack interface {
 	WriteAVCC(ts uint32, frame AVCCFrame) //写入AVCC格式的数据
 	Flush()
 }
+type VideoTrack interface {
+	AVTrack
+	GetDecoderConfiguration() DecoderConfiguration[NALUSlice]
+	CurrentFrame() *AVFrame[NALUSlice]
+	WriteSlice(NALUSlice)
+	WriteAnnexB(uint32, uint32, AnnexBFrame)
+}
+
+type AudioTrack interface {
+	AVTrack
+	GetDecoderConfiguration() DecoderConfiguration[AudioSlice]
+	CurrentFrame() *AVFrame[AudioSlice]
+	WriteSlice(AudioSlice)
+	WriteADTS([]byte)
+}
 
 type BPS struct {
 	ts    time.Time

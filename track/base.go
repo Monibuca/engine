@@ -37,6 +37,14 @@ type Media[T RawSlice] struct {
 	lastSeq2    uint16      //记录上上一个收到的序列号
 }
 
+func (av *Media[T]) GetDecoderConfiguration() DecoderConfiguration[T] {
+	return av.DecoderConfiguration
+}
+
+func (av *Media[T]) CurrentFrame() *AVFrame[T] {
+	return &av.Value
+}
+
 // 获取缓存中下一个rtpFrame
 func (av *Media[T]) nextRTPFrame() (frame *RTPFrame) {
 	if config.Global.RTPReorder {
