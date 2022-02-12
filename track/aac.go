@@ -18,22 +18,26 @@ func NewAAC(stream IStream) (aac *AAC) {
 	aac.Init(stream, 32)
 	aac.Poll = time.Millisecond * 20
 	aac.DecoderConfiguration.PayloadType = 97
+	if config.Global.RTPReorder {
+		aac.orderQueue = make([]*RTPFrame, 20)
+	}
 	return
 }
 
-type AAC Audio
+type AAC struct {
+	Audio
+}
 
 func (aac *AAC) WriteRTP(raw []byte) {
-	var packet RTPFrame
-	if frame := packet.Unmarshal(raw); frame == nil {
-		return
-	}
-	for _, payload := range codec.ParseRTPAAC(packet.Payload) {
-		aac.WriteSlice(payload)
-	}
-	aac.Value.AppendRTP(packet)
-	if packet.Marker {
-		aac.Flush()
+	for frame := aac.UnmarshalRTP(raw); frame != nil; frame = aac.nextRTPFrame() {
+		for _, payload := range codec.ParseRTPAAC(frame.Payload) {
+			aac.WriteSlice(payload)
+		}
+		aac.Value.AppendRTP(frame)
+		if frame.Marker {
+			aac.generateTimestamp()
+			aac.Flush()
+		}
 	}
 }
 
@@ -51,7 +55,7 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 		aac.DecoderConfiguration.Raw = AudioSlice(frame[2:])
 		aac.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
 	} else {
-		(*Audio)(aac).WriteAVCC(ts, frame)
+		aac.Audio.WriteAVCC(ts, frame)
 		aac.Flush()
 	}
 }
@@ -73,5 +77,5 @@ func (aac *AAC) Flush() {
 		}
 		aac.PacketizeRTP(o)
 	}
-	(*Audio)(aac).Flush()
+	aac.Audio.Flush()
 }

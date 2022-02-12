@@ -127,13 +127,7 @@ func (r *Subscriber) WaitVideoTrack(names ...string) *track.Video {
 	if t := <-r.Stream.WaitTrack(names...); t == nil {
 		return nil
 	} else {
-		switch vt := t.(type) {
-		case *track.H264:
-			return (*track.Video)(vt)
-		case *track.H265:
-			return (*track.Video)(vt)
-		}
-		return nil
+		return t.(*track.Video)
 	}
 }
 
@@ -147,12 +141,6 @@ func (r *Subscriber) WaitAudioTrack(names ...string) *track.Audio {
 	if t := <-r.Stream.WaitTrack(names...); t == nil {
 		return nil
 	} else {
-		switch at := t.(type) {
-		case *track.AAC:
-			return (*track.Audio)(at)
-		case *track.G711:
-			return (*track.Audio)(at)
-		}
-		return nil
+		return t.(*track.Audio)
 	}
 }

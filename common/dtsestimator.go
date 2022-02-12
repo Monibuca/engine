@@ -1,4 +1,4 @@
-package engine
+package common
 
 // DTSEstimator is a DTS estimator.
 type DTSEstimator struct {

@@ -119,7 +119,7 @@ type AVFrame[T RawSlice] struct {
 	DTS     uint32
 	FLV     net.Buffers // 打包好的FLV Tag
 	AVCC    net.Buffers // 打包好的AVCC格式
-	RTP     []RTPFrame
+	RTP     []*RTPFrame
 	Raw     []T //裸数据
 	canRead bool
 }
@@ -134,7 +134,7 @@ func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)
 }
-func (av *AVFrame[T]) AppendRTP(rtp ...RTPFrame) {
+func (av *AVFrame[T]) AppendRTP(rtp ...*RTPFrame) {
 	av.RTP = append(av.RTP, rtp...)
 }
 

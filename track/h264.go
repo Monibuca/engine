@@ -10,7 +10,10 @@ import (
 	"github.com/Monibuca/engine/v4/util"
 )
 
-type H264 Video
+type H264 struct {
+	Video
+	dtsEst *DTSEstimator
+}
 
 func NewH264(stream IStream) (vt *H264) {
 	vt = &H264{}
@@ -21,10 +24,14 @@ func NewH264(stream IStream) (vt *H264) {
 	vt.Init(stream, 256)
 	vt.Poll = time.Millisecond * 20
 	vt.DecoderConfiguration.PayloadType = 96
+	if config.Global.RTPReorder {
+		vt.orderQueue = make([]*RTPFrame, 20)
+	}
+	vt.dtsEst = NewDTSEstimator()
 	return
 }
 func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
-	(*Video)(vt).WriteAnnexB(pts, dts, frame)
+	vt.Video.WriteAnnexB(pts, dts, frame)
 	vt.Flush()
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
@@ -66,49 +73,49 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 		}
 		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
 	} else {
-		(*Video)(vt).WriteAVCC(ts, frame)
+		vt.Video.WriteAVCC(ts, frame)
 		vt.Value.IFrame = frame.IsIDR()
 		vt.Flush()
 	}
 }
 
 func (vt *H264) WriteRTP(raw []byte) {
-	var frame RTPFrame
-	if packet := frame.Unmarshal(raw); packet == nil {
-		return
-	}
-	if naluType := frame.H264Type(); naluType < 24 {
-		vt.WriteSlice(NALUSlice{frame.Payload})
-	} else {
-		switch naluType {
-		case codec.NALU_STAPA, codec.NALU_STAPB:
-			for buffer := util.Buffer(frame.Payload[naluType.Offset():]); buffer.CanRead(); {
-				vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
-			}
-		case codec.NALU_FUA, codec.NALU_FUB:
-			if util.Bit1(frame.Payload[1], 0) {
-				vt.Value.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
-			}
-			lastIndex := len(vt.Value.Raw) - 1
-			vt.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
-			if util.Bit1(frame.Payload[1], 1) {
-				vt.Value.Raw = vt.Value.Raw[:lastIndex]
-				vt.WriteSlice(vt.Value.Raw[lastIndex])
+	for frame := vt.UnmarshalRTP(raw); frame != nil; frame = vt.nextRTPFrame() {
+		if naluType := frame.H264Type(); naluType < 24 {
+			vt.WriteSlice(NALUSlice{frame.Payload})
+		} else {
+			switch naluType {
+			case codec.NALU_STAPA, codec.NALU_STAPB:
+				for buffer := util.Buffer(frame.Payload[naluType.Offset():]); buffer.CanRead(); {
+					vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
+				}
+			case codec.NALU_FUA, codec.NALU_FUB:
+				if util.Bit1(frame.Payload[1], 0) {
+					vt.Value.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
+				}
+				lastIndex := len(vt.Value.Raw) - 1
+				vt.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
+				if util.Bit1(frame.Payload[1], 1) {
+					vt.Value.Raw = vt.Value.Raw[:lastIndex]
+					vt.WriteSlice(vt.Value.Raw[lastIndex])
+				}
 			}
 		}
-	}
-	vt.Value.AppendRTP(frame)
-	if frame.Marker {
-		vt.Flush()
+		vt.Value.AppendRTP(frame)
+		if frame.Marker {
+			vt.Value.PTS = frame.Timestamp
+			vt.Value.DTS = vt.dtsEst.Feed(frame.Timestamp)
+			vt.Flush()
+		}
 	}
 }
 
 func (vt *H264) Flush() {
 	if vt.Value.IFrame {
 		if vt.IDRing == nil {
-			defer vt.Stream.AddTrack(vt)
+			defer vt.Stream.AddTrack(&vt.Video)
 		}
-		(*Video)(vt).ComputeGOP()
+		vt.Video.ComputeGOP()
 	}
 	// RTP格式补完
 	if vt.Value.RTP == nil && config.Global.EnableRTP {
@@ -142,5 +149,5 @@ func (vt *H264) Flush() {
 		}
 		vt.PacketizeRTP(out...)
 	}
-	(*Video)(vt).Flush()
+	vt.Video.Flush()
 }

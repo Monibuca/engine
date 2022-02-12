@@ -102,7 +102,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			a.SampleSize = 16
 			a.avccHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
-			a.Stream.AddTrack(a)
+			a.Stream.AddTrack(&a.Audio)
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
 			alaw := true
@@ -118,7 +118,7 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			a.Channels = frame[0]&0x01 + 1
 			a.avccHead = frame[:1]
-			a.Stream.AddTrack(a)
+			a.Stream.AddTrack(&a.Audio)
 		}
 	} else {
 		at.Know.WriteAVCC(ts, frame)
