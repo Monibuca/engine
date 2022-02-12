@@ -3,7 +3,7 @@ package config
 type Publish struct {
 	PubAudio         bool
 	PubVideo         bool
-	KickExsit         bool   // 是否踢掉已经存在的发布者
+	KickExsit        bool   // 是否踢掉已经存在的发布者
 	PublishTimeout   Second // 发布无数据超时
 	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
 }
@@ -16,14 +16,21 @@ type Subscribe struct {
 }
 
 type Pull struct {
-	AutoReconnect   bool              // 自动重连
+	Reconnect       int               // 自动重连,0 表示不自动重连，-1 表示无限重连，高于0 的数代表最大重连次数
 	PullOnStart     bool              // 启动时拉流
 	PullOnSubscribe bool              // 订阅时自动拉流
-	AutoPullList    map[string]string // 自动拉流列表
+	PullList        map[string]string // 自动拉流列表，以streamPath为key，url为value
+}
+
+func (p *Pull) AddPull(streamPath string, url string) {
+	if p.PullList == nil {
+		p.PullList = make(map[string]string)
+	}
+	p.PullList[streamPath] = url
 }
 
 type Push struct {
-	AutoPushList map[string]string // 自动推流列表
+	PushList map[string]string // 自动推流列表
 }
 
 type Engine struct {

@@ -3,7 +3,6 @@ package util
 import (
 	"encoding/binary"
 	"math"
-	"net"
 )
 
 type Buffer []byte
@@ -57,6 +56,9 @@ func (b *Buffer) Write(a []byte) (n int, err error) {
 func (b Buffer) Len() int {
 	return len(b)
 }
+func (b Buffer) CanRead() bool {
+	return b.Len() > 0
+}
 func (b Buffer) Cap() int {
 	return cap(b)
 }
@@ -86,23 +88,20 @@ func (b *Buffer) Glow(n int) {
 }
 
 // SizeOfBuffers 计算Buffers的内容长度
-func SizeOfBuffers(buf net.Buffers) (size int) {
+func SizeOfBuffers[T ~[]byte](buf []T) (size int) {
 	for _, b := range buf {
 		size += len(b)
 	}
 	return
 }
-func CutBuffers(buf net.Buffers, size int) {
-
-}
 
 // SplitBuffers 按照一定大小分割 Buffers
-func SplitBuffers(buf net.Buffers, size int) (result []net.Buffers) {
+func SplitBuffers[T ~[]byte](buf []T, size int) (result [][]T) {
 	for total := SizeOfBuffers(buf); total > 0; {
 		if total <= size {
 			return append(result, buf)
 		} else {
-			var before net.Buffers
+			var before []T
 			sizeOfBefore := 0
 			for _, b := range buf {
 				need := size - sizeOfBefore
@@ -123,5 +122,3 @@ func SplitBuffers(buf net.Buffers, size int) (result []net.Buffers) {
 	}
 	return
 }
-
-

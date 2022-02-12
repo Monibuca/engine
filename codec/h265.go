@@ -8,6 +8,12 @@ import (
 	"github.com/q191201771/naza/pkg/nazabits"
 )
 
+type H265NALUType byte
+
+func (H265NALUType) Parse(b byte) H265NALUType {
+	return H265NALUType(b & 0x7E >> 1)
+}
+
 const (
 	// HEVC_VPS    = 0x40
 	// HEVC_SPS    = 0x42
@@ -16,16 +22,16 @@ const (
 	// HEVC_IDR    = 0x26
 	// HEVC_PSLICE = 0x02
 
-	NAL_UNIT_CODED_SLICE_TRAIL_N byte = iota // 0
-	NAL_UNIT_CODED_SLICE_TRAIL_R             // 1
-	NAL_UNIT_CODED_SLICE_TSA_N               // 2
-	NAL_UNIT_CODED_SLICE_TLA                 // 3 // Current name in the spec: TSA_R
-	NAL_UNIT_CODED_SLICE_STSA_N              // 4
-	NAL_UNIT_CODED_SLICE_STSA_R              // 5
-	NAL_UNIT_CODED_SLICE_RADL_N              // 6
-	NAL_UNIT_CODED_SLICE_DLP                 // 7 // Current name in the spec: RADL_R
-	NAL_UNIT_CODED_SLICE_RASL_N              // 8
-	NAL_UNIT_CODED_SLICE_TFD                 // 9 // Current name in the spec: RASL_R
+	NAL_UNIT_CODED_SLICE_TRAIL_N H265NALUType = iota // 0
+	NAL_UNIT_CODED_SLICE_TRAIL_R                     // 1
+	NAL_UNIT_CODED_SLICE_TSA_N                       // 2
+	NAL_UNIT_CODED_SLICE_TLA                         // 3 // Current name in the spec: TSA_R
+	NAL_UNIT_CODED_SLICE_STSA_N                      // 4
+	NAL_UNIT_CODED_SLICE_STSA_R                      // 5
+	NAL_UNIT_CODED_SLICE_RADL_N                      // 6
+	NAL_UNIT_CODED_SLICE_DLP                         // 7 // Current name in the spec: RADL_R
+	NAL_UNIT_CODED_SLICE_RASL_N                      // 8
+	NAL_UNIT_CODED_SLICE_TFD                         // 9 // Current name in the spec: RASL_R
 	NAL_UNIT_RESERVED_10
 	NAL_UNIT_RESERVED_11
 	NAL_UNIT_RESERVED_12
@@ -64,8 +70,8 @@ const (
 	NAL_UNIT_RESERVED_45
 	NAL_UNIT_RESERVED_46
 	NAL_UNIT_RESERVED_47
-	NAL_UNIT_UNSPECIFIED_48
-	NAL_UNIT_UNSPECIFIED_49
+	NAL_UNIT_RTP_AP
+	NAL_UNIT_RTP_FU
 	NAL_UNIT_UNSPECIFIED_50
 	NAL_UNIT_UNSPECIFIED_51
 	NAL_UNIT_UNSPECIFIED_52

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
+	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
 )
 
@@ -39,6 +40,7 @@ func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) error) {
 		ar.MoveNext()
 	}
 }
+
 func (at *Audio) WriteADTS(adts []byte) {
 	profile := ((adts[2] & 0xc0) >> 6) + 1
 	sampleRate := (adts[2] & 0x3c) >> 2
@@ -47,26 +49,33 @@ func (at *Audio) WriteADTS(adts []byte) {
 	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
 	at.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
 	at.Channels = channel
-	at.DecoderConfiguration.AVCC = []byte{0xAF, 0x00, config1, config2}
-	at.DecoderConfiguration.Raw = at.DecoderConfiguration.AVCC[:2]
-	at.DecoderConfiguration.FLV = net.Buffers{adcflv1, at.DecoderConfiguration.AVCC, adcflv2}
-}
-
-func (at *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
-	at.Media.WriteAVCC(ts, frame)
-	at.Flush()
+	avcc := []byte{0xAF, 0x00, config1, config2}
+	at.DecoderConfiguration = DecoderConfiguration[AudioSlice]{
+		97,
+		avcc,
+		avcc[:2],
+		net.Buffers{adcflv1, at.DecoderConfiguration.AVCC, adcflv2},
+	}
 }
 
 func (at *Audio) Flush() {
-	if at.Value.AVCC == nil {
+	// AVCC 格式补完
+	if at.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
 		at.Value.AppendAVCC(at.avccHead)
 		for _, raw := range at.Value.Raw {
 			at.Value.AppendAVCC(raw)
 		}
 	}
 	// FLV tag 补完
-	if at.Value.FLV == nil {
+	if at.Value.FLV == nil && config.Global.EnableFLV {
 		at.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, at.Value.DTS/90)
+	}
+	if at.Value.RTP == nil && config.Global.EnableRTP {
+		var o []byte
+		for _, raw := range at.Value.Raw {
+			o = append(o, raw...)
+		}
+		at.PacketizeRTP(o)
 	}
 	at.Media.Flush()
 }

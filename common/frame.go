@@ -6,6 +6,7 @@ import (
 
 	"github.com/Monibuca/engine/v4/codec"
 	"github.com/pion/rtp"
+	"github.com/sirupsen/logrus"
 )
 
 type NALUSlice net.Buffers
@@ -29,11 +30,31 @@ type RawSlice interface {
 // func (nalu *H264NALU) Append(slice ...NALUSlice) {
 // 	*nalu = append(*nalu, slice...)
 // }
-func (nalu NALUSlice) H264Type() byte {
-	return nalu[0][0] & 0x1F
+func (nalu NALUSlice) H264Type() (naluType codec.H264NALUType) {
+	return naluType.Parse(nalu[0][0])
 }
-func (nalu NALUSlice) H265Type() byte {
-	return nalu[0][0] & 0x7E >> 1
+func (nalu NALUSlice) RefIdc() byte {
+	return nalu[0][0] & 0x60
+}
+func (nalu NALUSlice) H265Type() (naluType codec.H265NALUType) {
+	return naluType.Parse(nalu[0][0])
+}
+func (nalu NALUSlice) Bytes() (b []byte) {
+	for _, slice := range nalu {
+		b = append(b, slice...)
+	}
+	return
+}
+
+func (nalu *NALUSlice) Reset() *NALUSlice{
+	if len(*nalu) > 0 {
+		*nalu = (*nalu)[:0]
+	}
+	return nalu
+}
+
+func (nalu *NALUSlice) Append(b ...[]byte) {
+	*nalu = append(*nalu, b...)
 }
 
 // func (nalu *H265NALU) Append(slice ...NALUSlice) {
@@ -54,6 +75,31 @@ func (nalu NALUSlice) H265Type() byte {
 
 type AVCCFrame []byte   // 一帧AVCC格式的数据
 type AnnexBFrame []byte // 一帧AnnexB格式数据
+type RTPFrame struct {
+	rtp.Packet
+	Raw []byte // 序列化后的数据，避免反复序列化
+}
+
+func (rtp *RTPFrame) H264Type() (naluType codec.H264NALUType) {
+	return naluType.Parse(rtp.Payload[0])
+}
+func (rtp *RTPFrame) H265Type() (naluType codec.H265NALUType) {
+	return naluType.Parse(rtp.Payload[0])
+}
+func (rtp *RTPFrame) Marshal() *RTPFrame {
+	rtp.Raw, _ = rtp.Packet.Marshal()
+	return rtp
+}
+
+func (rtp *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
+	rtp.Raw = raw
+	if err := rtp.Packet.Unmarshal(raw); err != nil {
+		logrus.Errorln(err)
+		return nil
+	}
+	return rtp
+}
+
 type BaseFrame struct {
 	DeltaTime   uint32 // 相对上一帧时间戳，毫秒
 	SeqInStream uint32 //在一个流中的总序号
@@ -68,15 +114,14 @@ type DataFrame[T any] struct {
 }
 type AVFrame[T RawSlice] struct {
 	BaseFrame
-	IFrame     bool
-	PTS        uint32
-	DTS        uint32
-	FLV        net.Buffers // 打包好的FLV Tag
-	AVCC       net.Buffers // 打包好的AVCC格式
-	RTP        net.Buffers // 打包好的RTP格式
-	RTPPackets []rtp.Packet
-	Raw        []T //裸数据
-	canRead    bool
+	IFrame  bool
+	PTS     uint32
+	DTS     uint32
+	FLV     net.Buffers // 打包好的FLV Tag
+	AVCC    net.Buffers // 打包好的AVCC格式
+	RTP     []RTPFrame
+	Raw     []T //裸数据
+	canRead bool
 }
 
 func (av *AVFrame[T]) AppendRaw(raw ...T) {
@@ -89,18 +134,14 @@ func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)
 }
-func (av *AVFrame[T]) AppendRTP(rtp []byte) {
-	av.RTP = append(av.RTP, rtp)
-}
-func (av *AVFrame[T]) AppendRTPPackets(rtp rtp.Packet) {
-	av.RTPPackets = append(av.RTPPackets, rtp)
+func (av *AVFrame[T]) AppendRTP(rtp ...RTPFrame) {
+	av.RTP = append(av.RTP, rtp...)
 }
 
 func (av *AVFrame[T]) Reset() {
 	av.FLV = nil
 	av.AVCC = nil
 	av.RTP = nil
-	av.RTPPackets = nil
 	av.Raw = nil
 }
 
@@ -147,7 +188,8 @@ func (avcc AVCCFrame) AudioCodecID() byte {
 // 	return
 // }
 type DecoderConfiguration[T RawSlice] struct {
-	AVCC T
-	Raw  T
-	FLV  net.Buffers
+	PayloadType byte
+	AVCC        T
+	Raw         T
+	FLV         net.Buffers
 }

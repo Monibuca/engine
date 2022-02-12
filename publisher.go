@@ -74,6 +74,11 @@ type Puller struct {
 	pullCount int
 }
 
+// 是否需要重连
+func (pub *Puller) reconnect() bool {
+	return pub.Config.Reconnect == -1 || pub.pullCount <= pub.Config.Reconnect
+}
+
 func (pub *Puller) pull() {
 	pub.specific.(IPuller).Pull(pub.pullCount)
 	pub.pullCount++
@@ -84,7 +89,7 @@ func (pub *Puller) OnStateChanged(oldState StreamState, newState StreamState) {
 	case STATE_WAITTRACK:
 		go pub.pull()
 	case STATE_WAITPUBLISH:
-		if pub.Config.AutoReconnect && pub.Publish(pub.Path, pub.specific, *pub.Publisher.Config) {
+		if pub.reconnect() && pub.Publish(pub.Path, pub.specific, *pub.Publisher.Config) {
 			go pub.pull()
 		}
 	}

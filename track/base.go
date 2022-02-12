@@ -2,7 +2,6 @@ package track
 
 import (
 	. "github.com/Monibuca/engine/v4/common"
-	"github.com/Monibuca/engine/v4/util"
 	"github.com/pion/rtp"
 )
 
@@ -30,20 +29,9 @@ type Media[T RawSlice] struct {
 	SampleRate           uint32
 	SampleSize           byte
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
-	util.BytesPool                               //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
+	// util.BytesPool                               //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
 	lastAvccTS           uint32                  //上一个avcc帧的时间戳
-}
-
-func (av *Media[T]) WriteRTP(raw []byte) {
-	av.Value.AppendRTP(raw)
-	var packet rtp.Packet
-	if err := packet.Unmarshal(raw); err != nil {
-		return
-	}
-	av.Value.AppendRTPPackets(packet)
-	if packet.Marker {
-		av.Flush()
-	}
+	rtpSequence          uint16
 }
 
 func (av *Media[T]) WriteSlice(slice T) {
@@ -67,4 +55,26 @@ func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 func (av *Media[T]) Flush() {
 	av.Base.Flush(&av.Value.BaseFrame)
 	av.Step()
+}
+
+// Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
+func (av *Media[T]) PacketizeRTP(payloads ...[]byte) {
+	for i, pp := range payloads {
+		av.rtpSequence++
+		var frame = RTPFrame{Packet: rtp.Packet{
+			Header: rtp.Header{
+				Version:        2,
+				Padding:        false,
+				Extension:      false,
+				Marker:         i == len(payloads)-1,
+				PayloadType:    av.DecoderConfiguration.PayloadType,
+				SequenceNumber: av.rtpSequence,
+				Timestamp:      av.Value.DTS, // Figure out how to do timestamps
+				SSRC:           av.Stream.SSRC(),
+			},
+			Payload: pp,
+		}}
+		frame.Marshal()
+		av.Value.AppendRTP(frame)
+	}
 }

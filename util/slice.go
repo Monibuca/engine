@@ -30,3 +30,7 @@ func (s *Slice[T]) ResetAppend(first T) {
 	s.Reset()
 	s.Add(first)
 }
+
+func LastElement[T any](s []T) T {
+	return s[len(s)-1]
+}

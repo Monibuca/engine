@@ -27,7 +27,7 @@ func InstallPlugin(config config.Plugin) *Plugin {
 	_, pluginFilePath, _, _ := runtime.Caller(1)
 	configDir := filepath.Dir(pluginFilePath)
 	if parts := strings.Split(configDir, "@"); len(parts) > 1 {
-		plugin.Version = parts[len(parts)-1]
+		plugin.Version = util.LastElement(parts)
 	}
 	if _, ok := Plugins[name]; ok {
 		return nil
@@ -83,6 +83,7 @@ func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, 
 }
 
 // 读取独立配置合并入总配置中
+// TODO: 覆盖逻辑有待商榷
 func (opt *Plugin) assign() {
 	f, err := os.Open(opt.settingPath())
 	if err == nil {
@@ -128,7 +129,7 @@ func (opt *Plugin) autoPull() {
 		if t.Field(i).Name == "Pull" {
 			var pullConfig config.Pull
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
-			for streamPath, url := range pullConfig.AutoPullList {
+			for streamPath, url := range pullConfig.PullList {
 				puller := Puller{RemoteURL: url, Config: &pullConfig}
 				if pullConfig.PullOnStart {
 					opt.Config.(PullPlugin).PullStream(streamPath, puller)

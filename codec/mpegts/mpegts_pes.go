@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/Monibuca/engine/v4/util"
-	"github.com/Monibuca/engine/v4/codec"
 	"io"
 	"io/ioutil"
+
+	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/util"
 )
 
 // ios13818-1-CN.pdf 45/166
@@ -582,7 +583,7 @@ func CheckPESPacketIsKeyFrame(packet MpegTsPESPacket) bool {
 	nalus := bytes.SplitN(packet.Payload, codec.NALU_Delimiter1, -1)
 
 	for _, v := range nalus {
-		if v[0]&0x1f == codec.NALU_IDR_Picture {
+		if codec.H264NALUType.ParseBytes(codec.NALU_IDR_Picture, v) == codec.NALU_IDR_Picture {
 			return true
 		}
 	}

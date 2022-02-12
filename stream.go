@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/Monibuca/engine/v4/track"
 	"github.com/Monibuca/engine/v4/util"
@@ -105,6 +106,10 @@ type Stream struct {
 	*log.Entry `json:"-"`
 }
 
+func (s *Stream) SSRC() uint32 {
+	return uint32(uintptr(unsafe.Pointer(s)))
+}
+
 func (s *Stream) UnPublish() {
 	if !s.IsClosed() {
 		s.actionChan <- UnPublishAction{}
@@ -130,7 +135,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s = &Stream{
 			URL:        u,
 			AppName:    p[0],
-			StreamName: p[len(p)-1],
+			StreamName: util.LastElement(p),
 			Entry:      log.WithField("stream", u.Path),
 		}
 		s.Infoln("created:", streamPath)

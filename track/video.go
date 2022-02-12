@@ -93,6 +93,11 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 }
 
 func (vt *Video) Flush() {
+	// 没有实际媒体数据
+	if vt.Value.Raw == nil {
+		vt.Value.Reset()
+		return
+	}
 	// AVCC格式补完
 	if vt.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
 		b := []byte{vt.CodecID, 1, 0, 0, 0}

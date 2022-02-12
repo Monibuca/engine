@@ -12,4 +12,5 @@ type IStream interface {
 	AddTrack(Track)
 	IsClosed() bool
 	log.Ext1FieldLogger
+	SSRC() uint32
 }
