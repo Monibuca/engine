@@ -8,10 +8,11 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/Monibuca/engine/v4/log"
 	"github.com/Monibuca/engine/v4/track"
 	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 type StreamState byte
@@ -62,9 +63,7 @@ var StreamFSM = [STATE_DESTROYED + 1]map[StreamAction]StreamState{
 	{
 		ACTION_TIMEOUT: STATE_DESTROYED,
 	},
-	{
-
-	},
+	{},
 }
 
 // Streams 所有的流集合
@@ -103,10 +102,10 @@ type Stream struct {
 	StartTime   time.Time               //流的创建时间
 	Subscribers util.Slice[*Subscriber] // 订阅者
 	Tracks
-	FrameCount uint32 //帧总数
-	AppName    string
-	StreamName string
-	*log.Entry `json:"-"`
+	FrameCount    uint32 //帧总数
+	AppName       string
+	StreamName    string
+	*logrus.Entry `json:"-"`
 }
 
 func (s *Stream) SSRC() uint32 {
@@ -180,6 +179,11 @@ func (r *Stream) action(action StreamAction) bool {
 			r.WaitDone()
 			r.timeout.Reset(r.PublishTimeout)
 			Bus.Publish(Event_PUBLISH, r)
+			if v, ok := PushOnPublishList[r.Path]; ok {
+				for _, v := range v {
+					v.Push(r)
+				}
+			}
 		case STATE_WAITCLOSE:
 			r.timeout.Reset(r.WaitCloseTimeout)
 		case STATE_CLOSED:
@@ -251,8 +255,9 @@ func (r *Stream) run() {
 					r.action(v)
 				case *Subscriber:
 					r.Subscribers.Add(v)
+					v.SubscribeTime = time.Now()
 					Bus.Publish(Event_SUBSCRIBE, v)
-					v.Info(Sprintf(Yellow("added remains:%d") ,len(r.Subscribers)))
+					v.Info(Sprintf(Yellow("added remains:%d"), len(r.Subscribers)))
 					if r.Subscribers.Len() == 1 {
 						r.action(ACTION_FIRSTENTER)
 					}

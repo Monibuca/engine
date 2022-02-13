@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"io"
 	"net/url"
 	"time"
 
@@ -143,4 +144,46 @@ func (r *Subscriber) WaitAudioTrack(names ...string) *track.Audio {
 	} else {
 		return t.(*track.Audio)
 	}
+}
+
+type IPusher interface {
+	Push(int)
+	Close()
+}
+type Pusher struct {
+	Subscriber
+	specific  IPusher
+	Config    *config.Push
+	RemoteURL string
+	io.Writer
+	io.Closer
+	pushCount int
+}
+
+// 是否需要重连
+func (pub *Pusher) reconnect() bool {
+	return pub.Config.RePush == -1 || pub.pushCount <= pub.Config.RePush
+}
+
+func (pub *Pusher) push() {
+	pub.specific.Push(pub.pushCount)
+	pub.pushCount++
+	pub.specific.Close()
+	pub.Subscriber.Stream.Subscribe(&pub.Subscriber)
+	if !pub.Subscriber.Stream.IsClosed() {
+		go pub.push()
+	}
+}
+
+func (pub *Pusher) Push(specific IPusher, config config.Push) {
+	pub.specific = specific
+	pub.Config = &config
+	go pub.push()
+}
+
+func (p *Pusher) Close() {
+	if p.Closer != nil {
+		p.Closer.Close()
+	}
+	p.Subscriber.Close()
 }

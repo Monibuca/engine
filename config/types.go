@@ -16,7 +16,7 @@ type Subscribe struct {
 }
 
 type Pull struct {
-	Reconnect       int               // 自动重连,0 表示不自动重连，-1 表示无限重连，高于0 的数代表最大重连次数
+	RePull          int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
 	PullOnStart     bool              // 启动时拉流
 	PullOnSubscribe bool              // 订阅时自动拉流
 	PullList        map[string]string // 自动拉流列表，以streamPath为key，url为value
@@ -30,6 +30,7 @@ func (p *Pull) AddPull(streamPath string, url string) {
 }
 
 type Push struct {
+	RePush   int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
 	PushList map[string]string // 自动推流列表
 }
 

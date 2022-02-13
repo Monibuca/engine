@@ -78,7 +78,7 @@ type Puller struct {
 
 // 是否需要重连
 func (pub *Puller) reconnect() bool {
-	return pub.Config.Reconnect == -1 || pub.pullCount <= pub.Config.Reconnect
+	return pub.Config.RePull == -1 || pub.pullCount <= pub.Config.RePull
 }
 
 func (pub *Puller) pull() {

@@ -3,10 +3,9 @@ package engine
 import (
 	"encoding/json"
 	"net/http"
-
+	"github.com/Monibuca/engine/v4/log"
 	"github.com/Monibuca/engine/v4/config"
 	. "github.com/logrusorgru/aurora"
-	log "github.com/sirupsen/logrus"
 )
 
 type GlobalConfig struct {

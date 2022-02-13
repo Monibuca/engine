@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"github.com/Monibuca/engine/v4/config"
+	"github.com/Monibuca/engine/v4/log"
 	"github.com/Monibuca/engine/v4/util"
 	. "github.com/logrusorgru/aurora"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,9 +50,11 @@ type Plugin struct {
 	Version            string        //插件版本
 	RawConfig          config.Config //配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
-	*log.Entry
+	*logrus.Entry
 }
-
+type PushPlugin interface {
+	PushStream(*Stream, Pusher)
+}
 type PullPlugin interface {
 	PullStream(string, Puller) bool
 }
@@ -126,7 +129,7 @@ func (opt *Plugin) autoPull() {
 	t := reflect.TypeOf(opt.Config).Elem()
 	v := reflect.ValueOf(opt.Config).Elem()
 	for i, j := 0, t.NumField(); i < j; i++ {
-		if t.Field(i).Name == "Pull" {
+		if name := t.Field(i).Name; name == "Pull" {
 			var pullConfig config.Pull
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pullConfig.PullList {
@@ -136,6 +139,13 @@ func (opt *Plugin) autoPull() {
 				} else if pullConfig.PullOnSubscribe {
 					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), puller}
 				}
+			}
+		} else if name == "Push" {
+			var pushConfig config.Push
+			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
+			for streamPath, url := range pushConfig.PushList {
+				pusher := Pusher{RemoteURL: url, Config: &pushConfig}
+				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), pusher})
 			}
 		}
 	}

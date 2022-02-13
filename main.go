@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/Monibuca/engine/v4/config"
+	"github.com/Monibuca/engine/v4/log"
 	"github.com/Monibuca/engine/v4/util"
 	"github.com/google/uuid"
 	. "github.com/logrusorgru/aurora"
-	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,15 +34,25 @@ var (
 	handlerFuncType              = reflect.TypeOf(toolManForGetHandlerFuncType) //供反射使用的Handler类型的类型
 	MergeConfigs                 = []string{"Publish", "Subscribe"}             //需要合并配置的属性项，插件若没有配置则使用全局配置
 	PullOnSubscribeList          = make(map[string]PullOnSubscribe)             //按需拉流的配置信息
+	PushOnPublishList            = make(map[string][]PushOnPublish)             //发布时自动推流配置
 )
 
+type PushOnPublish struct {
+	PushPlugin
+	Pusher
+}
+
+func (p PushOnPublish) Push(stream *Stream) {
+	p.PushStream(stream, p.Pusher)
+}
+
 type PullOnSubscribe struct {
-	Plugin PullPlugin
+	PullPlugin
 	Puller
 }
 
 func (p PullOnSubscribe) Pull(streamPath string) {
-	p.Plugin.PullStream(streamPath, p.Puller)
+	p.PullStream(streamPath, p.Puller)
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
