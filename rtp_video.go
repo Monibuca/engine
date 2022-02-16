@@ -332,7 +332,7 @@ func (p *RTPVideo) _demux(ts uint32, payload []byte) {
 					dts = dtsEst.Feed(pts)
 				}
 				cache = append(cache, nalus.Payload)
-				if p.Marker {
+				if p.Marker && nalus.Next != nil {
 					p.PushNalu(dts, pts-dts, cache...)
 					cache = cache[:0]
 				}
