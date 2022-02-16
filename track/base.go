@@ -1,8 +1,12 @@
 package track
 
 import (
+	"context"
+	"time"
+
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
+	"github.com/Monibuca/engine/v4/util"
 	"github.com/pion/rtp"
 )
 
@@ -19,7 +23,7 @@ func (bt *Base) GetName() string {
 
 func (bt *Base) Flush(bf *BaseFrame) {
 	bt.ComputeBPS(bf.BytesIn)
-	bf.SeqInStream = bt.Stream.Update()
+	bf.Timestamp = time.Now()
 }
 
 // Media 基础媒体Track类
@@ -34,6 +38,25 @@ type Media[T RawSlice] struct {
 	orderQueue  []*RTPFrame //rtp包的缓存队列，用于乱序重排
 	lastSeq     uint16      //上一个收到的序号，用于乱序重排
 	lastSeq2    uint16      //记录上上一个收到的序列号
+}
+
+func (av *Media[T]) LastWriteTime() time.Time {
+	return av.AVRing.PreValue().Timestamp
+}
+
+func (av *Media[T]) Play(ctx context.Context, onMedia func(*AVFrame[T]) error) error {
+	for ar := av.ReadRing(); ctx.Err() == nil; ar.MoveNext() {
+		ap := ar.Read(ctx)
+		if err := onMedia(ap); err != nil {
+			// TODO: log err
+			return err
+		}
+	}
+	return ctx.Err()
+}
+
+func (av *Media[T]) ReadRing() *AVRing[T] {
+	return util.Clone(av.AVRing)
 }
 
 func (av *Media[T]) GetDecoderConfiguration() DecoderConfiguration[T] {
@@ -109,7 +132,7 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 			av.lastSeq2 = av.lastSeq
 			av.lastSeq = frame.SequenceNumber
 			if av.lastSeq != av.lastSeq2+1 { //序号不连续
-				av.Stream.Warn("RTP SequenceNumber error", av.lastSeq2, av.lastSeq)
+				// av.Stream.Warn("RTP SequenceNumber error", av.lastSeq2, av.lastSeq)
 				return
 			}
 		}
@@ -127,7 +150,7 @@ func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 	av.Value.AppendAVCC(frame)
 	av.Value.DTS = ts * 90
 	av.Value.PTS = (ts + cts) * 90
-	av.Stream.Tracef("WriteAVCC:ts %d,cts %d,len %d", ts, cts, len(frame))
+	// av.Stream.Tracef("WriteAVCC:ts %d,cts %d,len %d", ts, cts, len(frame))
 }
 
 func (av *Media[T]) Flush() {

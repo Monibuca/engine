@@ -8,6 +8,7 @@ import (
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
+	"go.uber.org/zap"
 )
 
 type Video struct {
@@ -23,7 +24,10 @@ type Video struct {
 func (t *Video) Attach() {
 	t.Stream.AddTrack(t)
 }
-
+func (t *Video) Detach() {
+	t.Stream = nil
+	t.Stream.RemoveTrack(t)
+}
 func (t *Video) GetName() string {
 	if t.Name == "" {
 		return t.CodecID.String()
@@ -37,7 +41,7 @@ func (t *Video) ComputeGOP() {
 		t.GOP = int(t.Value.SeqInTrack - t.IDRing.Value.SeqInTrack)
 		if l := t.Size - t.GOP - 5; l > 5 {
 			t.Size -= l
-			t.Stream.Debugf("resize %s ringbuffer %d-%d=%d", t.Name, t.Size+l, l, t.Size)
+			t.Stream.Debug("resize", zap.String("name", t.Name), zap.Int("after", t.Size+l), zap.Int("before", t.Size))
 			//缩小缓冲环节省内存
 			t.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
 				if v.IFrame {
@@ -65,7 +69,7 @@ func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
 }
 
 func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
-	vt.Stream.Tracef("WriteAnnexB:pts %d,dts %d,len %d", pts, dts, len(frame))
+	// vt.Stream.Tracef("WriteAnnexB:pts %d,dts %d,len %d", pts, dts, len(frame))
 	for len(frame) > 0 {
 		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)
 		if !found {
@@ -90,7 +94,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
 			nalus = nalus[end:]
 		} else {
-			vt.Stream.Error("WriteAVCC error,len %d,nalulenSize:%d,end:%d", len(nalus), vt.nalulenSize, end)
+			vt.Stream.Error("WriteAVCC", zap.Int("len", len(nalus)), zap.Int("naluLenSize", vt.nalulenSize), zap.Int("end", end))
 			break
 		}
 	}
@@ -135,19 +139,11 @@ func (vt *Video) Flush() {
 	}
 	vt.Media.Flush()
 }
+
 func (vt *Video) ReadRing() *AVRing[NALUSlice] {
-	vr := util.Clone(vt.AVRing)
+	vr := vt.Media.ReadRing()
 	vr.Ring = vt.IDRing
 	return vr
-}
-func (vt *Video) Play(onVideo func(*AVFrame[NALUSlice]) error) {
-	vr := vt.ReadRing()
-	for vp := vr.Read(); vt.Stream.Err() == nil; vp = vr.Read() {
-		if onVideo(vp) != nil {
-			break
-		}
-		vr.MoveNext()
-	}
 }
 
 type UnknowVideo struct {
@@ -188,12 +184,12 @@ func (vt *UnknowVideo) WriteAVCC(ts uint32, frame AVCCFrame) {
 			case codec.CodecID_H265:
 				vt.VideoTrack = NewH265(vt.Stream)
 			default:
-				vt.Stream.Error("video codecID not support: ", codecID)
+				vt.Stream.Error("video codecID not support: ", zap.Uint8("codeId", uint8(codecID)))
 				return
 			}
 			vt.VideoTrack.WriteAVCC(ts, frame)
 		} else {
-			vt.Stream.Warnf("need sequence frame")
+			vt.Stream.Warn("need sequence frame")
 		}
 	} else {
 		vt.VideoTrack.WriteAVCC(ts, frame)

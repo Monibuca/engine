@@ -1,16 +1,14 @@
 package common
 
 import (
-	"context"
-
-	log "github.com/sirupsen/logrus"
+	"github.com/Monibuca/engine/v4/log"
 )
 
 type IStream interface {
-	context.Context
-	Update() uint32
 	AddTrack(Track)
+	RemoveTrack(Track)
 	IsClosed() bool
-	log.Ext1FieldLogger
 	SSRC() uint32
+	log.Zap
+	Receive(any)
 }

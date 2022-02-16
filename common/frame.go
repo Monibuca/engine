@@ -101,10 +101,10 @@ func (rtp *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 }
 
 type BaseFrame struct {
-	DeltaTime   uint32 // 相对上一帧时间戳，毫秒
-	SeqInStream uint32 //在一个流中的总序号
-	SeqInTrack  uint32 //在一个Track中的序号
-	BytesIn     int    // 输入字节数用于计算BPS
+	DeltaTime  uint32    // 相对上一帧时间戳，毫秒
+	Timestamp  time.Time // 写入时间,可用于比较两个帧的先后
+	SeqInTrack uint32    // 在一个Track中的序号
+	BytesIn    int       // 输入字节数用于计算BPS
 }
 
 type DataFrame[T any] struct {

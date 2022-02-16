@@ -53,10 +53,10 @@ type Plugin struct {
 	*logrus.Entry
 }
 type PushPlugin interface {
-	PushStream(*Stream, Pusher)
+	PushStream(*Stream, string, *config.Push)
 }
 type PullPlugin interface {
-	PullStream(string, Puller) bool
+	PullStream(string, string, *config.Pull) bool
 }
 
 func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
@@ -133,19 +133,17 @@ func (opt *Plugin) autoPull() {
 			var pullConfig config.Pull
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pullConfig.PullList {
-				puller := Puller{RemoteURL: url, Config: &pullConfig}
 				if pullConfig.PullOnStart {
-					opt.Config.(PullPlugin).PullStream(streamPath, puller)
+					opt.Config.(PullPlugin).PullStream(streamPath, url, &pullConfig)
 				} else if pullConfig.PullOnSubscribe {
-					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), puller}
+					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), url, &pullConfig}
 				}
 			}
 		} else if name == "Push" {
 			var pushConfig config.Push
 			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pushConfig.PushList {
-				pusher := Pusher{RemoteURL: url, Config: &pushConfig}
-				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), pusher})
+				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), url, &pushConfig})
 			}
 		}
 	}
@@ -181,4 +179,20 @@ func (opt *Plugin) Save() error {
 		opt.Info("config saved")
 	}
 	return err
+}
+
+func (opt *Plugin) Publish(streamPath string, pub IPublisher) bool {
+	conf, ok := opt.Config.(config.PublishConfig)
+	if !ok {
+		conf = EngineConfig
+	}
+	return pub.receive(streamPath, pub, conf.GetPublishConfig())
+}
+
+func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) bool {
+	conf, ok := opt.Config.(config.SubscribeConfig)
+	if !ok {
+		conf = EngineConfig
+	}
+	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
 }

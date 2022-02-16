@@ -1,11 +1,23 @@
 package config
 
+type PublishConfig interface {
+	GetPublishConfig() *Publish
+}
+
+type SubscribeConfig interface {
+	GetSubscribeConfig() *Subscribe
+}
+
 type Publish struct {
 	PubAudio         bool
 	PubVideo         bool
-	KickExsit        bool   // 是否踢掉已经存在的发布者
+	KickExist        bool   // 是否踢掉已经存在的发布者
 	PublishTimeout   Second // 发布无数据超时
 	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
+}
+
+func (c *Publish) GetPublishConfig() *Publish {
+	return c
 }
 
 type Subscribe struct {
@@ -13,6 +25,10 @@ type Subscribe struct {
 	SubVideo    bool
 	IFrameOnly  bool   // 只要关键帧
 	WaitTimeout Second // 等待流超时
+}
+
+func (c *Subscribe) GetSubscribeConfig() *Subscribe {
+	return c
 }
 
 type Pull struct {

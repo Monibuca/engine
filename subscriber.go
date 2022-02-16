@@ -1,189 +1,104 @@
 package engine
 
 import (
-	"context"
-	"io"
-	"net/url"
 	"time"
 
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/track"
-	log "github.com/sirupsen/logrus"
 )
 
 type AudioFrame AVFrame[AudioSlice]
 type VideoFrame AVFrame[NALUSlice]
+type ISubscriber interface {
+	IIO
+	receive(string, ISubscriber, *config.Subscribe) bool
+	config.SubscribeConfig
+}
 
 // Subscriber 订阅者实体定义
 type Subscriber struct {
-	context.Context `json:"-"`
-	cancel          context.CancelFunc
-	Config          config.Subscribe
-	Stream          *Stream `json:"-"`
-	ID              string
-	TotalDrop       int //总丢帧
-	TotalPacket     int
-	Type            string
-	BufferLength    int
-	Delay           uint32
-	SubscribeTime   time.Time
-	SubscribeArgs   url.Values
-	OnAudio         func(*AudioFrame) error `json:"-"`
-	OnVideo         func(*VideoFrame) error `json:"-"`
-	*log.Entry
+	IO[config.Subscribe, ISubscriber]
+	AudioTrack *track.Audio
+	VideoTrack *track.Video
+	vr         *AVRing[NALUSlice]
+	ar         *AVRing[AudioSlice]
 }
 
-// Close 关闭订阅者
-func (s *Subscriber) Close() {
-	s.Stream.UnSubscribe(s)
-	if s.cancel != nil {
-		s.cancel()
-	}
+func (p *Publisher) Unsubscribe() {
+	p.bye(p)
 }
 
-//Subscribe 开始订阅 将Subscriber与Stream关联
-func (sub *Subscriber) Subscribe(streamPath string, config config.Subscribe) bool {
-	Streams.Lock()
-	defer Streams.Unlock()
-	log.Info(sub.ID, "try to subscribe", streamPath)
-	s, created := findOrCreateStream(streamPath, config.WaitTimeout.Duration())
-	if s.IsClosed() {
-		log.Warn("stream is closed")
-		return false
+func (s *Subscriber) GetSubscribeConfig() *config.Subscribe {
+	return s.Config
+}
+
+func (s *Subscriber) OnEvent(event any) any {
+	s.IO.OnEvent(event)
+	switch v := event.(type) {
+	case TrackRemoved:
+		if a, ok := v.(*track.Audio); ok && a == s.AudioTrack {
+			s.ar = nil
+		} else if v, ok := v.(*track.Video); ok && v == s.VideoTrack {
+			s.vr = nil
+		}
 	}
-	sub.Entry = s.Entry.WithField("suber", sub.ID)
-	if created {
-		Bus.Publish(Event_REQUEST_PUBLISH, s)
+	return event
+}
+
+func (s *Subscriber) AcceptTrack(t Track) {
+	if v, ok := t.(*track.Video); ok {
+		s.VideoTrack = v
+		s.vr = v.ReadRing()
+		go s.play()
+	} else if a, ok := t.(*track.Audio); ok {
+		s.AudioTrack = a
+		s.ar = a.ReadRing()
+		if !s.Config.SubVideo {
+			go s.play()
+		}
 	}
-	if s.Subscribe(sub); sub.Stream != nil {
-		sub.Config = config
-	}
-	return true
+	// TODO: data track
 }
 
 //Play 开始播放
-func (s *Subscriber) Play(at *track.Audio, vt *track.Video) {
-	defer s.Close()
-	if vt == nil && at == nil {
-		return
-	}
-	if vt == nil {
-		s.PlayAudio(at)
-		return
-	} else if at == nil {
-		s.PlayVideo(vt)
-		return
-	}
-	vr := vt.ReadRing() //从关键帧开始读取，首屏秒开
-	ar := at.ReadRing()
-	vp := vr.Read()
-	ap := ar.TryRead()
-	// chase := true
+func (s *Subscriber) play() {
+	var t time.Time
 	for s.Err() == nil {
-		if ap == nil && vp == nil {
-			time.Sleep(time.Millisecond * 10)
-		} else if ap != nil && (vp == nil || vp.SeqInStream > ap.SeqInStream) {
-			if s.onAudio(ap) != nil {
-				return
+		if s.vr != nil {
+			for {
+				vp := s.vr.Read(s)
+				s.OnEvent((*VideoFrame)(vp))
+				s.vr.MoveNext()
+				if vp.Timestamp.After(t) {
+					t = vp.Timestamp
+					break
+				}
 			}
-			ar.MoveNext()
-		} else if vp != nil && (ap == nil || ap.SeqInStream > vp.SeqInStream) {
-			if s.onVideo(vp) != nil {
-				return
-			}
-			// if chase {
-			// 	if add10 := vst.Add(time.Millisecond * 10); realSt.After(add10) {
-			// 		vst = add10
-			// 	} else {
-			// 		vst = realSt
-			// 		chase = false
-			// 	}
-			// }
-			vr.MoveNext()
 		}
-		ap = ar.TryRead()
-		vp = vr.TryRead()
+		if s.ar != nil {
+			for {
+				ap := s.ar.Read(s)
+				s.OnEvent((*AudioFrame)(ap))
+				s.ar.MoveNext()
+				if ap.Timestamp.After(t) {
+					t = ap.Timestamp
+					break
+				}
+			}
+		}
 	}
-}
-func (s *Subscriber) onAudio(af *AVFrame[AudioSlice]) error {
-	return s.OnAudio((*AudioFrame)(af))
-}
-func (s *Subscriber) onVideo(vf *AVFrame[NALUSlice]) error {
-	return s.OnVideo((*VideoFrame)(vf))
-}
-func (s *Subscriber) PlayAudio(at *track.Audio) {
-	at.Play(s.onAudio)
-}
-func (s *Subscriber) PlayVideo(vt *track.Video) {
-	vt.Play(s.onVideo)
-}
-func (r *Subscriber) WaitVideoTrack(names ...string) *track.Video {
-	if !r.Config.SubVideo {
-		return nil
-	}
-	if len(names) == 0 {
-		names = []string{"h264", "h265"}
-	}
-	if t := <-r.Stream.WaitTrack(names...); t == nil {
-		return nil
-	} else {
-		return t.(*track.Video)
-	}
+	return
 }
 
-func (r *Subscriber) WaitAudioTrack(names ...string) *track.Audio {
-	if !r.Config.SubAudio {
-		return nil
-	}
-	if len(names) == 0 {
-		names = []string{"aac", "pcma", "pcmu"}
-	}
-	if t := <-r.Stream.WaitTrack(names...); t == nil {
-		return nil
-	} else {
-		return t.(*track.Audio)
-	}
-}
-
-type IPusher interface {
-	Push(int)
-	Close()
-}
 type Pusher struct {
 	Subscriber
-	specific  IPusher
 	Config    *config.Push
 	RemoteURL string
-	io.Writer
-	io.Closer
-	pushCount int
+	PushCount int
 }
 
 // 是否需要重连
-func (pub *Pusher) reconnect() bool {
-	return pub.Config.RePush == -1 || pub.pushCount <= pub.Config.RePush
-}
-
-func (pub *Pusher) push() {
-	pub.specific.Push(pub.pushCount)
-	pub.pushCount++
-	pub.specific.Close()
-	pub.Subscriber.Stream.Subscribe(&pub.Subscriber)
-	if !pub.Subscriber.Stream.IsClosed() {
-		go pub.push()
-	}
-}
-
-func (pub *Pusher) Push(specific IPusher, config config.Push) {
-	pub.specific = specific
-	pub.Config = &config
-	go pub.push()
-}
-
-func (p *Pusher) Close() {
-	if p.Closer != nil {
-		p.Closer.Close()
-	}
-	p.Subscriber.Close()
+func (pub *Pusher) Reconnect() bool {
+	return pub.Config.RePush == -1 || pub.PushCount <= pub.Config.RePush
 }

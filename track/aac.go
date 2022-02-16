@@ -15,7 +15,7 @@ func NewAAC(stream IStream) (aac *AAC) {
 	aac.Name = "aac"
 	aac.Stream = stream
 	aac.CodecID = codec.CodecID_AAC
-	aac.Init(stream, 32)
+	aac.Init(32)
 	aac.Poll = time.Millisecond * 20
 	aac.DecoderConfiguration.PayloadType = 97
 	if config.Global.RTPReorder {
@@ -54,6 +54,7 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 		aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
 		aac.DecoderConfiguration.Raw = AudioSlice(frame[2:])
 		aac.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
+		aac.Attach()
 	} else {
 		aac.Audio.WriteAVCC(ts, frame)
 		aac.Flush()

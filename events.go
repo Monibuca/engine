@@ -5,7 +5,7 @@ import (
 )
 
 type TransCodeReq struct {
-	*Subscriber
+	ISubscriber
 	RequestCodec string
 }
 

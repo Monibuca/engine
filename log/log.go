@@ -9,8 +9,10 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"github.com/mattn/go-colorable"
 	log "github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 )
 
+var logger *zap.Logger
 var levelColors = []func(any) Value{Red, Red, Red, Yellow, Blue, Green, White}
 
 type LogWriter func(*log.Entry) string
@@ -18,8 +20,21 @@ type LogWriter func(*log.Entry) string
 var colorableStdout = colorable.NewColorableStdout()
 
 func init() {
+	logger, _ = zap.NewDevelopment()
 	std.SetOutput(colorableStdout)
 	std.SetFormatter(LogWriter(defaultFormatter))
+}
+
+type Zap interface {
+	With(fields ...zap.Field) *zap.Logger
+	Debug(msg string, fields ...zap.Field)
+	Info(msg string, fields ...zap.Field)
+	Warn(msg string, fields ...zap.Field)
+	Error(msg string, fields ...zap.Field)
+}
+
+func With(fields ...zap.Field) *zap.Logger {
+	return logger.With(fields...)
 }
 
 func defaultFormatter(entry *log.Entry) string {

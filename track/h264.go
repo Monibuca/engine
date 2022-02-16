@@ -21,7 +21,7 @@ func NewH264(stream IStream) (vt *H264) {
 	vt.CodecID = codec.CodecID_H264
 	vt.SampleRate = 90000
 	vt.Stream = stream
-	vt.Init(stream, 256)
+	vt.Init(256)
 	vt.Poll = time.Millisecond * 20
 	vt.DecoderConfiguration.PayloadType = 96
 	if config.Global.RTPReorder {

@@ -39,20 +39,22 @@ var (
 
 type PushOnPublish struct {
 	PushPlugin
-	Pusher
+	RemoteURL string
+	Config    *config.Push
 }
 
 func (p PushOnPublish) Push(stream *Stream) {
-	p.PushStream(stream, p.Pusher)
+	p.PushStream(stream, p.RemoteURL, p.Config)
 }
 
 type PullOnSubscribe struct {
 	PullPlugin
-	Puller
+	RemoteURL string
+	Config    *config.Pull
 }
 
 func (p PullOnSubscribe) Pull(streamPath string) {
-	p.PullStream(streamPath, p.Puller)
+	p.PullStream(streamPath, p.RemoteURL, p.Config)
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有

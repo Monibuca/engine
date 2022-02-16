@@ -5,23 +5,11 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/Monibuca/engine/v4/util"
 )
 
 type AVRing[T RawSlice] struct {
 	RingBuffer[AVFrame[T]]
-	ctx  context.Context
 	Poll time.Duration
-}
-
-func (r *AVRing[T]) Init(ctx context.Context, n int) {
-	r.ctx = ctx
-	r.RingBuffer.Init(n)
-}
-
-func (r AVRing[T]) SubRing(rr *util.Ring[AVFrame[T]]) *AVRing[T] {
-	r.Ring = rr
-	return &r
 }
 
 func (r *AVRing[T]) Step() *AVFrame[T] {
@@ -42,18 +30,15 @@ func (r *AVRing[T]) wait() {
 	}
 }
 
-func (r *AVRing[T]) Read() *AVFrame[T] {
-	item := &r.Value
-	for r.ctx.Err() == nil && !item.canRead {
-		r.wait()
+func (r *AVRing[T]) Read(ctx context.Context) (item *AVFrame[T]) {
+	for item = &r.Value; ctx.Err() == nil && !item.canRead; r.wait() {
 	}
-	return item
+	return
 }
 
-func (r *AVRing[T]) TryRead() *AVFrame[T] {
-	item := &r.Value
-	if r.ctx.Err() == nil && !item.canRead {
+func (r *AVRing[T]) TryRead(ctx context.Context) (item *AVFrame[T]) {
+	if item = &r.Value; ctx.Err() == nil && !item.canRead {
 		return nil
 	}
-	return item
+	return
 }

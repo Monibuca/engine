@@ -6,7 +6,7 @@ import (
 	"github.com/Monibuca/engine/v4/codec"
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/util"
+	"go.uber.org/zap"
 )
 
 var adcflv1 = []byte{codec.FLV_TAG_TYPE_AUDIO, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0}
@@ -14,74 +14,65 @@ var adcflv2 = []byte{0, 0, 0, 15}
 
 type Audio struct {
 	Media[AudioSlice]
-	CodecID codec.AudioCodecID
+	CodecID  codec.AudioCodecID
 	Channels byte
 	avccHead []byte
 }
 
-func (at *Audio) Attach() {
-	at.Stream.AddTrack(at)
+func (a *Audio) Attach() {
+	a.Stream.AddTrack(a)
+}
+func (a *Audio) Detach() {
+	a.Stream = nil
+	a.Stream.RemoveTrack(a)
+}
+func (a *Audio) GetName() string {
+	if a.Name == "" {
+		return a.CodecID.String()
+	}
+	return a.Name
+}
+func (a *Audio) GetInfo() *Audio {
+	return a
 }
 
-func (at *Audio) GetName() string {
-	if at.Name == "" {
-		return at.CodecID.String()
-	}
-	return at.Name
-}
-func (at *Audio) GetInfo() *Audio {
-	return at
-}
-func (at *Audio) ReadRing() *AVRing[AudioSlice] {
-	return util.Clone(at.AVRing)
-}
-func (at *Audio) Play(onAudio func(*AVFrame[AudioSlice]) error) {
-	ar := at.ReadRing()
-	for ap := ar.Read(); at.Stream.Err() == nil; ap = ar.Read() {
-		if onAudio(ap) != nil {
-			break
-		}
-		ar.MoveNext()
-	}
-}
-
-func (at *Audio) WriteADTS(adts []byte) {
+func (a *Audio) WriteADTS(adts []byte) {
 	profile := ((adts[2] & 0xc0) >> 6) + 1
 	sampleRate := (adts[2] & 0x3c) >> 2
 	channel := ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
 	config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
 	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
-	at.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
-	at.Channels = channel
+	a.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
+	a.Channels = channel
 	avcc := []byte{0xAF, 0x00, config1, config2}
-	at.DecoderConfiguration = DecoderConfiguration[AudioSlice]{
+	a.DecoderConfiguration = DecoderConfiguration[AudioSlice]{
 		97,
 		avcc,
 		avcc[:2],
-		net.Buffers{adcflv1, at.DecoderConfiguration.AVCC, adcflv2},
+		net.Buffers{adcflv1, a.DecoderConfiguration.AVCC, adcflv2},
 	}
 }
 
-func (at *Audio) Flush() {
+func (a *Audio) Flush() {
 	// AVCC 格式补完
-	if at.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
-		at.Value.AppendAVCC(at.avccHead)
-		for _, raw := range at.Value.Raw {
-			at.Value.AppendAVCC(raw)
+	if a.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+		a.Value.AppendAVCC(a.avccHead)
+		for _, raw := range a.Value.Raw {
+			a.Value.AppendAVCC(raw)
 		}
 	}
 	// FLV tag 补完
-	if at.Value.FLV == nil && config.Global.EnableFLV {
-		at.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, at.Value.DTS/90)
+	if a.Value.FLV == nil && config.Global.EnableFLV {
+		a.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, a.Value.DTS/90)
 	}
-	if at.Value.RTP == nil && config.Global.EnableRTP {
+	if a.Value.RTP == nil && config.Global.EnableRTP {
 		var o []byte
-		for _, raw := range at.Value.Raw {
+		for _, raw := range a.Value.Raw {
 			o = append(o, raw...)
 		}
-		at.PacketizeRTP(o)
+		a.PacketizeRTP(o)
 	}
-	at.Media.Flush()
+	a.Media.Flush()
 }
 
 type UnknowAudio struct {
@@ -89,31 +80,30 @@ type UnknowAudio struct {
 	AudioTrack
 }
 
-func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if at.AudioTrack == nil {
+func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
+	if ua.AudioTrack == nil {
 		codecID := frame.AudioCodecID()
-		if at.Name == "" {
-			at.Name = codecID.String()
+		if ua.Name == "" {
+			ua.Name = codecID.String()
 		}
 		switch codecID {
 		case codec.CodecID_AAC:
 			if !frame.IsSequence() {
 				return
 			}
-			a := NewAAC(at.Stream)
-			at.AudioTrack = a
+			a := NewAAC(ua.Stream)
+			ua.AudioTrack = a
 			a.SampleSize = 16
 			a.avccHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
-			a.Attach()
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
 			alaw := true
 			if codecID == codec.CodecID_PCMU {
 				alaw = false
 			}
-			a := NewG711(at.Stream, alaw)
-			at.AudioTrack = a
+			a := NewG711(ua.Stream, alaw)
+			ua.AudioTrack = a
 			a.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
 			a.SampleSize = 16
 			if frame[0]&0x02 == 0 {
@@ -121,12 +111,11 @@ func (at *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			a.Channels = frame[0]&0x01 + 1
 			a.avccHead = frame[:1]
-			a.Attach()
-			at.AudioTrack.WriteAVCC(ts, frame)
+			ua.AudioTrack.WriteAVCC(ts, frame)
 		default:
-			at.Stream.Errorf("audio codec not support yet:", codecID)
+			ua.Stream.Error("audio codec not support yet", zap.Uint8("codecId", uint8(codecID)))
 		}
 	} else {
-		at.AudioTrack.WriteAVCC(ts, frame)
+		ua.AudioTrack.WriteAVCC(ts, frame)
 	}
 }

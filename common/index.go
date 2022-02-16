@@ -4,11 +4,13 @@ import "time"
 
 type Track interface {
 	GetName() string
+	LastWriteTime() time.Time
 }
 
 type AVTrack interface {
 	Track
 	Attach()
+	Detach()
 	WriteAVCC(ts uint32, frame AVCCFrame) //写入AVCC格式的数据
 	Flush()
 }
