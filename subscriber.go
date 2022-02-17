@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"time"
 
 	. "github.com/Monibuca/engine/v4/common"
@@ -12,20 +13,31 @@ type AudioFrame AVFrame[AudioSlice]
 type VideoFrame AVFrame[NALUSlice]
 type ISubscriber interface {
 	IIO
-	receive(string, ISubscriber, *config.Subscribe) bool
+	receive(string, any, *config.Subscribe) bool
 	config.SubscribeConfig
+	GetSubscriber() *Subscriber
+	Unsubscribe()
 }
-
-// Subscriber 订阅者实体定义
-type Subscriber struct {
-	IO[config.Subscribe, ISubscriber]
+type TrackPlayer struct {
+	context.Context
+	context.CancelFunc
 	AudioTrack *track.Audio
 	VideoTrack *track.Video
 	vr         *AVRing[NALUSlice]
 	ar         *AVRing[AudioSlice]
 }
 
-func (p *Publisher) Unsubscribe() {
+// Subscriber 订阅者实体定义
+type Subscriber struct {
+	IO[config.Subscribe]
+	TrackPlayer
+}
+
+func (p *Subscriber) GetSubscriber() *Subscriber {
+	return p
+}
+
+func (p *Subscriber) Unsubscribe() {
 	p.bye(p)
 }
 
@@ -46,28 +58,41 @@ func (s *Subscriber) OnEvent(event any) any {
 	return event
 }
 
-func (s *Subscriber) AcceptTrack(t Track) {
+func (s *Subscriber) AddTrack(t Track) bool {
 	if v, ok := t.(*track.Video); ok {
-		s.VideoTrack = v
-		s.vr = v.ReadRing()
-		go s.play()
+		if s.Config.SubVideo {
+			if s.VideoTrack != nil {
+				return false
+			}
+			s.VideoTrack = v
+			s.vr = v.ReadRing()
+			return true
+		}
 	} else if a, ok := t.(*track.Audio); ok {
-		s.AudioTrack = a
-		s.ar = a.ReadRing()
-		if !s.Config.SubVideo {
-			go s.play()
+		if s.Config.SubAudio {
+			if s.AudioTrack != nil {
+				return false
+			}
+			s.AudioTrack = a
+			s.ar = a.ReadRing()
+			return true
 		}
 	}
+	return false
 	// TODO: data track
 }
 
+func (s *Subscriber) IsPlaying() bool {
+	return s.TrackPlayer.Err() == nil && (s.AudioTrack != nil || s.VideoTrack != nil)
+}
+
 //Play 开始播放
-func (s *Subscriber) play() {
+func (s *Subscriber) Play() {
 	var t time.Time
-	for s.Err() == nil {
+	for s.TrackPlayer.Err() == nil {
 		if s.vr != nil {
 			for {
-				vp := s.vr.Read(s)
+				vp := s.vr.Read(s.TrackPlayer)
 				s.OnEvent((*VideoFrame)(vp))
 				s.vr.MoveNext()
 				if vp.Timestamp.After(t) {
@@ -78,7 +103,7 @@ func (s *Subscriber) play() {
 		}
 		if s.ar != nil {
 			for {
-				ap := s.ar.Read(s)
+				ap := s.ar.Read(s.TrackPlayer)
 				s.OnEvent((*AudioFrame)(ap))
 				s.ar.MoveNext()
 				if ap.Timestamp.After(t) {
@@ -91,9 +116,10 @@ func (s *Subscriber) play() {
 	return
 }
 
+type PushEvent int
 type Pusher struct {
-	Subscriber
 	Config    *config.Push
+	StreamPath string
 	RemoteURL string
 	PushCount int
 }

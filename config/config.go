@@ -1,13 +1,12 @@
 package config
 
 import (
+	"github.com/Monibuca/engine/v4/log"
 	"net"
 	"net/http"
 	"reflect"
 	"strings"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 type Config map[string]any
@@ -61,7 +60,7 @@ func (config Config) Unmarshal(s any) {
 	for k, v := range config {
 		name, ok := nameMap[k]
 		if !ok {
-			logrus.Error("no config named:", k)
+			log.Error("no config named:", k)
 			continue
 		}
 		// 需要被写入的字段

@@ -11,6 +11,7 @@ import (
 )
 
 func NewAAC(stream IStream) (aac *AAC) {
+	stream.Debug("create aac track")
 	aac = &AAC{}
 	aac.Name = "aac"
 	aac.Stream = stream

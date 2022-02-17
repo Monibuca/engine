@@ -11,9 +11,9 @@ import (
 
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/log"
+	"github.com/Monibuca/engine/v4/track"
 	"github.com/Monibuca/engine/v4/util"
-	. "github.com/logrusorgru/aurora"
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,9 +34,9 @@ func InstallPlugin(config config.Plugin) *Plugin {
 		return nil
 	}
 	if config != EngineConfig {
-		plugin.Entry = log.WithField("plugin", name)
+		plugin.Logger = log.With(zap.String("plugin", name))
 		Plugins[name] = plugin
-		plugin.Info(Green("install"), BrightBlue(plugin.Version))
+		plugin.Info("install", zap.String("version", plugin.Version))
 	}
 	return plugin
 }
@@ -50,13 +50,13 @@ type Plugin struct {
 	Version            string        //插件版本
 	RawConfig          config.Config //配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
-	*logrus.Entry
+	*zap.Logger
 }
 type PushPlugin interface {
-	PushStream(*Stream, string, *config.Push)
+	PushStream(Pusher)
 }
 type PullPlugin interface {
-	PullStream(string, string, *config.Pull) bool
+	PullStream(Puller)
 }
 
 func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
@@ -75,12 +75,12 @@ func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, 
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
 	}
-	opt.Info("http handle added:", pattern)
+	opt.Info("http handle added:" + pattern)
 	EngineConfig.HandleFunc(pattern, func(rw http.ResponseWriter, r *http.Request) {
 		if cors {
 			util.CORS(rw, r)
 		}
-		opt.Debug(r.RemoteAddr, " -> ", pattern)
+		opt.Debug("visit", zap.String("path", pattern), zap.String("remote", r.RemoteAddr))
 		handler(rw, r)
 	})
 }
@@ -134,16 +134,16 @@ func (opt *Plugin) autoPull() {
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pullConfig.PullList {
 				if pullConfig.PullOnStart {
-					opt.Config.(PullPlugin).PullStream(streamPath, url, &pullConfig)
+					opt.Config.(PullPlugin).PullStream(Puller{&pullConfig, streamPath, url, 0})
 				} else if pullConfig.PullOnSubscribe {
-					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), url, &pullConfig}
+					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), Puller{&pullConfig, streamPath, url, 0}}
 				}
 			}
 		} else if name == "Push" {
 			var pushConfig config.Push
 			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pushConfig.PushList {
-				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), url, &pushConfig})
+				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), Pusher{&pushConfig, streamPath, url, 0}})
 			}
 		}
 	}
@@ -186,7 +186,16 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) bool {
 	if !ok {
 		conf = EngineConfig
 	}
-	return pub.receive(streamPath, pub, conf.GetPublishConfig())
+	if ok = pub.receive(streamPath, pub, conf.GetPublishConfig()); ok {
+		p := pub.GetPublisher()
+		unA := track.UnknowAudio{}
+		unA.Stream = p.Stream
+		p.AudioTrack = &unA
+		unV := track.UnknowVideo{}
+		unV.Stream = p.Stream
+		p.VideoTrack = &unV
+	}
+	return ok
 }
 
 func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) bool {
@@ -194,5 +203,9 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) bool {
 	if !ok {
 		conf = EngineConfig
 	}
-	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
+	if ok = sub.receive(streamPath, sub, conf.GetSubscribeConfig()); ok {
+		p := sub.GetSubscriber()
+		p.TrackPlayer.Context, p.TrackPlayer.CancelFunc = context.WithCancel(p.IO)
+	}
+	return ok
 }

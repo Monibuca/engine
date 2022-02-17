@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -16,6 +17,7 @@ import (
 	"github.com/Monibuca/engine/v4/util"
 	"github.com/google/uuid"
 	. "github.com/logrusorgru/aurora"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,22 +41,20 @@ var (
 
 type PushOnPublish struct {
 	PushPlugin
-	RemoteURL string
-	Config    *config.Push
+	Pusher
 }
 
-func (p PushOnPublish) Push(stream *Stream) {
-	p.PushStream(stream, p.RemoteURL, p.Config)
+func (p PushOnPublish) Push() {
+	p.PushStream(p.Pusher)
 }
 
 type PullOnSubscribe struct {
 	PullPlugin
-	RemoteURL string
-	Config    *config.Pull
+	Puller
 }
 
-func (p PullOnSubscribe) Pull(streamPath string) {
-	p.PullStream(streamPath, p.RemoteURL, p.Config)
+func (p PullOnSubscribe) Pull() {
+	p.PullStream(p.Puller)
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
@@ -83,7 +83,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	} else {
 		log.Warn("no config file found , use default config values")
 	}
-	Engine.Entry = log.WithContext(Engine)
+	Engine.Logger = log.With(zap.String("plugin", "engine"))
 	Engine.registerHandler()
 	go EngineConfig.Update(Engine.RawConfig)
 	for name, plugin := range Plugins {
@@ -92,13 +92,17 @@ func Run(ctx context.Context, configFile string) (err error) {
 	}
 	UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
-	req.Header.Set("os", runtime.GOOS)
-	req.Header.Set("version", Engine.Version)
-	req.Header.Set("uuid", UUID)
+	contentBuf := bytes.NewBuffer(nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"`, UUID, Engine.Version, runtime.GOOS, runtime.GOARCH)
 	var c http.Client
 	for {
-		req.Header.Set("streams", fmt.Sprintf("%d", Streams.Len()))
+		contentBuf.Reset()
+		postJson := fmt.Sprintf(`%s,"streams":%d}`, content, len(Streams.Map))
+		contentBuf.WriteString(postJson)
+		req.Body = ioutil.NopCloser(contentBuf)
 		c.Do(req)
 		select {
 		case <-ctx.Done():

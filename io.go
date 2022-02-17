@@ -8,9 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/log"
 	"go.uber.org/zap"
 )
 
@@ -18,14 +16,14 @@ type IOConfig interface {
 	config.Publish | config.Subscribe
 }
 
-type IO[C IOConfig, S IIO] struct {
+type IO[C IOConfig] struct {
 	ID   string
 	Type string
 	context.Context
 	context.CancelFunc
 	*zap.Logger
-	StartTime time.Time      //创建时间
-	Stream    common.IStream `json:"-"`
+	StartTime time.Time //创建时间
+	Stream    *Stream   `json:"-"`
 	io.Reader `json:"-"`
 	io.Writer `json:"-"`
 	io.Closer `json:"-"`
@@ -33,8 +31,13 @@ type IO[C IOConfig, S IIO] struct {
 	Config    *C
 }
 
-func (io *IO[C, S]) OnEvent(event any) any {
+func (io *IO[C]) IsClosed() bool {
+	return io.Err() != nil
+}
+func (io *IO[C]) OnEvent(event any) any {
 	switch v := event.(type) {
+	case context.Context:
+		io.Context, io.CancelFunc = context.WithCancel(v)
 	case *Stream:
 		io.StartTime = time.Now()
 		io.Stream = v
@@ -52,14 +55,21 @@ func (io *IO[C, S]) OnEvent(event any) any {
 	}
 	return event
 }
-
-type IIO interface {
-	context.Context
-	log.Zap
-	OnEvent(any) any
+func (io *IO[C]) getID() string {
+	return io.ID
+}
+func (io *IO[C]) getType() string {
+	return io.Type
 }
 
-func (io *IO[C, S]) bye(specific S) {
+type IIO interface {
+	IsClosed() bool
+	OnEvent(any) any
+	getID() string
+	getType() string
+}
+
+func (io *IO[C]) bye(specific any) {
 	if io.CancelFunc != nil {
 		io.CancelFunc()
 	}
@@ -68,7 +78,7 @@ func (io *IO[C, S]) bye(specific S) {
 	}
 }
 
-func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) bool {
+func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
 	Streams.Lock()
 	defer Streams.Unlock()
 	streamPath = strings.Trim(streamPath, "/")
@@ -82,12 +92,15 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) bool {
 	if v, ok := c.(*config.Subscribe); ok {
 		wt = v.WaitTimeout.Duration()
 	}
+	if io.Context == nil {
+		io.Context, io.CancelFunc = context.WithCancel(Engine)
+	}
 	s, created := findOrCreateStream(u.Path, wt)
 	if s.IsClosed() {
 		return false
 	}
 	if v, ok := c.(*config.Publish); ok {
-		if s.Publisher != nil && s.Publisher.Err() == nil {
+		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
 				s.Warn("kick", zap.Any("publisher", s.Publisher))

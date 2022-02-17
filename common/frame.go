@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/Monibuca/engine/v4/codec"
+	"github.com/Monibuca/engine/v4/log"
 	"github.com/pion/rtp"
-	"github.com/sirupsen/logrus"
 )
 
 type NALUSlice net.Buffers
@@ -94,7 +94,7 @@ func (rtp *RTPFrame) Marshal() *RTPFrame {
 func (rtp *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 	rtp.Raw = raw
 	if err := rtp.Packet.Unmarshal(raw); err != nil {
-		logrus.Error(err)
+		log.Error(err)
 		return nil
 	}
 	return rtp
@@ -112,6 +112,11 @@ type DataFrame[T any] struct {
 	BaseFrame
 	Value T
 }
+type MediaFrame interface {
+	GetFLV() net.Buffers
+	GetAVCC() net.Buffers
+	GetRTP() []*RTPFrame
+}
 type AVFrame[T RawSlice] struct {
 	BaseFrame
 	IFrame  bool
@@ -124,6 +129,15 @@ type AVFrame[T RawSlice] struct {
 	canRead bool
 }
 
+func (av *AVFrame[T]) GetFLV() net.Buffers {
+	return av.FLV
+}
+func (av *AVFrame[T]) GetAVCC() net.Buffers {
+	return av.AVCC
+}
+func (av *AVFrame[T]) GetRTP() []*RTPFrame {
+	return av.RTP
+}
 func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }

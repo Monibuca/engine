@@ -7,13 +7,19 @@ import (
 
 type IPublisher interface {
 	IIO
-	receive(string, IPublisher, *config.Publish) bool
+	GetPublisher() *Publisher
+	receive(string, any, *config.Publish) bool
+	Unpublish()
 }
 
 type Publisher struct {
-	IO[config.Publish, IPublisher]
+	IO[config.Publish]
 	common.AudioTrack
 	common.VideoTrack
+}
+
+func (p *Publisher) GetPublisher() *Publisher {
+	return p
 }
 
 func (p *Publisher) Unpublish() {
@@ -24,10 +30,10 @@ type PullEvent int
 
 // 用于远程拉流的发布者
 type Puller struct {
-	Publisher
-	Config    *config.Pull
-	RemoteURL string
-	PullCount int
+	Config     *config.Pull
+	StreamPath string
+	RemoteURL  string
+	PullCount  int
 }
 
 // 是否需要重连

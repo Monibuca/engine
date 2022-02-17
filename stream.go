@@ -162,14 +162,14 @@ func (r *Stream) action(action StreamAction) bool {
 			Bus.Publish(Event_REQUEST_PUBLISH, r)
 			r.timeout.Reset(r.WaitTimeout)
 			if _, ok = PullOnSubscribeList[r.Path]; ok {
-				PullOnSubscribeList[r.Path].Pull(r.Path)
+				PullOnSubscribeList[r.Path].Pull()
 			}
 		case STATE_PUBLISHING:
 			r.timeout.Reset(time.Second) // 秒级心跳，检测track的存活度
 			Bus.Publish(Event_PUBLISH, r)
 			if v, ok := PushOnPublishList[r.Path]; ok {
 				for _, v := range v {
-					v.Push(r)
+					v.Push()
 				}
 			}
 		case STATE_WAITCLOSE:
@@ -243,7 +243,7 @@ func (s *Stream) run() {
 			if ok {
 				switch v := action.(type) {
 				case IPublisher:
-					if v.Err() != nil {
+					if v.IsClosed() {
 						s.action(ACTION_PUBLISHLOST)
 					} else if s.action(ACTION_PUBLISH) {
 						s.Publisher = v
@@ -272,14 +272,14 @@ func (s *Stream) run() {
 				case StreamAction:
 					s.action(v)
 				case ISubscriber:
-					if v.Err() == nil {
+					if !v.IsClosed() {
 						s.Subscribers.Add(v)
 						if wt := v.GetSubscribeConfig().WaitTimeout.Duration(); wt > s.WaitTimeout {
 							s.WaitTimeout = wt
 						}
 						v.OnEvent(s) // 通知Subscriber已成功进入Stream
 						Bus.Publish(Event_SUBSCRIBE, v)
-						v.Info(Sprintf(Yellow("added remains:%d"), len(s.Subscribers)))
+						s.Info("suber added", zap.String("id", v.getID()), zap.String("type", v.getType()), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						}
@@ -288,7 +288,7 @@ func (s *Stream) run() {
 						}
 					} else if s.Subscribers.Delete(v) {
 						Bus.Publish(Event_UNSUBSCRIBE, v)
-						v.Info(Sprintf(Yellow("removed remains:%d"), len(s.Subscribers)))
+						s.Info("suber removed", zap.String("id", v.getID()), zap.String("type", v.getType()), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(v) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
@@ -328,20 +328,6 @@ func (r *Stream) NewAudioTrack() (at *track.UnknowAudio) {
 	at = &track.UnknowAudio{}
 	at.Stream = r
 	return
-}
-func (r *Stream) NewH264Track() *track.H264 {
-	r.Debug("create h264 track")
-	return track.NewH264(r)
-}
-
-func (r *Stream) NewH265Track() *track.H265 {
-	r.Debug("create h265 track")
-	return track.NewH265(r)
-}
-
-func (r *Stream) NewAACTrack() *track.AAC {
-	r.Debug("create aac track")
-	return track.NewAAC(r)
 }
 
 // func (r *Stream) WaitDataTrack(names ...string) DataTrack {

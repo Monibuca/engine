@@ -80,6 +80,14 @@ type UnknowAudio struct {
 	AudioTrack
 }
 
+func (ua *UnknowAudio) GetName() string {
+	return ua.Base.GetName()
+}
+
+func (ua *UnknowAudio) Flush() {
+	ua.AudioTrack.Flush()
+}
+
 func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if ua.AudioTrack == nil {
 		codecID := frame.AudioCodecID()

@@ -151,6 +151,14 @@ type UnknowVideo struct {
 	VideoTrack
 }
 
+func (uv *UnknowVideo) GetName() string {
+	return uv.Base.GetName()
+}
+
+func (uv *UnknowVideo) Flush() {
+	uv.VideoTrack.Flush()
+}
+
 /*
 Access Unit的首个nalu是4字节起始码。
 这里举个例子说明，用JM可以生成这样一段码流（不要使用JM8.6，它在这部分与标准不符），这个码流可以见本楼附件：
