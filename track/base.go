@@ -160,7 +160,7 @@ func (av *Media[T]) Flush() {
 		av.firstTimestamp = time.Now()
 	} else {
 		av.Value.DeltaTime = (av.Value.DTS - preValue.DTS) / 90
-		av.Value.AbsTime += av.Value.DeltaTime
+		av.Value.AbsTime = preValue.AbsTime + av.Value.DeltaTime
 	}
 	av.Base.Flush(&av.Value.BaseFrame)
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep

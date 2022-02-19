@@ -10,5 +10,5 @@ type IStream interface {
 	IsClosed() bool
 	SSRC() uint32
 	log.Zap
-	Receive(any)
+	Receive(any) bool
 }

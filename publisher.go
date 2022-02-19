@@ -8,22 +8,17 @@ import (
 type IPublisher interface {
 	IIO
 	GetPublisher() *Publisher
-	receive(string, any, *config.Publish) bool
-	Unpublish()
+	receive(string, IPublisher, *config.Publish) bool
 }
 
 type Publisher struct {
-	IO[config.Publish]
+	IO[config.Publish, IPublisher]
 	common.AudioTrack
 	common.VideoTrack
 }
 
 func (p *Publisher) GetPublisher() *Publisher {
 	return p
-}
-
-func (p *Publisher) Unpublish() {
-	p.bye(p)
 }
 
 type PullEvent int

@@ -1,7 +1,6 @@
 package util
 
 import (
-	"constraints"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,7 +25,7 @@ func Exist(filename string) bool {
 	return err == nil || os.IsExist(err)
 }
 
-func ConvertNum[F constraints.Integer, T constraints.Integer](from F, to T) T {
+func ConvertNum[F Integer, T Integer](from F, to T) T {
 	return T(from)
 }
 

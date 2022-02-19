@@ -11,7 +11,6 @@ import (
 
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/log"
-	"github.com/Monibuca/engine/v4/track"
 	"github.com/Monibuca/engine/v4/util"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -189,12 +188,8 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) bool {
 	}
 	if ok = pub.receive(streamPath, pub, conf.GetPublishConfig()); ok {
 		p := pub.GetPublisher()
-		unA := track.UnknowAudio{}
-		unA.Stream = p.Stream
-		p.AudioTrack = &unA
-		unV := track.UnknowVideo{}
-		unV.Stream = p.Stream
-		p.VideoTrack = &unV
+		p.AudioTrack = p.Stream.NewAudioTrack()
+		p.VideoTrack = p.Stream.NewVideoTrack()
 	}
 	return ok
 }
@@ -204,9 +199,5 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) bool {
 	if !ok {
 		conf = EngineConfig
 	}
-	if ok = sub.receive(streamPath, sub, conf.GetSubscribeConfig()); ok {
-		p := sub.GetSubscriber()
-		p.TrackPlayer.Context, p.TrackPlayer.CancelFunc = context.WithCancel(p.IO)
-	}
-	return ok
+	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
 }

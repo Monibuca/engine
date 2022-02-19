@@ -8,6 +8,7 @@ import (
 	. "github.com/Monibuca/engine/v4/common"
 	"github.com/Monibuca/engine/v4/config"
 	"github.com/Monibuca/engine/v4/util"
+	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
 )
 
@@ -38,10 +39,10 @@ func (t *Video) GetName() string {
 func (t *Video) ComputeGOP() {
 	t.idrCount++
 	if t.IDRing != nil {
-		t.GOP = int(t.Value.SeqInTrack - t.IDRing.Value.SeqInTrack)
+		t.GOP = int(t.Value.Sequence - t.IDRing.Value.Sequence)
 		if l := t.Size - t.GOP - 5; l > 5 {
 			t.Size -= l
-			t.Stream.Debug("resize", zap.String("name", t.Name), zap.Int("after", t.Size+l), zap.Int("before", t.Size))
+			t.Stream.Debug(Sprintf("resize(%d%s%d)", t.Size+l, Blink("→"), t.Size), zap.String("name", t.Name))
 			//缩小缓冲环节省内存
 			t.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
 				if v.IFrame {

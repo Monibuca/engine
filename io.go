@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Monibuca/engine/v4/config"
+	"github.com/Monibuca/engine/v4/util"
 	"go.uber.org/zap"
 )
 
@@ -19,11 +20,11 @@ type ClientConfig interface {
 	config.Pull | config.Push
 }
 
-type IO[C IOConfig] struct {
-	ID   string
-	Type string
-	context.Context
-	context.CancelFunc
+type IO[C IOConfig, S IIO] struct {
+	ID                 string
+	Type               string
+	context.Context    //不要直接设置，应当通过OnEvent传入父级Context
+	context.CancelFunc //流关闭是关闭发布者或者订阅者
 	*zap.Logger
 	StartTime time.Time //创建时间
 	Stream    *Stream   `json:"-"`
@@ -34,14 +35,16 @@ type IO[C IOConfig] struct {
 	Config    *C
 }
 
-func (io *IO[C]) IsClosed() bool {
+func (io *IO[C, S]) IsClosed() bool {
 	return io.Err() != nil
 }
-func (io *IO[C]) OnEvent(event any) any {
+func (io *IO[C, S]) OnEvent(event any) {
 	switch v := event.(type) {
 	case context.Context:
+		//传入父级Context，如果不传入将使用Engine的Context
 		io.Context, io.CancelFunc = context.WithCancel(v)
 	case *Stream:
+		io.Stream = v
 		io.StartTime = time.Now()
 		io.Logger = v.With(zap.String("type", io.Type))
 		if io.ID != "" {
@@ -55,33 +58,29 @@ func (io *IO[C]) OnEvent(event any) any {
 			io.CancelFunc()
 		}
 	}
-	return event
 }
-func (io *IO[C]) getID() string {
+func (io *IO[C, S]) getID() string {
 	return io.ID
 }
-func (io *IO[C]) getType() string {
+func (io *IO[C, S]) getType() string {
 	return io.Type
 }
 
 type IIO interface {
 	IsClosed() bool
-	OnEvent(any) any
+	OnEvent(any)
 	getID() string
 	getType() string
 }
 
-func (io *IO[C]) bye(specific any) {
+func (io *IO[C, S]) Bye() {
 	if io.CancelFunc != nil {
 		io.CancelFunc()
-	}
-	if io.Stream != nil {
-		io.Stream.Receive(specific)
 	}
 }
 
 // receive 用于接收发布或者订阅
-func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
+func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) bool {
 	Streams.Lock()
 	defer Streams.Unlock()
 	streamPath = strings.Trim(streamPath, "/")
@@ -91,7 +90,7 @@ func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
 		return false
 	}
 	io.Args = u.Query()
-	wt := time.Second*5
+	wt := time.Second * 5
 	var c any = conf
 	if v, ok := c.(*config.Subscribe); ok {
 		wt = v.WaitTimeout.Duration()
@@ -99,35 +98,34 @@ func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
-	s, created := findOrCreateStream(u.Path, wt)
+	s, _ := findOrCreateStream(u.Path, wt)
 	if s.IsClosed() {
 		return false
 	}
 	io.Config = conf
-	io.Stream = s
+	if io.Type == "" {
+		io.Type = reflect.TypeOf(specific).Elem().Name()
+	}
 	if v, ok := c.(*config.Publish); ok {
 		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
 				s.Warn("kick", zap.Any("publisher", s.Publisher))
-				s.Publisher.OnEvent(SEKick{specific.(IPublisher)})
+				s.Publisher.OnEvent(SEKick{})
 			} else {
 				s.Warn("badName", zap.Any("publisher", s.Publisher))
 				return false
 			}
 		}
-		if created {
-			s.PublishTimeout = v.PublishTimeout.Duration()
-			s.WaitCloseTimeout = v.WaitCloseTimeout.Duration()
-		}
+		s.PublishTimeout = v.PublishTimeout.Duration()
+		s.WaitCloseTimeout = v.WaitCloseTimeout.Duration()
 	} else {
 		Bus.Publish(Event_REQUEST_PUBLISH, s)
 	}
-	if io.Type == "" {
-		io.Type = reflect.TypeOf(specific).Elem().Name()
+	if promise := util.NewPromise[S, bool](specific); s.Receive(promise) {
+		return promise.Then()
 	}
-	s.Receive(specific)
-	return true
+	return false
 }
 
 type Client[C ClientConfig] struct {

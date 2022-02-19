@@ -19,6 +19,10 @@ type Audio struct {
 	avccHead []byte
 }
 
+func (a *Audio) IsAAC() bool {
+	return a.CodecID == codec.CodecID_AAC
+}
+
 func (a *Audio) Attach() {
 	a.Stream.AddTrack(a)
 }
