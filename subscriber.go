@@ -17,10 +17,10 @@ type VideoDeConf DecoderConfiguration[NALUSlice]
 type ISubscriber interface {
 	IIO
 	receive(string, ISubscriber, *config.Subscribe) bool
-	config.SubscribeConfig
-	GetSubscriber() *Subscriber
+	GetConfig() *config.Subscribe
 	IsPlaying() bool
-	Play(ISubscriber)
+	Play(ISubscriber) func() error
+	PlayBlock(ISubscriber)
 	Stop()
 }
 type TrackPlayer struct {
@@ -36,14 +36,6 @@ type TrackPlayer struct {
 type Subscriber struct {
 	IO[config.Subscribe, ISubscriber]
 	TrackPlayer
-}
-
-func (p *Subscriber) GetSubscriber() *Subscriber {
-	return p
-}
-
-func (s *Subscriber) GetSubscribeConfig() *config.Subscribe {
-	return s.Config
 }
 
 func (s *Subscriber) OnEvent(event any) {
@@ -97,9 +89,76 @@ func (s *Subscriber) Stop() {
 	}
 }
 
-//Play 开始播放
-func (s *Subscriber) Play(spesic ISubscriber) {
+// 非阻塞式读取，通过反复调用返回的函数可以尝试读取数据，读取到数据后会调用OnEvent，这种模式自由的在不同的goroutine中调用
+func (s *Subscriber) Play(spesic ISubscriber) func() error {
 	s.Info("play")
+	var t time.Time
+	var startTime time.Time    //读到第一个关键帧的时间
+	var firstIFrame VideoFrame //起始关键帧
+	var audioSent bool         //音频是否发送过
+	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
+	ctx := s.TrackPlayer.Context
+	var nextRoundReadAudio bool //下一次读取音频
+	return func() error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !nextRoundReadAudio || s.ar == nil {
+			if s.vr != nil {
+				if startTime.IsZero() {
+					startTime = time.Now()
+					firstIFrame = (VideoFrame)(s.vr.Read(ctx)) // 这里阻塞读取为0耗时
+					s.Debug("firstIFrame", zap.Uint32("seq", firstIFrame.Sequence))
+					if ctx.Err() != nil {
+						return ctx.Err()
+					}
+					spesic.OnEvent(VideoDeConf(s.VideoTrack.DecoderConfiguration))
+					spesic.OnEvent(firstIFrame)
+					s.vr.MoveNext()
+					if firstIFrame.Timestamp.After(t) {
+						t = firstIFrame.Timestamp
+					}
+					return nil
+				} else if firstIFrame == nil {
+					if vp := VideoFrame(s.vr.TryRead()); vp != nil {
+						spesic.OnEvent(vp)
+						s.vr.MoveNext()
+						// 如果本次读取的视频时间戳比较大，下次给音频一个机会
+						if nextRoundReadAudio = vp.Timestamp.After(t); nextRoundReadAudio {
+							t = vp.Timestamp
+						}
+						return nil
+					}
+				}
+			} else if s.Config.SubVideo && (s.Stream == nil || s.Stream.Publisher == nil || s.Stream.Publisher.GetConfig().PubVideo) {
+				// 如果订阅了视频需要等待视频轨道
+				// TODO: 如果发布配置了视频，订阅配置了视频，但是实际上没有视频，需要处理播放纯音频
+				return nil
+			}
+		}
+		// 正常模式下或者纯音频模式下，音频开始播放
+		if s.ar != nil && firstIFrame == nil {
+			if !audioSent {
+				spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
+				audioSent = true
+			}
+			if ap := AudioFrame(s.ar.TryRead()); ap != nil {
+				spesic.OnEvent(ap)
+				s.ar.MoveNext()
+				// 这次如果音频比较大，则下次读取给视频一个机会
+				if nextRoundReadAudio = !ap.Timestamp.After(t); !nextRoundReadAudio {
+					t = ap.Timestamp
+				}
+				return nil
+			}
+		}
+		return nil
+	}
+}
+
+//PlayBlock 阻塞式读取数据
+func (s *Subscriber) PlayBlock(spesic ISubscriber) {
+	s.Info("playblock")
 	var t time.Time
 	var startTime time.Time    //读到第一个关键帧的时间
 	var firstIFrame VideoFrame //起始关键帧
@@ -151,7 +210,12 @@ func (s *Subscriber) Play(spesic ISubscriber) {
 					break
 				}
 			}
+		} else if s.Config.SubVideo && (s.Stream == nil || s.Stream.Publisher == nil || s.Stream.Publisher.GetConfig().PubVideo) {
+			// 如果订阅了视频需要等待视频轨道
+			time.Sleep(time.Second)
+			continue
 		}
+		// 正常模式下或者纯音频模式下，音频开始播放
 		if s.ar != nil && firstIFrame == nil {
 			if !audioSent {
 				spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))

@@ -186,12 +186,7 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) bool {
 	if !ok {
 		conf = EngineConfig
 	}
-	if ok = pub.receive(streamPath, pub, conf.GetPublishConfig()); ok {
-		p := pub.GetPublisher()
-		p.AudioTrack = p.Stream.NewAudioTrack()
-		p.VideoTrack = p.Stream.NewVideoTrack()
-	}
-	return ok
+	return pub.receive(streamPath, pub, conf.GetPublishConfig())
 }
 
 func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) bool {

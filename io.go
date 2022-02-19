@@ -66,6 +66,10 @@ func (io *IO[C, S]) getType() string {
 	return io.Type
 }
 
+func (io *IO[C, S]) GetConfig() *C {
+	return io.Config
+}
+
 type IIO interface {
 	IsClosed() bool
 	OnEvent(any)

@@ -7,7 +7,7 @@ import (
 
 type IPublisher interface {
 	IIO
-	GetPublisher() *Publisher
+	GetConfig() *config.Publish
 	receive(string, IPublisher, *config.Publish) bool
 }
 
@@ -17,8 +17,13 @@ type Publisher struct {
 	common.VideoTrack
 }
 
-func (p *Publisher) GetPublisher() *Publisher {
-	return p
+func (p *Publisher) OnEvent(event any) {
+	switch v := event.(type) {
+	case *Stream:
+		p.AudioTrack = v.NewAudioTrack()
+		p.VideoTrack = v.NewVideoTrack()
+	}
+	p.IO.OnEvent(event)
 }
 
 type PullEvent int

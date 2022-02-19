@@ -276,7 +276,7 @@ func (s *Stream) run() {
 					}
 					suber := v.Value
 					s.Subscribers = append(s.Subscribers, suber)
-					sbConfig := suber.GetSubscribeConfig()
+					sbConfig := suber.GetConfig()
 					if wt := sbConfig.WaitTimeout.Duration(); wt > s.WaitTimeout {
 						s.WaitTimeout = wt
 					}
