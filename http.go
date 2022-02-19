@@ -14,8 +14,6 @@ type GlobalConfig struct {
 }
 
 func (cfg *GlobalConfig) Update(override config.Config) {
-	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
-	Engine.RawConfig = config.Struct2Config(cfg.Engine)
 	log.Info(Green("api server start at"), BrightBlue(cfg.ListenAddr), BrightBlue(cfg.ListenAddrTLS))
 	cfg.Listen(Engine, cfg)
 }

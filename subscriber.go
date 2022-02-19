@@ -21,10 +21,12 @@ type ISubscriber interface {
 type TrackPlayer struct {
 	context.Context
 	context.CancelFunc
-	AudioTrack *track.Audio
-	VideoTrack *track.Video
-	vr         *AVRing[NALUSlice]
-	ar         *AVRing[AudioSlice]
+	AudioTrack  *track.Audio
+	VideoTrack  *track.Video
+	vr          *AVRing[NALUSlice]
+	ar          *AVRing[AudioSlice]
+	startTime   time.Time   //读到第一个关键帧的时间
+	firstIFrame *VideoFrame //起始关键帧
 }
 
 // Subscriber 订阅者实体定义
@@ -66,6 +68,7 @@ func (s *Subscriber) AddTrack(t Track) bool {
 			}
 			s.VideoTrack = v
 			s.vr = v.ReadRing()
+			s.firstIFrame = (*VideoFrame)(s.vr.Read(s.TrackPlayer))
 			return true
 		}
 	} else if a, ok := t.(*track.Audio); ok {
@@ -92,12 +95,31 @@ func (s *Subscriber) Play() {
 	for s.TrackPlayer.Err() == nil {
 		if s.vr != nil {
 			for {
-				vp := s.vr.Read(s.TrackPlayer)
-				s.OnEvent((*VideoFrame)(vp))
-				s.vr.MoveNext()
-				if vp.Timestamp.After(t) {
-					t = vp.Timestamp
-					break
+				// 如果进入正常模式
+				if s.firstIFrame == nil {
+					vp := s.vr.Read(s.TrackPlayer)
+					s.OnEvent((*VideoFrame)(vp))
+					s.vr.MoveNext()
+					if vp.Timestamp.After(t) {
+						t = vp.Timestamp
+						break
+					}
+				} else {
+					if s.startTime.IsZero() {
+						s.startTime = time.Now()
+					}
+					if &s.VideoTrack.IDRing.Value != (*AVFrame[NALUSlice])(s.firstIFrame) {
+						s.firstIFrame = nil
+						s.vr = s.VideoTrack.ReadRing()
+					} else {
+						vp := s.vr.Read(s.TrackPlayer)
+						s.OnEvent((*VideoFrame)(vp))
+						fast := time.Duration(vp.AbsTime-s.firstIFrame.AbsTime)*time.Millisecond - time.Since(s.startTime)
+						if fast > 0 {
+							time.Sleep(fast)
+						}
+						s.vr.MoveNext()
+					}
 				}
 			}
 		}
@@ -118,13 +140,10 @@ func (s *Subscriber) Play() {
 
 type PushEvent int
 type Pusher struct {
-	Config    *config.Push
-	StreamPath string
-	RemoteURL string
-	PushCount int
+	Client[config.Push]
 }
 
 // 是否需要重连
 func (pub *Pusher) Reconnect() bool {
-	return pub.Config.RePush == -1 || pub.PushCount <= pub.Config.RePush
+	return pub.Config.RePush == -1 || pub.ReConnectCount <= pub.Config.RePush
 }

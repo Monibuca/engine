@@ -122,6 +122,7 @@ func (opt *Plugin) Update() {
 	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	opt.RawConfig.Unmarshal(opt.Config)
 	opt.autoPull()
+	opt.Debug("config", zap.Any("config", opt.Config))
 	go opt.Config.Update(opt.RawConfig)
 }
 
@@ -134,16 +135,16 @@ func (opt *Plugin) autoPull() {
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pullConfig.PullList {
 				if pullConfig.PullOnStart {
-					opt.Config.(PullPlugin).PullStream(Puller{&pullConfig, streamPath, url, 0})
+					opt.Config.(PullPlugin).PullStream(Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}})
 				} else if pullConfig.PullOnSubscribe {
-					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), Puller{&pullConfig, streamPath, url, 0}}
+					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}}}
 				}
 			}
 		} else if name == "Push" {
 			var pushConfig config.Push
 			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pushConfig.PushList {
-				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), Pusher{&pushConfig, streamPath, url, 0}})
+				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), Pusher{Client[config.Push]{&pushConfig, streamPath, url, 0}}})
 			}
 		}
 	}

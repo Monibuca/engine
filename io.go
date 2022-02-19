@@ -15,6 +15,9 @@ import (
 type IOConfig interface {
 	config.Publish | config.Subscribe
 }
+type ClientConfig interface {
+	config.Pull | config.Push
+}
 
 type IO[C IOConfig] struct {
 	ID   string
@@ -40,7 +43,6 @@ func (io *IO[C]) OnEvent(event any) any {
 		io.Context, io.CancelFunc = context.WithCancel(v)
 	case *Stream:
 		io.StartTime = time.Now()
-		io.Stream = v
 		io.Logger = v.With(zap.String("type", io.Type))
 		if io.ID != "" {
 			io.Logger = io.Logger.With(zap.String("ID", io.ID))
@@ -78,16 +80,18 @@ func (io *IO[C]) bye(specific any) {
 	}
 }
 
+// receive 用于接收发布或者订阅
 func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
 	Streams.Lock()
 	defer Streams.Unlock()
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
+		io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
 		return false
 	}
 	io.Args = u.Query()
-	wt := time.Second
+	wt := time.Second*5
 	var c any = conf
 	if v, ok := c.(*config.Subscribe); ok {
 		wt = v.WaitTimeout.Duration()
@@ -99,14 +103,16 @@ func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
 	if s.IsClosed() {
 		return false
 	}
+	io.Config = conf
+	io.Stream = s
 	if v, ok := c.(*config.Publish); ok {
 		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
 				s.Warn("kick", zap.Any("publisher", s.Publisher))
-				s.Publisher.OnEvent(SEKick{})
+				s.Publisher.OnEvent(SEKick{specific.(IPublisher)})
 			} else {
-				s.Warn("publisher exist", zap.Any("publisher", s.Publisher))
+				s.Warn("badName", zap.Any("publisher", s.Publisher))
 				return false
 			}
 		}
@@ -120,9 +126,13 @@ func (io *IO[C]) receive(streamPath string, specific any, conf *C) bool {
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
 	}
-	if s.Receive(specific); io.Stream != nil {
-		io.Config = conf
-		return true
-	}
-	return false
+	s.Receive(specific)
+	return true
+}
+
+type Client[C ClientConfig] struct {
+	Config         *C
+	StreamPath     string // 本地流标识
+	RemoteURL      string // 远程服务器地址（用于推拉）
+	ReConnectCount int    //重连次数
 }

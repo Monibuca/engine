@@ -2,21 +2,32 @@ package log
 
 import (
 	// . "github.com/logrusorgru/aurora"
-	"github.com/mattn/go-colorable"
+	"io"
+
+	// "github.com/mattn/go-colorable"
+	"gopkg.in/yaml.v3"
 
 	// log "github.com/sirupsen/logrus"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var logger *zap.SugaredLogger
+
 // var levelColors = []func(any) Value{Red, Red, Red, Yellow, Blue, Green, White}
 
 // type LogWriter func(*log.Entry) string
 
-var colorableStdout = colorable.NewColorableStdout()
+// var colorableStdout = colorable.NewColorableStdout()
 
 func init() {
-	l, _ := zap.NewDevelopment()
+	config := zap.NewDevelopmentConfig()
+	config.EncoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
+		return yaml.NewEncoder(w)
+	}
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
+	l, _ := config.Build(zap.WithCaller(false))
 	logger = l.Sugar()
 	// std.SetOutput(colorableStdout)
 	// std.SetFormatter(LogWriter(defaultFormatter))
@@ -53,6 +64,7 @@ func Error(args ...any) {
 func Debugf(format string, args ...interface{}) {
 	logger.Debugf(format, args...)
 }
+
 // Infof logs a message at level Info on the standard logger.
 func Infof(format string, args ...interface{}) {
 	logger.Infof(format, args...)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"runtime"
 	"time"
-
 )
 
 type AVRing[T RawSlice] struct {
@@ -36,9 +35,9 @@ func (r *AVRing[T]) Read(ctx context.Context) (item *AVFrame[T]) {
 	return
 }
 
-func (r *AVRing[T]) TryRead(ctx context.Context) (item *AVFrame[T]) {
-	if item = &r.Value; ctx.Err() == nil && !item.canRead {
-		return nil
-	}
-	return
-}
+// func (r *AVRing[T]) TryRead(ctx context.Context) (item *AVFrame[T]) {
+// 	if item = &r.Value; ctx.Err() == nil && !item.canRead {
+// 		return nil
+// 	}
+// 	return
+// }

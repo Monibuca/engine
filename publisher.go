@@ -30,13 +30,10 @@ type PullEvent int
 
 // 用于远程拉流的发布者
 type Puller struct {
-	Config     *config.Pull
-	StreamPath string
-	RemoteURL  string
-	PullCount  int
+	Client[config.Pull]
 }
 
 // 是否需要重连
 func (pub *Puller) Reconnect() bool {
-	return pub.Config.RePull == -1 || pub.PullCount <= pub.Config.RePull
+	return pub.Config.RePull == -1 || pub.ReConnectCount <= pub.Config.RePull
 }

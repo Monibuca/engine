@@ -30,12 +30,18 @@ type SEwaitPublish struct {
 	StateEvent
 	Publisher IPublisher
 }
-
+type SEpublish struct {
+	StateEvent
+}
+type SEwaitClose struct {
+	StateEvent
+}
 type SEclose struct {
 	StateEvent
 }
 
 type SEKick struct {
+	Publisher IPublisher
 }
 
 const (
@@ -56,6 +62,8 @@ const (
 	ACTION_NOTRACKS                 // 轨道为空了
 )
 
+var StateNames = [...]string{"⌛", "🟢", "🟡", "🔴", "❌"}
+var ActionNames = [...]string{"publish", "timeout", "publish lost", "close", "last leave", "first enter", "no tracks"}
 var StreamFSM = [STATE_DESTROYED + 1]map[StreamAction]StreamState{
 	{
 		ACTION_PUBLISH:   STATE_PUBLISHING,
@@ -148,15 +156,18 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		return s, true
 	}
 }
-
-func (r *Stream) action(action StreamAction) bool {
+func (r *Stream) broadcast(event any) {
+	for _, sub := range r.Subscribers {
+		sub.OnEvent(event)
+	}
+}
+func (r *Stream) action(action StreamAction) (ok bool) {
 	event := StateEvent{From: r.State, Action: action}
-	if next, ok := event.Next(); ok {
+	if r.State, ok = event.Next(); ok {
 		// 给Publisher状态变更的回调，方便进行远程拉流等操作
 		var stateEvent any
-		r.Debug("state change", zap.Uint8("action", uint8(action)), zap.Uint8("oldState", uint8(r.State)), zap.Uint8("newState", uint8(next)))
-		r.State = next
-		switch next {
+		r.Debug(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[r.State]), zap.String("action", ActionNames[action]))
+		switch r.State {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
 			Bus.Publish(Event_REQUEST_PUBLISH, r)
@@ -165,7 +176,9 @@ func (r *Stream) action(action StreamAction) bool {
 				PullOnSubscribeList[r.Path].Pull()
 			}
 		case STATE_PUBLISHING:
-			r.timeout.Reset(time.Second) // 秒级心跳，检测track的存活度
+			stateEvent = SEpublish{event}
+			r.broadcast(stateEvent)
+			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
 			Bus.Publish(Event_PUBLISH, r)
 			if v, ok := PushOnPublishList[r.Path]; ok {
 				for _, v := range v {
@@ -173,12 +186,11 @@ func (r *Stream) action(action StreamAction) bool {
 				}
 			}
 		case STATE_WAITCLOSE:
+			stateEvent = SEwaitClose{event}
 			r.timeout.Reset(r.WaitCloseTimeout)
 		case STATE_CLOSED:
 			stateEvent = SEclose{event}
-			for _, sub := range r.Subscribers {
-				sub.OnEvent(stateEvent)
-			}
+			r.broadcast(stateEvent)
 			r.Subscribers.Reset()
 			Bus.Publish(Event_STREAMCLOSE, r)
 			Streams.Delete(r.Path)
@@ -192,9 +204,8 @@ func (r *Stream) action(action StreamAction) bool {
 		if r.Publisher != nil {
 			r.Publisher.OnEvent(stateEvent)
 		}
-		return true
 	}
-	return false
+	return
 }
 func (r *Stream) IsClosed() bool {
 	if r == nil {
@@ -218,27 +229,24 @@ func (s *Stream) run() {
 	for {
 		select {
 		case <-s.timeout.C:
-			s.Debug("timeout", zap.Uint8("action", uint8(s.State)))
 			if s.State == STATE_PUBLISHING {
 				for name, t := range s.Tracks {
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
-						s.Warn("track timeout", zap.String("name", name))
+						s.Warn("track timeout", zap.String("name", name), zap.Time("lastWriteTime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
 						delete(s.Tracks, name)
-						for _, sub := range s.Subscribers {
-							sub.OnEvent(TrackRemoved(t)) // 通知Subscriber Track已被移除
-						}
+						s.broadcast(TrackRemoved(t))
 					}
 				}
 				if len(s.Tracks) == 0 {
 					s.action(ACTION_NOTRACKS)
 				} else {
-					s.timeout.Reset(time.Second)
+					s.timeout.Reset(time.Second * 5)
 				}
 			} else {
+				s.Debug("timeout", zap.String("state", StateNames[s.State]))
 				s.action(ACTION_TIMEOUT)
 			}
-
 		case action, ok := <-s.actionChan:
 			if ok {
 				switch v := action.(type) {
@@ -253,7 +261,7 @@ func (s *Stream) run() {
 					name := v.GetName()
 					if _, ok := s.Tracks[name]; !ok {
 						s.Tracks[name] = v
-						s.Info("Track added", zap.String("name", name))
+						s.Info("TrackAdd", zap.String("name", name))
 						for _, sub := range s.Subscribers {
 							sub.OnEvent(v) // 通知Subscriber有新Track可用了
 						}

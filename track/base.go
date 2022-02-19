@@ -34,10 +34,11 @@ type Media[T RawSlice] struct {
 	SampleSize           byte
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	// util.BytesPool                               //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
-	rtpSequence uint16      //用于生成下一个rtp包的序号
-	orderQueue  []*RTPFrame //rtp包的缓存队列，用于乱序重排
-	lastSeq     uint16      //上一个收到的序号，用于乱序重排
-	lastSeq2    uint16      //记录上上一个收到的序列号
+	rtpSequence    uint16      //用于生成下一个rtp包的序号
+	orderQueue     []*RTPFrame //rtp包的缓存队列，用于乱序重排
+	lastSeq        uint16      //上一个收到的序号，用于乱序重排
+	lastSeq2       uint16      //记录上上一个收到的序列号
+	firstTimestamp time.Time   //第一次写入的时间，用于计算总时间防止过快写入
 }
 
 func (av *Media[T]) LastWriteTime() time.Time {
@@ -154,10 +155,18 @@ func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 }
 
 func (av *Media[T]) Flush() {
-	if av.Prev().Value.DTS != 0 {
-		av.Value.DeltaTime = (av.Value.DTS - av.Prev().Value.DTS) / 90
+	preValue := av.PreValue()
+	if av.firstTimestamp.IsZero() {
+		av.firstTimestamp = time.Now()
+	} else {
+		av.Value.DeltaTime = (av.Value.DTS - preValue.DTS) / 90
+		av.Value.AbsTime += av.Value.DeltaTime
 	}
 	av.Base.Flush(&av.Value.BaseFrame)
+	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
+	if fast := time.Duration(av.Value.AbsTime)*time.Millisecond - time.Since(av.firstTimestamp); fast > time.Millisecond*100 {
+		time.Sleep(fast)
+	}
 	av.Step()
 }
 

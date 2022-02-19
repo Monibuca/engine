@@ -83,8 +83,10 @@ func Run(ctx context.Context, configFile string) (err error) {
 	} else {
 		log.Warn("no config file found , use default config values")
 	}
-	Engine.Logger = log.With(zap.String("plugin", "engine"))
+	Engine.Logger = log.With(zap.Bool("engine", true))
 	Engine.registerHandler()
+	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
+	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
 	go EngineConfig.Update(Engine.RawConfig)
 	for name, plugin := range Plugins {
 		plugin.RawConfig = cg.GetChild(name)

@@ -15,7 +15,6 @@ type H265 struct {
 }
 
 func NewH265(stream IStream) (vt *H265) {
-	stream.Debug("create h265 track")
 	vt = &H265{}
 	vt.Name = "h265"
 	vt.CodecID = codec.CodecID_H265
