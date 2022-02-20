@@ -38,6 +38,7 @@ type IO[C IOConfig, S IIO] struct {
 func (io *IO[C, S]) IsClosed() bool {
 	return io.Err() != nil
 }
+
 func (io *IO[C, S]) OnEvent(event any) {
 	switch v := event.(type) {
 	case context.Context:

@@ -283,7 +283,6 @@ func (s *Stream) run() {
 					suber.OnEvent(s) // 通知Subscriber已成功进入Stream
 					Bus.Publish(Event_SUBSCRIBE, v)
 					s.Info("suber +1", zap.String("id", suber.getID()), zap.String("type", suber.getType()), zap.Int("remains", len(s.Subscribers)))
-					v.Resolve(true)
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						for _, t := range s.Tracks {
@@ -300,6 +299,7 @@ func (s *Stream) run() {
 							suber.OnEvent(t) // 把现有的Track发给订阅者
 						}
 					}
+					v.Resolve(true)
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)
 					}

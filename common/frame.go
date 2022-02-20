@@ -207,3 +207,7 @@ type DecoderConfiguration[T RawSlice] struct {
 	Raw         T
 	FLV         net.Buffers
 }
+
+func (dc *DecoderConfiguration[T]) GetFLV() net.Buffers {
+	return dc.FLV
+}
