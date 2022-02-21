@@ -37,24 +37,25 @@ var (
 	MergeConfigs                 = []string{"Publish", "Subscribe"}             //需要合并配置的属性项，插件若没有配置则使用全局配置
 	PullOnSubscribeList          = make(map[string]PullOnSubscribe)             //按需拉流的配置信息
 	PushOnPublishList            = make(map[string][]PushOnPublish)             //发布时自动推流配置
+	EventBus                     = make(chan any)
 )
 
 type PushOnPublish struct {
-	PushPlugin
+	config.Plugin
 	Pusher
 }
 
 func (p PushOnPublish) Push() {
-	p.PushStream(p.Pusher)
+	p.OnEvent(p.Pusher)
 }
 
 type PullOnSubscribe struct {
-	PullPlugin
+	config.Plugin
 	Puller
 }
 
 func (p PullOnSubscribe) Pull() {
-	p.PullStream(p.Puller)
+	p.OnEvent(p.Puller)
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
@@ -87,7 +88,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	Engine.registerHandler()
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
 	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
-	go EngineConfig.Update(Engine.RawConfig)
+	go EngineConfig.OnEvent(FirstConfig(Engine.RawConfig))
 	for name, plugin := range Plugins {
 		plugin.RawConfig = cg.GetChild(name)
 		plugin.assign()
@@ -107,6 +108,10 @@ func Run(ctx context.Context, configFile string) (err error) {
 		req.Body = ioutil.NopCloser(contentBuf)
 		c.Do(req)
 		select {
+		case event := <-EventBus:
+			for _, plugin := range Plugins {
+				plugin.Config.OnEvent(event)
+			}
 		case <-ctx.Done():
 			return
 		case <-reportTimer.C:

@@ -19,6 +19,7 @@ type StreamAction byte
 type StateEvent struct {
 	Action StreamAction
 	From   StreamState
+	Stream *Stream
 }
 
 func (se StateEvent) Next() (next StreamState, ok bool) {
@@ -62,6 +63,23 @@ const (
 
 var StateNames = [...]string{"⌛", "🟢", "🟡", "🔴"}
 var ActionNames = [...]string{"publish", "timeout", "publish lost", "close", "last leave", "first enter", "no tracks"}
+
+/*
+stateDiagram-v2
+    [*] --> ⌛等待发布者 : 创建
+    ⌛等待发布者 --> 🟢正在发布 :发布
+    ⌛等待发布者 --> 🔴已关闭 :关闭
+    ⌛等待发布者 --> 🔴已关闭  :超时
+    ⌛等待发布者 --> 🔴已关闭  :最后订阅者离开
+    🟢正在发布 --> ⌛等待发布者: 发布者断开
+    🟢正在发布 --> 🟡等待关闭: 最后订阅者离开
+    🟢正在发布 --> 🔴已关闭  :关闭
+    🟡等待关闭 --> 🟢正在发布 :第一个订阅者进入
+    🟡等待关闭 --> 🔴已关闭  :关闭
+    🟡等待关闭 --> 🔴已关闭  :超时
+    🟡等待关闭 --> 🔴已关闭  :发布者断开
+*/
+
 var StreamFSM = [len(StateNames)]map[StreamAction]StreamState{
 	{
 		ACTION_PUBLISH:   STATE_PUBLISHING,
@@ -156,7 +174,7 @@ func (r *Stream) broadcast(event any) {
 	}
 }
 func (r *Stream) action(action StreamAction) (ok bool) {
-	event := StateEvent{action, r.State}
+	event := StateEvent{action, r.State, r}
 	var next StreamState
 	if next, ok = event.Next(); ok {
 		r.State = next
@@ -166,7 +184,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
-			Bus.Publish(Event_REQUEST_PUBLISH, r)
 			r.timeout.Reset(r.WaitTimeout)
 			if _, ok = PullOnSubscribeList[r.Path]; ok {
 				PullOnSubscribeList[r.Path].Pull()
@@ -175,7 +192,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEpublish{event}
 			r.broadcast(stateEvent)
 			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
-			Bus.Publish(Event_PUBLISH, r)
 			if v, ok := PushOnPublishList[r.Path]; ok {
 				for _, v := range v {
 					v.Push()
@@ -192,12 +208,10 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEclose{event}
 			r.broadcast(stateEvent)
 			r.Subscribers = nil
-			Bus.Publish(Event_STREAMCLOSE, r)
 			Streams.Delete(r.Path)
-			fallthrough
-		default:
 			r.timeout.Stop()
 		}
+		EventBus <- stateEvent
 		if r.Publisher != nil {
 			r.Publisher.OnEvent(stateEvent)
 		}
@@ -239,7 +253,6 @@ func (s *Stream) run() {
 				for i, sub := range s.Subscribers {
 					if sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:(i-deletes)], s.Subscribers[i-deletes+1:]...)
-						Bus.Publish(Event_UNSUBSCRIBE, sub)
 						s.Info("suber -1", zap.String("id", sub.getID()), zap.String("type", sub.getType()), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
@@ -281,7 +294,6 @@ func (s *Stream) run() {
 						s.WaitTimeout = wt
 					}
 					suber.OnEvent(s) // 通知Subscriber已成功进入Stream
-					Bus.Publish(Event_SUBSCRIBE, v)
 					s.Info("suber +1", zap.String("id", suber.getID()), zap.String("type", suber.getType()), zap.Int("remains", len(s.Subscribers)))
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量

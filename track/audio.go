@@ -51,9 +51,9 @@ func (a *Audio) WriteADTS(adts []byte) {
 	avcc := []byte{0xAF, 0x00, config1, config2}
 	a.DecoderConfiguration = DecoderConfiguration[AudioSlice]{
 		97,
-		avcc,
+		net.Buffers{avcc},
 		avcc[:2],
-		net.Buffers{adcflv1, a.DecoderConfiguration.AVCC, adcflv2},
+		net.Buffers{adcflv1, avcc, adcflv2},
 	}
 }
 

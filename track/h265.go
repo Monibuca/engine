@@ -43,7 +43,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		vt.DecoderConfiguration.Raw.Append(slice[0])
 		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.DecoderConfiguration.Raw[0], vt.DecoderConfiguration.Raw[1], vt.DecoderConfiguration.Raw[2])
 		if err == nil {
-			vt.DecoderConfiguration.AVCC.Reset().Append(extraData)
+			vt.DecoderConfiguration.AVCC = net.Buffers{extraData}
 		}
 		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
 	case
@@ -61,7 +61,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
-		vt.DecoderConfiguration.AVCC.Reset().Append(frame)
+		vt.DecoderConfiguration.AVCC = net.Buffers{frame}
 		if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(frame); err == nil {
 			vt.SPSInfo, _ = codec.ParseHevcSPS(frame)
 			vt.nalulenSize = int(frame[26]) & 0x03

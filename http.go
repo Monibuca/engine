@@ -3,8 +3,10 @@ package engine
 import (
 	"encoding/json"
 	"net/http"
-	"github.com/Monibuca/engine/v4/log"
+	"net/http/pprof"
+
 	"github.com/Monibuca/engine/v4/config"
+	"github.com/Monibuca/engine/v4/log"
 	. "github.com/logrusorgru/aurora"
 )
 
@@ -13,9 +15,27 @@ type GlobalConfig struct {
 	*config.Engine
 }
 
-func (cfg *GlobalConfig) Update(override config.Config) {
-	log.Info(Green("api server start at"), BrightBlue(cfg.ListenAddr), BrightBlue(cfg.ListenAddrTLS))
-	cfg.Listen(Engine, cfg)
+func (cfg *GlobalConfig) OnEvent(event any) {
+	switch event.(type) {
+	case FirstConfig:
+		if cfg.EnablePProf {
+			cfg.HandleFunc("/debug/pprof/", pprof.Index)
+			cfg.HandleFunc("/debug/pprof/profile",pprof.Profile)
+			cfg.HandleFunc("/debug/pprof/trace", pprof.Trace)
+			// cfg.HandleFunc("/debug/pprof/profile", pprof.Profile)
+			// cfg.Handle("/debug/pprof/allocs", pprof.Handler("allocs"))
+			// cfg.Handle("/debug/pprof/block", pprof.Handler("block"))
+			// cfg.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+			// cfg.Handle("/debug/pprof/heap", pprof.Handler("heap"))
+			// cfg.Handle("/debug/pprof/mutex", pprof.Handler("mutex"))
+			// cfg.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+		}
+		log.Info(Green("api server start at"), BrightBlue(cfg.ListenAddr), BrightBlue(cfg.ListenAddrTLS))
+		// cfg.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		// 	w.Write([]byte("Monibuca API Server"))
+		// })
+		go cfg.Listen(Engine, cfg)
+	}
 }
 
 func (config *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request) {

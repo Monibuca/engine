@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/url"
 	"reflect"
@@ -39,24 +40,34 @@ func (io *IO[C, S]) IsClosed() bool {
 	return io.Err() != nil
 }
 
-func (io *IO[C, S]) OnEvent(event any) {
+func (i *IO[C, S]) OnEvent(event any) {
 	switch v := event.(type) {
 	case context.Context:
 		//传入父级Context，如果不传入将使用Engine的Context
-		io.Context, io.CancelFunc = context.WithCancel(v)
+		i.Context, i.CancelFunc = context.WithCancel(v)
 	case *Stream:
-		io.Stream = v
-		io.StartTime = time.Now()
-		io.Logger = v.With(zap.String("type", io.Type))
-		if io.ID != "" {
-			io.Logger = io.Logger.With(zap.String("ID", io.ID))
+		i.Stream = v
+		i.StartTime = time.Now()
+		i.Logger = v.With(zap.String("type", i.Type))
+		if i.ID != "" {
+			i.Logger = i.Logger.With(zap.String("ID", i.ID))
 		}
 	case SEclose, SEKick:
-		if io.Closer != nil {
-			io.Closer.Close()
+		if i.Closer != nil {
+			i.Closer.Close()
 		}
-		if io.CancelFunc != nil {
-			io.CancelFunc()
+		if i.CancelFunc != nil {
+			i.CancelFunc()
+		}
+	default:
+		if v, ok := event.(io.Closer); ok {
+			i.Closer = v
+		}
+		if v, ok := event.(io.Reader); ok {
+			i.Reader = v
+		}
+		if v, ok := event.(io.Writer); ok {
+			i.Writer = v
 		}
 	}
 }
@@ -74,25 +85,29 @@ func (io *IO[C, S]) GetConfig() *C {
 type IIO interface {
 	IsClosed() bool
 	OnEvent(any)
+	Stop()
 	getID() string
 	getType() string
 }
 
-func (io *IO[C, S]) Bye() {
+//Stop 停止订阅或者发布，由订阅者或者发布者调用
+func (io *IO[C, S]) Stop() {
 	if io.CancelFunc != nil {
 		io.CancelFunc()
 	}
 }
 
+var BadNameErr = errors.New("Bad Name")
+
 // receive 用于接收发布或者订阅
-func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) bool {
+func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 	Streams.Lock()
 	defer Streams.Unlock()
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
 		io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
-		return false
+		return err
 	}
 	io.Args = u.Query()
 	wt := time.Second * 5
@@ -104,9 +119,6 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) bool {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
 	s, _ := findOrCreateStream(u.Path, wt)
-	if s.IsClosed() {
-		return false
-	}
 	io.Config = conf
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
@@ -118,19 +130,16 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) bool {
 				s.Warn("kick", zap.Any("publisher", s.Publisher))
 				s.Publisher.OnEvent(SEKick{})
 			} else {
-				s.Warn("badName", zap.Any("publisher", s.Publisher))
-				return false
+				return BadNameErr
 			}
 		}
 		s.PublishTimeout = v.PublishTimeout.Duration()
 		s.WaitCloseTimeout = v.WaitCloseTimeout.Duration()
-	} else {
-		Bus.Publish(Event_REQUEST_PUBLISH, s)
 	}
 	if promise := util.NewPromise[S, bool](specific); s.Receive(promise) {
-		return promise.Then()
+		return promise.Catch()
 	}
-	return false
+	return nil
 }
 
 type Client[C ClientConfig] struct {

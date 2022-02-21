@@ -20,7 +20,8 @@ func (s Second) Duration() time.Duration {
 }
 
 type Plugin interface {
-	Update(Config)
+	// 可能的入参类型：FirstConfig 第一次初始化配置，Config 后续配置更新，SE系列（StateEvent）流状态变化事件
+	OnEvent(any)
 }
 
 type TCPPlugin interface {

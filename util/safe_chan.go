@@ -11,7 +11,6 @@ type SafeChan[T any] struct {
 	senders int32 //当前发送者数量
 }
 
-
 func (sc *SafeChan[T]) Init(n int) {
 	sc.C = make(chan T, n)
 }
@@ -49,17 +48,28 @@ func (sc *SafeChan[T]) IsFull() bool {
 
 type Promise[S any, R any] struct {
 	Value S
+	err   error
 	c     chan R
 }
 
 func (r *Promise[S, R]) Resolve(result R) {
 	r.c <- result
 }
-
-func (r *Promise[S, R]) Then() R {
-	return <-r.c
+func (r *Promise[S, R]) Reject(err error) {
+	r.err = err
+	close(r.c)
 }
-
+func (p *Promise[S, R]) AWait() (R, error) {
+	return <-p.c, p.err
+}
+func (p *Promise[S, R]) Then() (r R) {
+	r, _ = p.AWait()
+	return
+}
+func (p *Promise[S, R]) Catch() (err error) {
+	_, err = p.AWait()
+	return
+}
 func NewPromise[S any, R any](value S) *Promise[S, R] {
 	return &Promise[S, R]{
 		Value: value,

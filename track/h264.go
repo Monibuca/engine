@@ -43,15 +43,14 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])
 		lenSPS := len(vt.DecoderConfiguration.Raw[0])
 		lenPPS := len(vt.DecoderConfiguration.Raw[1])
-		vt.DecoderConfiguration.AVCC.Reset()
 		if lenSPS > 3 {
-			vt.DecoderConfiguration.AVCC.Append(codec.RTMP_AVC_HEAD[:6], vt.DecoderConfiguration.Raw[0][1:4])
+			vt.DecoderConfiguration.AVCC = net.Buffers{codec.RTMP_AVC_HEAD[:6], vt.DecoderConfiguration.Raw[0][1:4]}
 		} else {
-			vt.DecoderConfiguration.AVCC.Append(codec.RTMP_AVC_HEAD)
+			vt.DecoderConfiguration.AVCC = net.Buffers{codec.RTMP_AVC_HEAD}
 		}
 		tmp := []byte{0xE1, 0, 0, 0x01, 0, 0}
-		vt.DecoderConfiguration.AVCC.Append(tmp[:1], util.PutBE(tmp[1:3], lenSPS), vt.DecoderConfiguration.Raw[0], tmp[3:4], util.PutBE(tmp[3:6], lenPPS), vt.DecoderConfiguration.Raw[1])
-		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
+		vt.DecoderConfiguration.AVCC = append(vt.DecoderConfiguration.AVCC, tmp[:1], util.PutBE(tmp[1:3], lenSPS), vt.DecoderConfiguration.Raw[0], tmp[3:4], util.PutBE(tmp[3:6], lenPPS), vt.DecoderConfiguration.Raw[1])
+		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(vt.DecoderConfiguration.AVCC, 0)
 
 	case codec.NALU_IDR_Picture:
 		vt.Value.IFrame = true
@@ -64,7 +63,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 
 func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
-		vt.DecoderConfiguration.AVCC.Reset().Append(frame)
+		vt.DecoderConfiguration.AVCC = net.Buffers{frame}
 		var info codec.AVCDecoderConfigurationRecord
 		if _, err := info.Unmarshal(frame[5:]); err == nil {
 			vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)

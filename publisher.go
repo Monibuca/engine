@@ -8,7 +8,7 @@ import (
 type IPublisher interface {
 	IIO
 	GetConfig() *config.Publish
-	receive(string, IPublisher, *config.Publish) bool
+	receive(string, IPublisher, *config.Publish) error
 }
 
 type Publisher struct {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -40,6 +41,8 @@ func InstallPlugin(config config.Plugin) *Plugin {
 	return plugin
 }
 
+type FirstConfig config.Config
+
 // Plugin 插件信息
 type Plugin struct {
 	context.Context    `json:"-"`
@@ -50,12 +53,6 @@ type Plugin struct {
 	RawConfig          config.Config //配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
 	*zap.Logger
-}
-type PushPlugin interface {
-	PushStream(Pusher)
-}
-type PullPlugin interface {
-	PullStream(Puller)
 }
 
 func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
@@ -111,18 +108,21 @@ func (opt *Plugin) assign() {
 		}
 	}
 	opt.registerHandler()
-	opt.Update()
+	opt.run()
 }
 
-func (opt *Plugin) Update() {
-	if opt.CancelFunc != nil {
-		opt.CancelFunc()
-	}
+func (opt *Plugin) run() {
 	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	opt.RawConfig.Unmarshal(opt.Config)
 	opt.autoPull()
 	opt.Debug("config", zap.Any("config", opt.Config))
-	go opt.Config.Update(opt.RawConfig)
+	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
+}
+
+// Update 热更新配置
+func (opt *Plugin) Update(conf config.Config) {
+	conf.Unmarshal(opt.Config)
+	opt.Config.OnEvent(conf)
 }
 
 func (opt *Plugin) autoPull() {
@@ -134,16 +134,16 @@ func (opt *Plugin) autoPull() {
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pullConfig.PullList {
 				if pullConfig.PullOnStart {
-					opt.Config.(PullPlugin).PullStream(Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}})
+					opt.Config.OnEvent(Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}})
 				} else if pullConfig.PullOnSubscribe {
-					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config.(PullPlugin), Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}}}
+					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config, Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}}}
 				}
 			}
 		} else if name == "Push" {
 			var pushConfig config.Push
 			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pushConfig.PushList {
-				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config.(PushPlugin), Pusher{Client[config.Push]{&pushConfig, streamPath, url, 0}}})
+				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config, Pusher{Client[config.Push]{&pushConfig, streamPath, url, 0}}})
 			}
 		}
 	}
@@ -159,6 +159,8 @@ func (opt *Plugin) registerHandler() {
 			patten := "/"
 			if mt.Name != "ServeHTTP" {
 				patten = strings.ToLower(strings.ReplaceAll(mt.Name, "_", "/"))
+			} else if opt == Engine {
+				continue
 			}
 			reflect.ValueOf(opt.HandleFunc).Call([]reflect.Value{reflect.ValueOf(patten), mv})
 		}
@@ -181,7 +183,7 @@ func (opt *Plugin) Save() error {
 	return err
 }
 
-func (opt *Plugin) Publish(streamPath string, pub IPublisher) bool {
+func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
 	conf, ok := opt.Config.(config.PublishConfig)
 	if !ok {
 		conf = EngineConfig
@@ -189,10 +191,27 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) bool {
 	return pub.receive(streamPath, pub, conf.GetPublishConfig())
 }
 
-func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) bool {
+func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 	conf, ok := opt.Config.(config.SubscribeConfig)
 	if !ok {
 		conf = EngineConfig
 	}
 	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
+}
+
+var noPullConfig = errors.New("no pull config")
+
+func (opt *Plugin) Pull(streamPath string, url string) error {
+	conf, ok := opt.Config.(config.PullConfig)
+	if !ok {
+		return noPullConfig
+	}
+	var puller Puller
+	puller.StreamPath = streamPath
+	puller.RemoteURL = url
+	puller.Config = conf.GetPullConfig()
+	promise := util.NewPromise[Puller, bool](puller)
+	opt.Config.OnEvent(promise)
+	_, err := promise.AWait()
+	return err
 }

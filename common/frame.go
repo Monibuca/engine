@@ -203,11 +203,7 @@ func (avcc AVCCFrame) AudioCodecID() codec.AudioCodecID {
 // }
 type DecoderConfiguration[T RawSlice] struct {
 	PayloadType byte
-	AVCC        T
+	AVCC        net.Buffers
 	Raw         T
 	FLV         net.Buffers
-}
-
-func (dc *DecoderConfiguration[T]) GetFLV() net.Buffers {
-	return dc.FLV
 }

@@ -43,7 +43,7 @@ func (aac *AAC) WriteRTP(raw []byte) {
 
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
-		aac.DecoderConfiguration.AVCC = AudioSlice(frame)
+		aac.DecoderConfiguration.AVCC = net.Buffers{frame}
 		config1, config2 := frame[2], frame[3]
 		//audioObjectType = (config1 & 0xF8) >> 3
 		// 1 AAC MAIN 	ISO/IEC 14496-3 subpart 4

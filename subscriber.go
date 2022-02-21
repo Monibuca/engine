@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"net"
 	"time"
 
 	. "github.com/Monibuca/engine/v4/common"
@@ -10,13 +11,33 @@ import (
 	"go.uber.org/zap"
 )
 
+type HaveFLV interface {
+	GetFLV() net.Buffers
+}
+type HaveAVCC interface {
+	GetAVCC() net.Buffers
+}
+
 type AudioFrame *AVFrame[AudioSlice]
 type VideoFrame *AVFrame[NALUSlice]
 type AudioDeConf DecoderConfiguration[AudioSlice]
 type VideoDeConf DecoderConfiguration[NALUSlice]
+
+func (a *AudioDeConf) GetFLV() net.Buffers {
+	return a.FLV
+}
+func (a *VideoDeConf) GetFLV() net.Buffers {
+	return a.FLV
+}
+func (a *AudioDeConf) GetAVCC() net.Buffers {
+	return a.AVCC
+}
+func (a *VideoDeConf) GetAVCC() net.Buffers {
+	return a.AVCC
+}
 type ISubscriber interface {
 	IIO
-	receive(string, ISubscriber, *config.Subscribe) bool
+	receive(string, ISubscriber, *config.Subscribe) error
 	GetConfig() *config.Subscribe
 	IsPlaying() bool
 	Play(ISubscriber) func() error
@@ -218,7 +239,9 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 		// 正常模式下或者纯音频模式下，音频开始播放
 		if s.ar != nil && firstIFrame == nil {
 			if !audioSent {
-				spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
+				if s.AudioTrack.IsAAC() {
+					spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
+				}
 				audioSent = true
 			}
 			for {
