@@ -94,6 +94,10 @@ func (opt *Plugin) assign() {
 			}
 		}
 	}
+	if opt.RawConfig["enable"] == false {
+		opt.Warn("disabled")
+		return
+	}
 	t := reflect.TypeOf(opt.Config).Elem()
 	// 用全局配置覆盖没有设置的配置
 	for _, fname := range MergeConfigs {
@@ -201,7 +205,11 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 
 var noPullConfig = errors.New("no pull config")
 
-func (opt *Plugin) Pull(streamPath string, url string) error {
+type PullerPromise struct {
+	*util.Promise[Puller, error]
+}
+
+func (opt *Plugin) Pull(streamPath string, url string, save bool) error {
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
 		return noPullConfig
@@ -210,8 +218,15 @@ func (opt *Plugin) Pull(streamPath string, url string) error {
 	puller.StreamPath = streamPath
 	puller.RemoteURL = url
 	puller.Config = conf.GetPullConfig()
-	promise := util.NewPromise[Puller, bool](puller)
-	opt.Config.OnEvent(promise)
+	promise := util.NewPromise[Puller, error](puller)
+	opt.Config.OnEvent(PullerPromise{promise})
 	_, err := promise.AWait()
+	if err == nil && save {
+		puller.Config.AddPull(streamPath, url)
+		opt.Modified["pull"] = config.Struct2Config(puller.Config)
+		if err := opt.Save(); err != nil {
+			opt.Error("save faild", zap.Error(err))
+		}
+	}
 	return err
 }

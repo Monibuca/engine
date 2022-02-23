@@ -22,13 +22,15 @@ import (
 )
 
 var (
+	ExecPath = os.Args[0]
+	ExecDir  = filepath.Dir(ExecPath)
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw    []byte
 	StartTime    time.Time                  //启动时间
 	Plugins      = make(map[string]*Plugin) // Plugins 所有的插件配置
 	EngineConfig = &GlobalConfig{
 		Engine:   config.Global,
-		ServeMux: http.NewServeMux(),
+		ServeMux: http.DefaultServeMux,
 	}
 	settingDir                   string                                         //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
 	Engine                       = InstallPlugin(EngineConfig)                  //复用安装插件逻辑，将全局配置信息注入，并启动server
@@ -55,11 +57,14 @@ type PullOnSubscribe struct {
 }
 
 func (p PullOnSubscribe) Pull() {
-	p.OnEvent(p.Puller)
+	p.OnEvent(PullerPromise{util.NewPromise[Puller, error](p.Puller)})
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
 func Run(ctx context.Context, configFile string) (err error) {
+	if _, err := os.Stat(configFile); err != nil {
+		configFile = filepath.Join(ExecDir, configFile)
+	}
 	Engine.Context = ctx
 	if err := util.CreateShutdownScript(); err != nil {
 		log.Error("create shutdown script error:", err)

@@ -21,7 +21,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-require (
-	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef
-	github.com/pion/randutil v0.1.0 // indirect
-)
+require github.com/pion/randutil v0.1.0 // indirect
