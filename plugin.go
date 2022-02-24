@@ -118,9 +118,9 @@ func (opt *Plugin) assign() {
 func (opt *Plugin) run() {
 	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	opt.RawConfig.Unmarshal(opt.Config)
-	opt.autoPull()
 	opt.Debug("config", zap.Any("config", opt.Config))
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
+	opt.autoPull()
 }
 
 // Update 热更新配置
@@ -133,17 +133,18 @@ func (opt *Plugin) autoPull() {
 	t := reflect.TypeOf(opt.Config).Elem()
 	v := reflect.ValueOf(opt.Config).Elem()
 	for i, j := 0, t.NumField(); i < j; i++ {
-		if name := t.Field(i).Name; name == "Pull" {
+		switch t.Field(i).Name {
+		case "Pull":
 			var pullConfig config.Pull
 			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pullConfig.PullList {
 				if pullConfig.PullOnStart {
-					opt.Config.OnEvent(Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}})
+					opt.Pull(streamPath, url, false)
 				} else if pullConfig.PullOnSubscribe {
-					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt.Config, Puller{Client[config.Pull]{&pullConfig, streamPath, url, 0}}}
+					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt, streamPath, url}
 				}
 			}
-		} else if name == "Push" {
+		case "Push":
 			var pushConfig config.Push
 			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
 			for streamPath, url := range pushConfig.PushList {
@@ -203,22 +204,22 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
 }
 
-var noPullConfig = errors.New("no pull config")
+var NoPullConfigErr = errors.New("no pull config")
 
 type PullerPromise struct {
-	*util.Promise[Puller, error]
+	*util.Promise[Puller, struct{}]
 }
 
 func (opt *Plugin) Pull(streamPath string, url string, save bool) error {
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
-		return noPullConfig
+		return NoPullConfigErr
 	}
 	var puller Puller
 	puller.StreamPath = streamPath
 	puller.RemoteURL = url
 	puller.Config = conf.GetPullConfig()
-	promise := util.NewPromise[Puller, error](puller)
+	promise := util.NewPromise[Puller, struct{}](puller)
 	opt.Config.OnEvent(PullerPromise{promise})
 	_, err := promise.AWait()
 	if err == nil && save {

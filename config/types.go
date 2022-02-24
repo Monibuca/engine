@@ -45,6 +45,10 @@ type Pull struct {
 	PullList        map[string]string // 自动拉流列表，以streamPath为key，url为value
 }
 
+func (p *Pull) GetPullConfig() *Pull {
+	return p
+}
+
 func (p *Pull) AddPull(streamPath string, url string) {
 	if p.PullList == nil {
 		p.PullList = make(map[string]string)
@@ -68,10 +72,10 @@ type Engine struct {
 	Publish
 	Subscribe
 	HTTP
-	RTPReorder  bool
-	EnableAVCC  bool //启用AVCC格式，rtmp协议使用
-	EnableRTP   bool //启用RTP格式，rtsp、gb18181等协议使用
-	EnableFLV   bool //开启FLV格式，hdl协议使用
+	RTPReorder bool
+	EnableAVCC bool //启用AVCC格式，rtmp协议使用
+	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
+	EnableFLV  bool //开启FLV格式，hdl协议使用
 }
 
 var Global = &Engine{

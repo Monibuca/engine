@@ -39,7 +39,7 @@ var (
 	MergeConfigs                 = []string{"Publish", "Subscribe"}             //需要合并配置的属性项，插件若没有配置则使用全局配置
 	PullOnSubscribeList          = make(map[string]PullOnSubscribe)             //按需拉流的配置信息
 	PushOnPublishList            = make(map[string][]PushOnPublish)             //发布时自动推流配置
-	EventBus                     = make(chan any)
+	EventBus                     = make(chan any, 1)
 )
 
 type PushOnPublish struct {
@@ -52,12 +52,13 @@ func (p PushOnPublish) Push() {
 }
 
 type PullOnSubscribe struct {
-	config.Plugin
-	Puller
+	*Plugin
+	StreamPath string // 本地流标识
+	RemoteURL  string // 远程服务器地址
 }
 
 func (p PullOnSubscribe) Pull() {
-	p.OnEvent(PullerPromise{util.NewPromise[Puller, error](p.Puller)})
+	p.Plugin.Pull(p.StreamPath, p.RemoteURL, false)
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有

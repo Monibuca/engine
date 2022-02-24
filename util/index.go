@@ -1,10 +1,15 @@
 package util
 
 import (
+	"context"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 )
+
+var Null = struct{}{}
 
 func Clone[T any](x T) *T {
 	return &x
@@ -32,4 +37,12 @@ func ConvertNum[F Integer, T Integer](from F, to T) T {
 // Bit1 检查字节中的某一位是否为1 |0|1|2|3|4|5|6|7|
 func Bit1(b byte, index int) bool {
 	return b&(1<<(7-index)) != 0
+}
+
+func WaitTerm(cancel context.CancelFunc) {
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigc)
+	<-sigc
+	cancel()
 }

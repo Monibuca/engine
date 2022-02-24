@@ -98,6 +98,7 @@ func (io *IO[C, S]) Stop() {
 }
 
 var BadNameErr = errors.New("Bad Name")
+var StreamIsClosedErr = errors.New("Stream Is Closed")
 
 // receive 用于接收发布或者订阅
 func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
@@ -136,10 +137,10 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		s.PublishTimeout = v.PublishTimeout.Duration()
 		s.WaitCloseTimeout = v.WaitCloseTimeout.Duration()
 	}
-	if promise := util.NewPromise[S, bool](specific); s.Receive(promise) {
+	if promise := util.NewPromise[S, struct{}](specific); s.Receive(promise) {
 		return promise.Catch()
 	}
-	return nil
+	return StreamIsClosedErr
 }
 
 type Client[C ClientConfig] struct {

@@ -185,9 +185,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
 			r.timeout.Reset(r.WaitTimeout)
-			if _, ok = PullOnSubscribeList[r.Path]; ok {
-				PullOnSubscribeList[r.Path].Pull()
-			}
 		case STATE_PUBLISHING:
 			stateEvent = SEpublish{event}
 			r.broadcast(stateEvent)
@@ -237,6 +234,7 @@ func (s *Stream) Receive(event any) bool {
 
 // 流状态处理中枢，包括接收订阅发布指令等
 func (s *Stream) run() {
+	var waitP []*util.Promise[ISubscriber, struct{}]
 	for {
 		select {
 		case <-s.timeout.C:
@@ -274,18 +272,22 @@ func (s *Stream) run() {
 		case action, ok := <-s.actionChan.C:
 			if ok {
 				switch v := action.(type) {
-				case *util.Promise[IPublisher, bool]:
+				case *util.Promise[IPublisher, struct{}]:
 					s.Publisher = v.Value
 					if s.action(ACTION_PUBLISH) {
 						s.Publisher.OnEvent(s) // 通知Publisher已成功进入Stream
-						v.Resolve(true)
+						v.Resolve(util.Null)
+						for _, p := range waitP {
+							p.Resolve(util.Null)
+						}
+						waitP = waitP[:0]
 					} else {
 						s.Publisher = nil
-						v.Resolve(false)
+						v.Reject(BadNameErr)
 					}
-				case *util.Promise[ISubscriber, bool]:
+				case *util.Promise[ISubscriber, struct{}]:
 					if s.IsClosed() {
-						v.Resolve(false)
+						v.Reject(StreamIsClosedErr)
 					}
 					suber := v.Value
 					s.Subscribers = append(s.Subscribers, suber)
@@ -310,8 +312,14 @@ func (s *Stream) run() {
 							}
 							suber.OnEvent(t) // 把现有的Track发给订阅者
 						}
+						v.Resolve(util.Null)
+					} else {
+						waitP = append(waitP, v)
+						// 通知发布者按需拉流
+						if _, ok = PullOnSubscribeList[s.Path]; ok {
+							PullOnSubscribeList[s.Path].Pull()
+						}
 					}
-					v.Resolve(true)
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)
 					}
@@ -334,12 +342,15 @@ func (s *Stream) run() {
 					}
 				case StreamAction:
 					s.action(v)
+				default:
+					s.Error("unknown action", zap.Any("action", action))
 				}
 			} else {
+				for _, p := range waitP {
+					p.Reject(StreamIsClosedErr)
+				}
 				return
 			}
-			// default:
-
 		}
 	}
 }
