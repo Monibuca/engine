@@ -54,19 +54,30 @@ func (r *RTPDemuxer) push(ts uint32, payload []byte) {
 	r.OnDemux(r.PTS, r.Payload)
 	r.lastTs = ts
 }
+
+func IsNewer(value uint16, prev_value uint16) bool {
+	if prev_value == 0 {
+		prev_value = value
+	}
+	seq := int32(value)
+	prevSeq := int32(prev_value)
+	if (seq - prevSeq == 32768) || (seq!=prevSeq && seq - prevSeq < 32768) {
+		return true
+	}
+	return false
+}
+
 func (r *RTPDemuxer) Push(rtpRaw []byte) {
 	if err := r.Unmarshal(rtpRaw); err != nil {
 		utils.Println("RTP Unmarshal error", err)
 		return
 	}
 	if config.RTPReorder {
-		if r.SequenceNumber < r.lastSeq {
-			return
-		} else if r.lastSeq == 0 {
+		if !IsNewer(r.SequenceNumber, r.lastSeq) {
 			r.timestamp = time.Now()
 			r.tryPop(r.Timestamp, r.Payload)
 			r.lastSeq = r.SequenceNumber
-		} else if r.lastSeq+1 == r.SequenceNumber {
+		}else if r.lastSeq+1 == r.SequenceNumber {
 			r.tryPop(r.Timestamp, r.Payload)
 		} else if _, ok := r.orderMap[r.SequenceNumber]; !ok {
 			r.orderMap[r.SequenceNumber] = RTPNalu{
