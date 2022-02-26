@@ -1,8 +1,8 @@
 package config
 
 import (
+	"github.com/Monibuca/engine/v4/log"
 	"context"
-	"log"
 	"net"
 	"runtime"
 	"time"
@@ -27,7 +27,7 @@ func (tcp *TCP) listen(l net.Listener, handler func(*net.TCPConn)) {
 				if max := 1 * time.Second; tempDelay > max {
 					tempDelay = max
 				}
-				log.Printf("%s: Accept error: %v; retrying in %v", tcp.ListenAddr, err, tempDelay)
+				log.Warnf("%s: Accept error: %v; retrying in %v", tcp.ListenAddr, err, tempDelay)
 				time.Sleep(tempDelay)
 				continue
 			}
@@ -41,6 +41,7 @@ func (tcp *TCP) listen(l net.Listener, handler func(*net.TCPConn)) {
 func (tcp *TCP) Listen(ctx context.Context, plugin TCPPlugin) error {
 	l, err := net.Listen("tcp", tcp.ListenAddr)
 	if err != nil {
+		log.Fatalf("%s: Listen error: %v", tcp.ListenAddr, err)
 		return err
 	}
 	count := tcp.ListenNum

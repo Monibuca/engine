@@ -18,11 +18,29 @@ type HaveAVCC interface {
 	GetAVCC() net.Buffers
 }
 
-type AudioFrame *AVFrame[AudioSlice]
-type VideoFrame *AVFrame[NALUSlice]
+type AudioFrame AVFrame[AudioSlice]
+type VideoFrame AVFrame[NALUSlice]
 type AudioDeConf DecoderConfiguration[AudioSlice]
 type VideoDeConf DecoderConfiguration[NALUSlice]
 
+func (a *AudioFrame) GetFLV() net.Buffers {
+	return a.FLV
+}
+func (a *AudioFrame) GetAVCC() net.Buffers {
+	return a.AVCC
+}
+func (a *AudioFrame) GetRTP() []*RTPFrame {
+	return a.RTP
+}
+func (v *VideoFrame) GetFLV() net.Buffers {
+	return v.FLV
+}
+func (v *VideoFrame) GetAVCC() net.Buffers {
+	return v.AVCC
+}
+func (v *VideoFrame) GetRTP() []*RTPFrame {
+	return v.RTP
+}
 func (a *AudioDeConf) GetFLV() net.Buffers {
 	return a.FLV
 }
@@ -35,6 +53,7 @@ func (a *AudioDeConf) GetAVCC() net.Buffers {
 func (a *VideoDeConf) GetAVCC() net.Buffers {
 	return a.AVCC
 }
+
 type ISubscriber interface {
 	IIO
 	receive(string, ISubscriber, *config.Subscribe) error
@@ -114,9 +133,9 @@ func (s *Subscriber) Stop() {
 func (s *Subscriber) Play(spesic ISubscriber) func() error {
 	s.Info("play")
 	var t time.Time
-	var startTime time.Time    //读到第一个关键帧的时间
-	var firstIFrame VideoFrame //起始关键帧
-	var audioSent bool         //音频是否发送过
+	var startTime time.Time     //读到第一个关键帧的时间
+	var firstIFrame *VideoFrame //起始关键帧
+	var audioSent bool          //音频是否发送过
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
 	var nextRoundReadAudio bool //下一次读取音频
@@ -128,7 +147,7 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 			if s.vr != nil {
 				if startTime.IsZero() {
 					startTime = time.Now()
-					firstIFrame = (VideoFrame)(s.vr.Read(ctx)) // 这里阻塞读取为0耗时
+					firstIFrame = (*VideoFrame)(s.vr.Read(ctx)) // 这里阻塞读取为0耗时
 					s.Debug("firstIFrame", zap.Uint32("seq", firstIFrame.Sequence))
 					if ctx.Err() != nil {
 						return ctx.Err()
@@ -141,8 +160,8 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 					}
 					return nil
 				} else if firstIFrame == nil {
-					if vp := VideoFrame(s.vr.TryRead()); vp != nil {
-						spesic.OnEvent(vp)
+					if vp := (s.vr.TryRead()); vp != nil {
+						spesic.OnEvent((*VideoFrame)(vp))
 						s.vr.MoveNext()
 						// 如果本次读取的视频时间戳比较大，下次给音频一个机会
 						if nextRoundReadAudio = vp.Timestamp.After(t); nextRoundReadAudio {
@@ -163,7 +182,7 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 				spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
 				audioSent = true
 			}
-			if ap := AudioFrame(s.ar.TryRead()); ap != nil {
+			if ap := s.ar.TryRead(); ap != nil {
 				spesic.OnEvent(ap)
 				s.ar.MoveNext()
 				// 这次如果音频比较大，则下次读取给视频一个机会
@@ -181,9 +200,9 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 	s.Info("playblock")
 	var t time.Time
-	var startTime time.Time    //读到第一个关键帧的时间
-	var firstIFrame VideoFrame //起始关键帧
-	var audioSent bool         //音频是否发送过
+	var startTime time.Time     //读到第一个关键帧的时间
+	var firstIFrame *VideoFrame //起始关键帧
+	var audioSent bool          //音频是否发送过
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
 	defer s.Info("stop")
@@ -191,7 +210,7 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 		if s.vr != nil {
 			if startTime.IsZero() {
 				startTime = time.Now()
-				firstIFrame = (VideoFrame)(s.vr.Read(ctx))
+				firstIFrame = (*VideoFrame)(s.vr.Read(ctx))
 				s.Debug("firstIFrame", zap.Uint32("seq", firstIFrame.Sequence))
 				if ctx.Err() != nil {
 					return
@@ -199,10 +218,10 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 				spesic.OnEvent(VideoDeConf(s.VideoTrack.DecoderConfiguration))
 			}
 			for {
-				var vp VideoFrame
+				var vp *VideoFrame
 				// 如果进入正常模式
 				if firstIFrame == nil {
-					vp = VideoFrame(s.vr.Read(ctx))
+					vp = (*VideoFrame)(s.vr.Read(ctx))
 					if ctx.Err() != nil {
 						return
 					}
@@ -215,7 +234,7 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 						s.Debug("skip to latest key frame")
 						continue
 					} else {
-						vp = VideoFrame(s.vr.Read(ctx))
+						vp = (*VideoFrame)(s.vr.Read(ctx))
 						if ctx.Err() != nil {
 							return
 						}
@@ -245,7 +264,7 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 				audioSent = true
 			}
 			for {
-				ap := AudioFrame(s.ar.Read(ctx))
+				ap := (*AudioFrame)(s.ar.Read(ctx))
 				if ctx.Err() != nil {
 					return
 				}

@@ -129,15 +129,6 @@ type AVFrame[T RawSlice] struct {
 	canRead bool
 }
 
-func (av *AVFrame[T]) GetFLV() net.Buffers {
-	return av.FLV
-}
-func (av *AVFrame[T]) GetAVCC() net.Buffers {
-	return av.AVCC
-}
-func (av *AVFrame[T]) GetRTP() []*RTPFrame {
-	return av.RTP
-}
 func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }

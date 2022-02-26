@@ -1,4 +1,4 @@
-module github.com/Monibuca/engine/v4
+module v4.m7s.live/engine
 
 go 1.18
 

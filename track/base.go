@@ -89,7 +89,7 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 		return
 	}
 	if config.Global.RTPReorder {
-		if frame.SequenceNumber < av.lastSeq {
+		if frame.SequenceNumber < av.lastSeq &&  av.lastSeq - frame.SequenceNumber < 0x8000 {
 			// 出现旧的包直接丢弃
 			return nil
 		} else if av.lastSeq == 0 {

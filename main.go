@@ -39,7 +39,7 @@ var (
 	MergeConfigs                 = []string{"Publish", "Subscribe"}             //需要合并配置的属性项，插件若没有配置则使用全局配置
 	PullOnSubscribeList          = make(map[string]PullOnSubscribe)             //按需拉流的配置信息
 	PushOnPublishList            = make(map[string][]PushOnPublish)             //发布时自动推流配置
-	EventBus                     = make(chan any, 1)
+	EventBus                     = make(chan any, 10)
 )
 
 type PushOnPublish struct {
