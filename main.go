@@ -1,4 +1,4 @@
-package engine // import "v4.m7s.live/engine"
+package engine // import "m7s.live/engine/v4"
 
 import (
 	"bytes"
@@ -16,9 +16,9 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-	"v4.m7s.live/engine/config"
-	"v4.m7s.live/engine/log"
-	"v4.m7s.live/engine/util"
+	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
 var (

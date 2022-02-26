@@ -1,7 +1,7 @@
 package common
 
 import (
-	"v4.m7s.live/engine/util"
+	"m7s.live/engine/v4/util"
 )
 
 type RingBuffer[T any] struct {

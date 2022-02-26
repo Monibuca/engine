@@ -6,8 +6,8 @@ import (
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
-	"v4.m7s.live/engine/config"
-	"v4.m7s.live/engine/log"
+	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/log"
 )
 
 type GlobalConfig struct {

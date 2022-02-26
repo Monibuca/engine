@@ -7,8 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 
-	"v4.m7s.live/engine/codec"
-	"v4.m7s.live/engine/util"
+	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/util"
 )
 
 // ios13818-1-CN.pdf 45/166

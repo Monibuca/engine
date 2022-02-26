@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	. "v4.m7s.live/engine/common"
-	"v4.m7s.live/engine/config"
-	"v4.m7s.live/engine/track"
+	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/track"
 )
 
 type HaveFLV interface {

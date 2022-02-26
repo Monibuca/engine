@@ -12,9 +12,9 @@ import (
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-	"v4.m7s.live/engine/config"
-	"v4.m7s.live/engine/log"
-	"v4.m7s.live/engine/util"
+	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
 // InstallPlugin 安装插件，传入插件配置生成插件信息对象

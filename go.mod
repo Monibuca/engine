@@ -1,4 +1,4 @@
-module v4.m7s.live/engine 
+module m7s.live/engine/v4
 
 go 1.18
 

@@ -4,9 +4,9 @@ import (
 	"net"
 
 	"go.uber.org/zap"
-	"v4.m7s.live/engine/codec"
-	. "v4.m7s.live/engine/common"
-	"v4.m7s.live/engine/config"
+	"m7s.live/engine/v4/codec"
+	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
 )
 
 var adcflv1 = []byte{codec.FLV_TAG_TYPE_AUDIO, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0}

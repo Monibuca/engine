@@ -1,7 +1,7 @@
 package common
 
 import (
-	"v4.m7s.live/engine/log"
+	"m7s.live/engine/v4/log"
 )
 
 type IStream interface {

@@ -1,6 +1,6 @@
 package codec
 
-import "v4.m7s.live/engine/util"
+import "m7s.live/engine/v4/util"
 
 type MP4 interface {
 }

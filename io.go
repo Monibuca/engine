@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"v4.m7s.live/engine/config"
-	"v4.m7s.live/engine/util"
+	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/util"
 )
 
 type IOConfig interface {

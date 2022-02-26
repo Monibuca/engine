@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"v4.m7s.live/engine/common"
-	"v4.m7s.live/engine/config"
+	"m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
 )
 
 type IPublisher interface {
