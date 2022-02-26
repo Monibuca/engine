@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"github.com/Monibuca/engine/v4/common"
-	"github.com/Monibuca/engine/v4/config"
+	"v4.m7s.live/engine/common"
+	"v4.m7s.live/engine/config"
 )
 
 type IPublisher interface {

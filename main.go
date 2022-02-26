@@ -1,4 +1,4 @@
-package engine
+package engine // import "v4.m7s.live/engine"
 
 import (
 	"bytes"
@@ -12,13 +12,13 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/log"
-	"github.com/Monibuca/engine/v4/util"
 	"github.com/google/uuid"
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	"v4.m7s.live/engine/config"
+	"v4.m7s.live/engine/log"
+	"v4.m7s.live/engine/util"
 )
 
 var (

@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/Monibuca/engine/v4/util"
+	"v4.m7s.live/engine/util"
 )
 
 type RingBuffer[T any] struct {

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/log"
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
+	"v4.m7s.live/engine/config"
+	"v4.m7s.live/engine/log"
 )
 
 type GlobalConfig struct {

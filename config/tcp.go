@@ -1,11 +1,12 @@
 package config
 
 import (
-	"github.com/Monibuca/engine/v4/log"
 	"context"
 	"net"
 	"runtime"
 	"time"
+
+	"v4.m7s.live/engine/log"
 )
 
 type TCP struct {

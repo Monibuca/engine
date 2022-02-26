@@ -10,11 +10,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Monibuca/engine/v4/config"
-	"github.com/Monibuca/engine/v4/log"
-	"github.com/Monibuca/engine/v4/util"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	"v4.m7s.live/engine/config"
+	"v4.m7s.live/engine/log"
+	"v4.m7s.live/engine/util"
 )
 
 // InstallPlugin 安装插件，传入插件配置生成插件信息对象

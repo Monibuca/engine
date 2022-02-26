@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Monibuca/engine/v4/log"
 	"go.uber.org/zap"
+	"v4.m7s.live/engine/log"
 )
 
 type Config map[string]any

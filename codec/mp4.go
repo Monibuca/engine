@@ -1,6 +1,6 @@
 package codec
 
-import "github.com/Monibuca/engine/v4/util"
+import "v4.m7s.live/engine/util"
 
 type MP4 interface {
 }

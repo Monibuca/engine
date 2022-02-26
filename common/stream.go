@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/Monibuca/engine/v4/log"
+	"v4.m7s.live/engine/log"
 )
 
 type IStream interface {
