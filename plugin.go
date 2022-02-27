@@ -167,7 +167,7 @@ func (opt *Plugin) registerHandler() {
 			} else if opt == Engine {
 				continue
 			}
-			reflect.ValueOf(opt.HandleFunc).Call([]reflect.Value{reflect.ValueOf(patten), mv})
+			opt.HandleFunc(patten, mv.Interface().(func(http.ResponseWriter, *http.Request)))
 		}
 	}
 }

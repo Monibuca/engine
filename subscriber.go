@@ -41,16 +41,16 @@ func (v *VideoFrame) GetAVCC() net.Buffers {
 func (v *VideoFrame) GetRTP() []*RTPFrame {
 	return v.RTP
 }
-func (a *AudioDeConf) GetFLV() net.Buffers {
+func (a AudioDeConf) GetFLV() net.Buffers {
 	return a.FLV
 }
-func (a *VideoDeConf) GetFLV() net.Buffers {
+func (a VideoDeConf) GetFLV() net.Buffers {
 	return a.FLV
 }
-func (a *AudioDeConf) GetAVCC() net.Buffers {
+func (a AudioDeConf) GetAVCC() net.Buffers {
 	return a.AVCC
 }
-func (a *VideoDeConf) GetAVCC() net.Buffers {
+func (a VideoDeConf) GetAVCC() net.Buffers {
 	return a.AVCC
 }
 

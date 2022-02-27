@@ -40,11 +40,25 @@ func (io *IO[C, S]) IsClosed() bool {
 	return io.Err() != nil
 }
 
+// SetIO（可选） 设置Writer、Reader、Closer
+func (i *IO[C, S]) SetIO(conn any) {
+	if v, ok := conn.(io.Closer); ok {
+		i.Closer = v
+	}
+	if v, ok := conn.(io.Reader); ok {
+		i.Reader = v
+	}
+	if v, ok := conn.(io.Writer); ok {
+		i.Writer = v
+	}
+}
+// SetParentCtx（可选）
+func (i *IO[C, S]) SetParentCtx(parent context.Context) {
+	i.Context, i.CancelFunc = context.WithCancel(parent)
+}
+
 func (i *IO[C, S]) OnEvent(event any) {
 	switch v := event.(type) {
-	case context.Context:
-		//传入父级Context，如果不传入将使用Engine的Context
-		i.Context, i.CancelFunc = context.WithCancel(v)
 	case *Stream:
 		i.Stream = v
 		i.StartTime = time.Now()
@@ -58,16 +72,6 @@ func (i *IO[C, S]) OnEvent(event any) {
 		}
 		if i.CancelFunc != nil {
 			i.CancelFunc()
-		}
-	default:
-		if v, ok := event.(io.Closer); ok {
-			i.Closer = v
-		}
-		if v, ok := event.(io.Reader); ok {
-			i.Reader = v
-		}
-		if v, ok := event.(io.Writer); ok {
-			i.Writer = v
 		}
 	}
 }

@@ -67,7 +67,7 @@ func (a *Audio) Flush() {
 	}
 	// FLV tag 补完
 	if a.Value.FLV == nil && config.Global.EnableFLV {
-		a.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, a.Value.DTS/90)
+		a.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, a.Value.AbsTime)
 	}
 	if a.Value.RTP == nil && config.Global.EnableRTP {
 		var o []byte

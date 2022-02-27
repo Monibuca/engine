@@ -125,7 +125,7 @@ func (vt *Video) Flush() {
 	}
 	// FLV tag 补完
 	if vt.Value.FLV == nil && config.Global.EnableFLV {
-		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.Value.DTS/90)
+		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.Value.AbsTime)
 	}
 	// 下一帧为I帧，即将覆盖
 	if vt.Next().Value.IFrame {
