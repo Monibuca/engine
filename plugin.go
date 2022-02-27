@@ -120,7 +120,6 @@ func (opt *Plugin) run() {
 	opt.RawConfig.Unmarshal(opt.Config)
 	opt.Debug("config", zap.Any("config", opt.Config))
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
-	opt.autoPull()
 }
 
 // Update 热更新配置
@@ -129,30 +128,6 @@ func (opt *Plugin) Update(conf config.Config) {
 	opt.Config.OnEvent(conf)
 }
 
-func (opt *Plugin) autoPull() {
-	t := reflect.TypeOf(opt.Config).Elem()
-	v := reflect.ValueOf(opt.Config).Elem()
-	for i, j := 0, t.NumField(); i < j; i++ {
-		switch t.Field(i).Name {
-		case "Pull":
-			var pullConfig config.Pull
-			reflect.ValueOf(&pullConfig).Elem().Set(v.Field(i))
-			for streamPath, url := range pullConfig.PullList {
-				if pullConfig.PullOnStart {
-					opt.Pull(streamPath, url, false)
-				} else if pullConfig.PullOnSubscribe {
-					PullOnSubscribeList[streamPath] = PullOnSubscribe{opt, streamPath, url}
-				}
-			}
-		case "Push":
-			var pushConfig config.Push
-			reflect.ValueOf(&pushConfig).Elem().Set(v.Field(i))
-			for streamPath, url := range pushConfig.PushList {
-				PushOnPublishList[streamPath] = append(PushOnPublishList[streamPath], PushOnPublish{opt.Config, Pusher{Client[config.Push]{&pushConfig, streamPath, url, 0}}})
-			}
-		}
-	}
-}
 func (opt *Plugin) registerHandler() {
 	t := reflect.TypeOf(opt.Config)
 	v := reflect.ValueOf(opt.Config)
@@ -206,28 +181,90 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 
 var NoPullConfigErr = errors.New("no pull config")
 
-type PullerPromise struct {
-	*util.Promise[Puller, struct{}]
-}
-
-func (opt *Plugin) Pull(streamPath string, url string, save bool) error {
+func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
 		return NoPullConfigErr
 	}
-	var puller Puller
-	puller.StreamPath = streamPath
-	puller.RemoteURL = url
-	puller.Config = conf.GetPullConfig()
-	promise := util.NewPromise[Puller, struct{}](puller)
-	opt.Config.OnEvent(PullerPromise{promise})
-	_, err := promise.AWait()
-	if err == nil && save {
-		puller.Config.AddPull(streamPath, url)
-		opt.Modified["pull"] = config.Struct2Config(puller.Config)
-		if err := opt.Save(); err != nil {
+	pullConf := conf.GetPullConfig()
+
+	puller.init(streamPath, url, pullConf)
+
+	if err = puller.Connect(); err != nil {
+		return
+	}
+
+	if err = opt.Publish(streamPath, puller); err != nil {
+		return
+	}
+
+	go func() {
+		defer opt.Info("stop pull", zap.String("remoteURL", url))
+		for puller.Reconnect() {
+			if puller.Pull(); !puller.IsClosed() {
+				if err = puller.Connect(); err != nil {
+					return
+				}
+				if err = opt.Publish(streamPath, puller); err != nil {
+					if Streams.Get(streamPath).Publisher != puller {
+						return
+					}
+				}
+			} else {
+				return
+			}
+		}
+	}()
+
+	if save {
+		pullConf.AddPull(streamPath, url)
+		opt.Modified["pull"] = config.Struct2Config(pullConf)
+		if err = opt.Save(); err != nil {
 			opt.Error("save faild", zap.Error(err))
 		}
 	}
-	return err
+	return
+}
+
+func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
+	conf, ok := opt.Config.(config.PushConfig)
+	if !ok {
+		return NoPullConfigErr
+	}
+	pushConfig := conf.GetPushConfig()
+
+	pusher.init(streamPath, url, pushConfig)
+
+	if err = pusher.Connect(); err != nil {
+		return
+	}
+
+	if err = opt.Subscribe(streamPath, pusher); err != nil {
+		return
+	}
+
+	go func() {
+		defer opt.Info("stop push", zap.String("remoteURL", url))
+		for pusher.Reconnect() {
+			if pusher.Push(); !pusher.IsClosed() {
+				if err = pusher.Connect(); err != nil {
+					return
+				}
+				if err = opt.Subscribe(streamPath, pusher); err != nil {
+					return
+				}
+			} else {
+				return
+			}
+		}
+	}()
+
+	if save {
+		pushConfig.AddPush(streamPath, url)
+		opt.Modified["push"] = config.Struct2Config(pushConfig)
+		if err = opt.Save(); err != nil {
+			opt.Error("save faild", zap.Error(err))
+		}
+	}
+	return
 }

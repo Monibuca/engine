@@ -279,7 +279,13 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 	}
 }
 
-type PushEvent int
+type IPusher interface {
+	ISubscriber
+	Push()
+	Connect() error
+	init(string, string, *config.Push)
+	Reconnect() bool
+}
 type Pusher struct {
 	Client[config.Push]
 }

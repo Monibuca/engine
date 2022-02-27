@@ -37,29 +37,8 @@ var (
 	toolManForGetHandlerFuncType http.HandlerFunc                               //专门用来获取HandlerFunc类型的工具人
 	handlerFuncType              = reflect.TypeOf(toolManForGetHandlerFuncType) //供反射使用的Handler类型的类型
 	MergeConfigs                 = []string{"Publish", "Subscribe"}             //需要合并配置的属性项，插件若没有配置则使用全局配置
-	PullOnSubscribeList          = make(map[string]PullOnSubscribe)             //按需拉流的配置信息
-	PushOnPublishList            = make(map[string][]PushOnPublish)             //发布时自动推流配置
 	EventBus                     = make(chan any, 10)
 )
-
-type PushOnPublish struct {
-	config.Plugin
-	Pusher
-}
-
-func (p PushOnPublish) Push() {
-	p.OnEvent(p.Pusher)
-}
-
-type PullOnSubscribe struct {
-	*Plugin
-	StreamPath string // 本地流标识
-	RemoteURL  string // 远程服务器地址
-}
-
-func (p PullOnSubscribe) Pull() {
-	p.Plugin.Pull(p.StreamPath, p.RemoteURL, false)
-}
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
 func Run(ctx context.Context, configFile string) (err error) {

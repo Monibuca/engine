@@ -52,6 +52,7 @@ func (i *IO[C, S]) SetIO(conn any) {
 		i.Writer = v
 	}
 }
+
 // SetParentCtx（可选）
 func (i *IO[C, S]) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
@@ -123,7 +124,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
-	s, _ := findOrCreateStream(u.Path, wt)
+	s, create := findOrCreateStream(u.Path, wt)
 	io.Config = conf
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
@@ -140,6 +141,8 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		}
 		s.PublishTimeout = v.PublishTimeout.Duration()
 		s.WaitCloseTimeout = v.WaitCloseTimeout.Duration()
+	} else if create {
+		EventBus <- s //通知发布者按需拉流
 	}
 	if promise := util.NewPromise[S, struct{}](specific); s.Receive(promise) {
 		return promise.Catch()
@@ -152,4 +155,10 @@ type Client[C ClientConfig] struct {
 	StreamPath     string // 本地流标识
 	RemoteURL      string // 远程服务器地址（用于推拉）
 	ReConnectCount int    //重连次数
+}
+
+func (c *Client[C]) init(streamPath string, url string, conf *C) {
+	c.Config = conf
+	c.StreamPath = streamPath
+	c.RemoteURL = url
 }

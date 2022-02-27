@@ -189,11 +189,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEpublish{event}
 			r.broadcast(stateEvent)
 			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
-			if v, ok := PushOnPublishList[r.Path]; ok {
-				for _, v := range v {
-					v.Push()
-				}
-			}
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
 			r.timeout.Reset(r.WaitCloseTimeout)
@@ -315,10 +310,6 @@ func (s *Stream) run() {
 						v.Resolve(util.Null)
 					} else {
 						waitP = append(waitP, v)
-						// 通知发布者按需拉流
-						if _, ok = PullOnSubscribeList[s.Path]; ok {
-							PullOnSubscribeList[s.Path].Pull()
-						}
 					}
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)

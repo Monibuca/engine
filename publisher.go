@@ -26,7 +26,13 @@ func (p *Publisher) OnEvent(event any) {
 	p.IO.OnEvent(event)
 }
 
-type PullEvent int
+type IPuller interface {
+	IPublisher
+	Connect() error
+	Pull()
+	Reconnect() bool
+	init(streamPath string, url string, conf *config.Pull)
+}
 
 // 用于远程拉流的发布者
 type Puller struct {
