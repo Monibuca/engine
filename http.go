@@ -3,28 +3,22 @@ package engine
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
-	. "github.com/logrusorgru/aurora"
-	"go.uber.org/zap"
 	"m7s.live/engine/v4/config"
-	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
 type GlobalConfig struct {
-	*http.ServeMux
 	*config.Engine
 }
 
-func (cfg *GlobalConfig) OnEvent(event any) {
-	switch event.(type) {
-	case FirstConfig:
-		log.Info(Green("api server start at"), BrightBlue(cfg.ListenAddr), BrightBlue(cfg.ListenAddrTLS))
-		cfg.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			log.Debug("visit", zap.String("path", "/"), zap.String("remote", r.RemoteAddr))
-			w.Write([]byte("Monibuca API Server"))
-		})
-		go cfg.Listen(Engine, cfg)
-	}
+func (config *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	rw.Write([]byte("Monibuca API Server"))
+}
+
+func (config *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
+	util.ReturnJson(summary.collect, time.Second, rw, r)
 }
 
 func (config *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request) {

@@ -40,6 +40,8 @@ type Puller struct {
 }
 
 // 是否需要重连
-func (pub *Puller) Reconnect() bool {
-	return pub.Config.RePull == -1 || pub.ReConnectCount <= pub.Config.RePull
+func (pub *Puller) Reconnect() (ok bool) {
+	ok = pub.Config.RePull == -1 || pub.ReConnectCount <= pub.Config.RePull
+	pub.ReConnectCount++
+	return
 }

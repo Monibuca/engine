@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"time"
 
@@ -29,15 +28,12 @@ var (
 	StartTime    time.Time                  //启动时间
 	Plugins      = make(map[string]*Plugin) // Plugins 所有的插件配置
 	EngineConfig = &GlobalConfig{
-		Engine:   config.Global,
-		ServeMux: http.DefaultServeMux,
+		Engine: config.Global,
 	}
-	settingDir                   string                                         //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
-	Engine                       = InstallPlugin(EngineConfig)                  //复用安装插件逻辑，将全局配置信息注入，并启动server
-	toolManForGetHandlerFuncType http.HandlerFunc                               //专门用来获取HandlerFunc类型的工具人
-	handlerFuncType              = reflect.TypeOf(toolManForGetHandlerFuncType) //供反射使用的Handler类型的类型
-	MergeConfigs                 = []string{"Publish", "Subscribe"}             //需要合并配置的属性项，插件若没有配置则使用全局配置
-	EventBus                     = make(chan any, 10)
+	settingDir   string                                     //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
+	Engine       = InstallPlugin(EngineConfig)              //复用安装插件逻辑，将全局配置信息注入，并启动server
+	MergeConfigs = []string{"Publish", "Subscribe", "HTTP"} //需要合并配置的属性项，插件若没有配置则使用全局配置
+	EventBus     = make(chan any, 10)
 )
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
@@ -73,7 +69,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	Engine.registerHandler()
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
 	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
-	go EngineConfig.OnEvent(FirstConfig(Engine.RawConfig))
+	go EngineConfig.Listen(Engine)
 	for name, plugin := range Plugins {
 		plugin.RawConfig = cg.GetChild(name)
 		plugin.assign()

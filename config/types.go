@@ -1,5 +1,7 @@
 package config
 
+import "net/http"
+
 type PublishConfig interface {
 	GetPublishConfig() *Publish
 }
@@ -77,10 +79,12 @@ type Engine struct {
 	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
 	EnableFLV  bool //开启FLV格式，hdl协议使用
 }
+func (cfg *Engine) OnEvent(event any) {
 
+}
 var Global = &Engine{
 	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, false, 10},
-	HTTP{ListenAddr: ":8080", CORS: true},
+	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, true,
 }

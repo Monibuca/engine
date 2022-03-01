@@ -55,30 +55,28 @@ type Plugin struct {
 	*zap.Logger
 }
 
-func (opt *Plugin) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+func (opt *Plugin) logHandler(pattern string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		opt.Debug("visit", zap.String("path", pattern), zap.String("remote", r.RemoteAddr))
+		handler(rw, r)
+	}
+}
+func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
 	if opt == nil {
 		return
 	}
-	var cors bool
-	if v, ok := opt.RawConfig["cors"]; ok {
-		cors = v.(bool)
-	} else if EngineConfig.CORS {
-		cors = true
-	}
+	conf, ok := opt.Config.(config.HTTPConfig)
 	if !strings.HasPrefix(pattern, "/") {
 		pattern = "/" + pattern
 	}
+	opt.Info("http handle added:" + pattern)
+	if ok {
+		conf.HandleFunc(pattern, opt.logHandler(pattern, handler))
+	}
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
+		EngineConfig.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
-	opt.Info("http handle added:" + pattern)
-	EngineConfig.HandleFunc(pattern, func(rw http.ResponseWriter, r *http.Request) {
-		if cors {
-			util.CORS(rw, r)
-		}
-		opt.Debug("visit", zap.String("path", pattern), zap.String("remote", r.RemoteAddr))
-		handler(rw, r)
-	})
 }
 
 // 读取独立配置合并入总配置中
@@ -111,6 +109,10 @@ func (opt *Plugin) assign() {
 			}
 		}
 	}
+	if conf, ok := opt.Config.(config.HTTPConfig); ok {
+		httpConf := conf.GetHTTPConfig()
+		httpConf.InitMux()
+	}
 	opt.registerHandler()
 	opt.run()
 }
@@ -120,6 +122,12 @@ func (opt *Plugin) run() {
 	opt.RawConfig.Unmarshal(opt.Config)
 	opt.Debug("config", zap.Any("config", opt.Config))
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
+	if conf, ok := opt.Config.(config.HTTPConfig); ok {
+		httpconf := conf.GetHTTPConfig()
+		if httpconf.ListenAddr != "" && httpconf.ListenAddr != EngineConfig.ListenAddr {
+			go conf.Listen(opt)
+		}
+	}
 }
 
 // Update 热更新配置
@@ -133,16 +141,13 @@ func (opt *Plugin) registerHandler() {
 	v := reflect.ValueOf(opt.Config)
 	// 注册http响应
 	for i, j := 0, t.NumMethod(); i < j; i++ {
-		mt := t.Method(i)
-		mv := v.Method(i)
-		if mv.CanConvert(handlerFuncType) {
+		name := t.Method(i).Name
+		if handler, ok := v.Method(i).Interface().(func(http.ResponseWriter, *http.Request)); ok {
 			patten := "/"
-			if mt.Name != "ServeHTTP" {
-				patten = strings.ToLower(strings.ReplaceAll(mt.Name, "_", "/"))
-			} else if opt == Engine {
-				continue
+			if name != "ServeHTTP" {
+				patten = strings.ToLower(strings.ReplaceAll(name, "_", "/"))
 			}
-			opt.HandleFunc(patten, mv.Interface().(func(http.ResponseWriter, *http.Request)))
+			opt.handleFunc(patten, handler)
 		}
 	}
 }

@@ -169,6 +169,9 @@ func Struct2Config(s any) (config Config) {
 	}
 	for i, j := 0, t.NumField(); i < j; i++ {
 		ft := t.Field(i)
+		if !ft.IsExported() {
+			continue
+		}
 		name := strings.ToLower(ft.Name)
 		switch ft.Type.Kind() {
 		case reflect.Struct:
