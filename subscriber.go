@@ -94,29 +94,25 @@ func (s *Subscriber) OnEvent(event any) {
 }
 
 func (s *Subscriber) AddTrack(t Track) bool {
-	if v, ok := t.(*track.Video); ok {
-		if s.Config.SubVideo {
-			if s.VideoTrack != nil {
-				return false
-			}
-			s.VideoTrack = v
-			s.vr = v.ReadRing()
-			s.Info("track+1", zap.String("name", v.Name))
-			return true
+	switch v := t.(type) {
+	case *track.Video:
+		if s.VideoTrack != nil || !s.Config.SubVideo {
+			return false
 		}
-	} else if a, ok := t.(*track.Audio); ok {
-		if s.Config.SubAudio {
-			if s.AudioTrack != nil {
-				return false
-			}
-			s.AudioTrack = a
-			s.ar = a.ReadRing()
-			s.Info("track+1", zap.String("name", a.Name))
-			return true
+		s.VideoTrack = v
+		s.vr = v.ReadRing()
+	case *track.Audio:
+		if s.AudioTrack != nil || !s.Config.SubAudio {
+			return false
 		}
+		s.AudioTrack = v
+		s.ar = v.ReadRing()
+	case *track.Data:
+	default:
+		return false
 	}
-	return false
-	// TODO: data track
+	s.Info("track+1", zap.String("name", t.GetName()))
+	return true
 }
 
 func (s *Subscriber) IsPlaying() bool {

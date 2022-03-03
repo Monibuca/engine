@@ -2,6 +2,7 @@ package engine
 
 import (
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -323,12 +324,15 @@ func (s *Stream) run() {
 					}
 				case TrackRemoved:
 					name := v.GetName()
-					if _, ok := s.Tracks[name]; ok {
+					if t, ok := s.Tracks[name]; ok {
 						s.Info("track -1", zap.String("name", name))
 						delete(s.Tracks, name)
 						s.broadcast(v)
 						if len(s.Tracks) == 0 {
 							s.action(ACTION_PUBLISHLOST)
+						}
+						if dt, ok := t.(*track.Data); ok {
+							dt.Dispose()
 						}
 					}
 				case StreamAction:
@@ -339,6 +343,11 @@ func (s *Stream) run() {
 			} else {
 				for _, p := range waitP {
 					p.Reject(StreamIsClosedErr)
+				}
+				for _, t := range s.Tracks {
+					if dt, ok := t.(*track.Data); ok {
+						dt.Dispose()
+					}
 				}
 				return
 			}
@@ -364,13 +373,18 @@ func (r *Stream) NewVideoTrack() (vt *track.UnknowVideo) {
 	vt.Stream = r
 	return
 }
+
 func (r *Stream) NewAudioTrack() (at *track.UnknowAudio) {
 	at = &track.UnknowAudio{}
 	at.Stream = r
 	return
 }
 
-// func (r *Stream) WaitDataTrack(names ...string) DataTrack {
-// 	t := <-r.WaitTrack(names...)
-// 	return t.(DataTrack)
-// }
+func (r *Stream) NewDataTrack(locker sync.Locker) (dt *track.Data) {
+	dt = &track.Data{
+		Locker: locker,
+	}
+	dt.Init(10)
+	dt.Stream = r
+	return
+}
