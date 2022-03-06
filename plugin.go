@@ -57,7 +57,7 @@ type Plugin struct {
 
 func (opt *Plugin) logHandler(pattern string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		opt.Debug("visit", zap.String("path", pattern), zap.String("remote", r.RemoteAddr))
+		opt.Debug("visit", zap.String("path", r.URL.String()), zap.String("remote", r.RemoteAddr))
 		handler(rw, r)
 	}
 }
@@ -69,12 +69,13 @@ func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, 
 	if !strings.HasPrefix(pattern, "/") {
 		pattern = "/" + pattern
 	}
-	opt.Info("http handle added:" + pattern)
 	if ok {
+		opt.Info("http handle added:" + pattern)
 		conf.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
+		opt.Info("http handle added to engine:" + pattern)
 		EngineConfig.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
 }

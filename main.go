@@ -30,7 +30,7 @@ var (
 	EngineConfig = &GlobalConfig{
 		Engine: config.Global,
 	}
-	settingDir   string                                     //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
+	settingDir   = filepath.Join(ExecDir, ".m7s")           //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
 	Engine       = InstallPlugin(EngineConfig)              //复用安装插件逻辑，将全局配置信息注入，并启动server
 	MergeConfigs = []string{"Publish", "Subscribe", "HTTP"} //需要合并配置的属性项，插件若没有配置则使用全局配置
 	EventBus     = make(chan any, 10)
@@ -38,18 +38,17 @@ var (
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
 func Run(ctx context.Context, configFile string) (err error) {
+	StartTime = time.Now()
+	Engine.Context = ctx
 	if _, err := os.Stat(configFile); err != nil {
 		configFile = filepath.Join(ExecDir, configFile)
 	}
-	Engine.Context = ctx
 	if err := util.CreateShutdownScript(); err != nil {
 		log.Error("create shutdown script error:", err)
 	}
-	StartTime = time.Now()
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
-		log.Error("read config file error:", err)
+		log.Warn("read config file error:", err.Error())
 	}
-	settingDir = filepath.Join(filepath.Dir(configFile), ".m7s")
 	if err = os.MkdirAll(settingDir, 0755); err != nil {
 		log.Error("create dir .m7s error:", err)
 		return
@@ -62,8 +61,6 @@ func Run(ctx context.Context, configFile string) (err error) {
 			//将配置信息同步到结构体
 			Engine.RawConfig.Unmarshal(config.Global)
 		}
-	} else {
-		log.Warn("no config file found , use default config values")
 	}
 	Engine.Logger = log.With(zap.Bool("engine", true))
 	Engine.registerHandler()
