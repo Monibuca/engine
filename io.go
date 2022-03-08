@@ -125,6 +125,9 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
 	s, create := findOrCreateStream(u.Path, wt)
+	if s == nil {
+		return BadNameErr
+	}
 	io.Config = conf
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
