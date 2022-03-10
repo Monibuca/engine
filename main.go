@@ -76,15 +76,9 @@ func Run(ctx context.Context, configFile string) (err error) {
 	contentBuf := bytes.NewBuffer(nil)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
 	req.Header.Set("Content-Type", "application/json")
-
 	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"`, UUID, Engine.Version, runtime.GOOS, runtime.GOARCH)
 	var c http.Client
 	for {
-		contentBuf.Reset()
-		postJson := fmt.Sprintf(`%s,"streams":%d}`, content, len(Streams.Map))
-		contentBuf.WriteString(postJson)
-		req.Body = ioutil.NopCloser(contentBuf)
-		c.Do(req)
 		select {
 		case event := <-EventBus:
 			for _, plugin := range Plugins {
@@ -93,6 +87,11 @@ func Run(ctx context.Context, configFile string) (err error) {
 		case <-ctx.Done():
 			return
 		case <-reportTimer.C:
+			contentBuf.Reset()
+			postJson := fmt.Sprintf(`%s,"streams":%d}`, content, len(Streams.Map))
+			contentBuf.WriteString(postJson)
+			req.Body = ioutil.NopCloser(contentBuf)
+			c.Do(req)
 		}
 	}
 }

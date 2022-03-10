@@ -308,10 +308,10 @@ func (s *Stream) run() {
 							}
 							suber.OnEvent(t) // 把现有的Track发给订阅者
 						}
-						v.Resolve(util.Null)
 					} else {
 						waitP = append(waitP, v)
 					}
+					v.Resolve(util.Null)
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)
 					}
