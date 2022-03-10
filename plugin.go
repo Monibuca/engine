@@ -231,11 +231,11 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	}
 	return
 }
-
+var NoPushConfigErr = errors.New("no push config")
 func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
 	conf, ok := opt.Config.(config.PushConfig)
 	if !ok {
-		return NoPullConfigErr
+		return NoPushConfigErr
 	}
 	pushConfig := conf.GetPushConfig()
 

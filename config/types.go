@@ -62,6 +62,9 @@ type Push struct {
 	RePush   int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
 	PushList map[string]string // 自动推流列表
 }
+func (p *Push) GetPushConfig() *Push {
+	return p
+}
 
 func (p *Push) AddPush(streamPath string, url string) {
 	if p.PushList == nil {
