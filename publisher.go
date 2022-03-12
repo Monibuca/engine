@@ -9,6 +9,7 @@ type IPublisher interface {
 	IIO
 	GetConfig() *config.Publish
 	receive(string, IPublisher, *config.Publish) error
+	getIO() *IO[config.Publish, IPublisher]
 }
 
 type Publisher struct {
@@ -18,10 +19,10 @@ type Publisher struct {
 }
 
 func (p *Publisher) OnEvent(event any) {
-	switch v := event.(type) {
-	case *Stream:
-		p.AudioTrack = v.NewAudioTrack()
-		p.VideoTrack = v.NewVideoTrack()
+	switch event.(type) {
+	case IPublisher:
+		p.AudioTrack = p.Stream.NewAudioTrack()
+		p.VideoTrack = p.Stream.NewVideoTrack()
 	}
 	p.IO.OnEvent(event)
 }

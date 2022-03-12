@@ -59,14 +59,7 @@ func (i *IO[C, S]) SetParentCtx(parent context.Context) {
 }
 
 func (i *IO[C, S]) OnEvent(event any) {
-	switch v := event.(type) {
-	case *Stream:
-		i.Stream = v
-		i.StartTime = time.Now()
-		i.Logger = v.With(zap.String("type", i.Type))
-		if i.ID != "" {
-			i.Logger = i.Logger.With(zap.String("ID", i.ID))
-		}
+	switch event.(type) {
 	case SEclose, SEKick:
 		if i.Closer != nil {
 			i.Closer.Close()
@@ -76,11 +69,9 @@ func (i *IO[C, S]) OnEvent(event any) {
 		}
 	}
 }
-func (io *IO[C, S]) getID() string {
-	return io.ID
-}
-func (io *IO[C, S]) getType() string {
-	return io.Type
+
+func (io *IO[C, S]) getIO() *IO[C, S] {
+	return io
 }
 
 func (io *IO[C, S]) GetConfig() *C {
@@ -91,8 +82,6 @@ type IIO interface {
 	IsClosed() bool
 	OnEvent(any)
 	Stop()
-	getID() string
-	getType() string
 }
 
 //Stop 停止订阅或者发布，由订阅者或者发布者调用

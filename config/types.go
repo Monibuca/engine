@@ -1,6 +1,15 @@
 package config
 
-import "net/http"
+import (
+	"context"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
+	"m7s.live/engine/v4/log"
+)
 
 type PublishConfig interface {
 	GetPublishConfig() *Publish
@@ -62,6 +71,7 @@ type Push struct {
 	RePush   int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
 	PushList map[string]string // 自动推流列表
 }
+
 func (p *Push) GetPushConfig() *Push {
 	return p
 }
@@ -78,16 +88,65 @@ type Engine struct {
 	Subscribe
 	HTTP
 	RTPReorder bool
-	EnableAVCC bool //启用AVCC格式，rtmp协议使用
-	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
-	EnableFLV  bool //开启FLV格式，hdl协议使用
+	EnableAVCC bool   //启用AVCC格式，rtmp协议使用
+	EnableRTP  bool   //启用RTP格式，rtsp、gb18181等协议使用
+	EnableFLV  bool   //开启FLV格式，hdl协议使用
+	ConsoleURL string //远程控制台地址
+	Secret     string //远程控制台密钥
+}
+type myResponseWriter struct {
+	io.Writer
+}
+
+func (w *myResponseWriter) Write(b []byte) (int, error) {
+	return len(b), wsutil.WriteClientMessage(w, ws.OpBinary, b)
+}
+
+func (w *myResponseWriter) Header() http.Header {
+	return make(http.Header)
+}
+func (w *myResponseWriter) WriteHeader(statusCode int) {
 }
 func (cfg *Engine) OnEvent(event any) {
-
+	switch v := event.(type) {
+	case context.Context:
+		go func() {
+			for {
+				conn, _, _, err := ws.Dial(v, cfg.ConsoleURL)
+				wr := &myResponseWriter{conn}
+				if err != nil {
+					log.Error("connect to console server error:", err)
+					time.Sleep(time.Second * 5)
+					continue
+				}
+				err = wsutil.WriteClientMessage(conn, ws.OpText, []byte(cfg.Secret))
+				if err != nil {
+					time.Sleep(time.Second * 5)
+					continue
+				}
+				for {
+					msg, _, err := wsutil.ReadServerData(conn)
+					if err != nil {
+						log.Error("read console server error:", err)
+						break
+					} else {
+						req, err := http.NewRequest("GET", string(msg), nil)
+						if err != nil {
+							log.Error("receive console request :", msg, err)
+							break
+						}
+						h, _ := cfg.mux.Handler(req)
+						h.ServeHTTP(wr, req)
+					}
+				}
+			}
+		}()
+	}
 }
+
 var Global = &Engine{
 	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	false, true, true, true,
+	false, true, true, true, "wss://console.monibuca.com", "",
 }

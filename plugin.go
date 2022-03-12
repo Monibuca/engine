@@ -170,6 +170,7 @@ func (opt *Plugin) Save() error {
 }
 
 func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
+	opt.Info("publish", zap.String("path", streamPath))
 	conf, ok := opt.Config.(config.PublishConfig)
 	if !ok {
 		conf = EngineConfig
@@ -178,6 +179,7 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
 }
 
 func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
+	opt.Info("subscribe", zap.String("path", streamPath))
 	conf, ok := opt.Config.(config.SubscribeConfig)
 	if !ok {
 		conf = EngineConfig
@@ -185,9 +187,17 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
 }
 
+func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber) (err error) {
+	if err = opt.Subscribe(streamPath, sub); err == nil {
+		sub.PlayBlock(sub)
+	}
+	return
+}
+
 var NoPullConfigErr = errors.New("no pull config")
 
 func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
+	opt.Info("pull", zap.String("path", streamPath), zap.String("url", url))
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
 		return NoPullConfigErr
@@ -231,8 +241,11 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	}
 	return
 }
+
 var NoPushConfigErr = errors.New("no push config")
+
 func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
+	opt.Info("push", zap.String("path", streamPath), zap.String("url", url))
 	conf, ok := opt.Config.(config.PushConfig)
 	if !ok {
 		return NoPushConfigErr

@@ -247,7 +247,7 @@ func (s *Stream) run() {
 				for i, sub := range s.Subscribers {
 					if sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:(i-deletes)], s.Subscribers[i-deletes+1:]...)
-						s.Info("suber -1", zap.String("id", sub.getID()), zap.String("type", sub.getType()), zap.Int("remains", len(s.Subscribers)))
+						s.Info("suber -1", zap.String("id", sub.getIO().ID), zap.String("type", sub.getIO().Type), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
@@ -271,7 +271,14 @@ func (s *Stream) run() {
 				case *util.Promise[IPublisher, struct{}]:
 					s.Publisher = v.Value
 					if s.action(ACTION_PUBLISH) {
-						s.Publisher.OnEvent(s) // 通知Publisher已成功进入Stream
+						io := v.Value.getIO()
+						io.Stream = s
+						io.StartTime = time.Now()
+						io.Logger = s.With(zap.String("type", io.Type))
+						if io.ID != "" {
+							io.Logger = io.Logger.With(zap.String("ID", io.ID))
+						}
+						v.Value.OnEvent(v.Value) // 发出成功发布事件
 						v.Resolve(util.Null)
 						for _, p := range waitP {
 							p.Resolve(util.Null)
@@ -286,13 +293,19 @@ func (s *Stream) run() {
 						v.Reject(StreamIsClosedErr)
 					}
 					suber := v.Value
+					io := suber.getIO()
 					s.Subscribers = append(s.Subscribers, suber)
-					sbConfig := suber.GetConfig()
+					sbConfig := io.Config
 					if wt := sbConfig.WaitTimeout.Duration(); wt > s.WaitTimeout {
 						s.WaitTimeout = wt
 					}
-					suber.OnEvent(s) // 通知Subscriber已成功进入Stream
-					s.Info("suber +1", zap.String("id", suber.getID()), zap.String("type", suber.getType()), zap.Int("remains", len(s.Subscribers)))
+					io.Stream = s
+					io.StartTime = time.Now()
+					io.Logger = s.With(zap.String("type", io.Type))
+					if io.ID != "" {
+						io.Logger = io.Logger.With(zap.String("ID", io.ID))
+					}
+					s.Info("suber +1", zap.String("id", io.ID), zap.String("type", io.Type), zap.Int("remains", len(s.Subscribers)))
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						for _, t := range s.Tracks {
@@ -311,6 +324,7 @@ func (s *Stream) run() {
 					} else {
 						waitP = append(waitP, v)
 					}
+					suber.OnEvent(suber) // 订阅成功事件
 					v.Resolve(util.Null)
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)

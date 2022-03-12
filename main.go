@@ -77,6 +77,9 @@ func Run(ctx context.Context, configFile string) (err error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
 	req.Header.Set("Content-Type", "application/json")
 	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"`, UUID, Engine.Version, runtime.GOOS, runtime.GOARCH)
+	if EngineConfig.Secret != "" {
+		EngineConfig.OnEvent(ctx)
+	}
 	var c http.Client
 	for {
 		select {
