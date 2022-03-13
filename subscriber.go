@@ -228,7 +228,7 @@ func (s *Subscriber) PlayBlock(spesic ISubscriber) {
 					if s.VideoTrack.IDRing.Value.Sequence != firstIFrame.Sequence {
 						firstIFrame = nil
 						s.vr = s.VideoTrack.ReadRing()
-						s.Debug("skip to latest key frame")
+						s.Debug("skip to latest key frame", zap.Uint32("seq", s.VideoTrack.IDRing.Value.Sequence))
 						continue
 					} else {
 						vp = (*VideoFrame)(s.vr.Read(ctx))

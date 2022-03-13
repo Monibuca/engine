@@ -97,6 +97,7 @@ func SizeOfBuffers[T ~[]byte](buf []T) (size int) {
 
 // SplitBuffers 按照一定大小分割 Buffers
 func SplitBuffers[T ~[]byte](buf []T, size int) (result [][]T) {
+	buf = append([]T(nil), buf...)
 	for total := SizeOfBuffers(buf); total > 0; {
 		if total <= size {
 			return append(result, buf)
