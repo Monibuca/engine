@@ -29,7 +29,7 @@ func (config *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request)
 }
 
 func (config *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request) {
-	if streamPath := r.URL.Query().Get("stream"); streamPath != "" {
+	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
 			s.Close()
 			w.Write([]byte("success"))
