@@ -256,7 +256,7 @@ func (s *Stream) run() {
 						}
 					}
 				}
-				if len(s.Tracks) == 0 {
+				if len(s.Tracks) == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)
 				} else {
 					s.timeout.Reset(time.Second * 5)
@@ -269,7 +269,11 @@ func (s *Stream) run() {
 			if ok {
 				switch v := action.(type) {
 				case *util.Promise[IPublisher, struct{}]:
+					oldPublisher := s.Publisher
 					s.Publisher = v.Value
+					if oldPublisher == nil {
+						oldPublisher = v.Value
+					}
 					if s.action(ACTION_PUBLISH) {
 						io := v.Value.getIO()
 						io.Stream = s
@@ -278,7 +282,7 @@ func (s *Stream) run() {
 						if io.ID != "" {
 							io.Logger = io.Logger.With(zap.String("ID", io.ID))
 						}
-						v.Value.OnEvent(v.Value) // 发出成功发布事件
+						v.Value.OnEvent(oldPublisher) // 发出成功发布事件
 						v.Resolve(util.Null)
 						for _, p := range waitP {
 							p.Resolve(util.Null)
