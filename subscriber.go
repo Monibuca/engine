@@ -18,6 +18,10 @@ type HaveAVCC interface {
 	GetAVCC() net.Buffers
 }
 
+type HaveRTP interface {
+	GetRTP() []*RTPFrame
+}
+
 type AudioFrame AVFrame[AudioSlice]
 type VideoFrame AVFrame[NALUSlice]
 type AudioDeConf DecoderConfiguration[AudioSlice]

@@ -3,6 +3,7 @@ package log
 import (
 	// . "github.com/logrusorgru/aurora"
 	"io"
+	"os"
 
 	// "github.com/mattn/go-colorable"
 	"gopkg.in/yaml.v3"
@@ -12,14 +13,45 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var logger *zap.SugaredLogger
+var sugaredLogger *zap.SugaredLogger
+var logger *zap.Logger
 
 // var levelColors = []func(any) Value{Red, Red, Red, Yellow, Blue, Green, White}
 
 // type LogWriter func(*log.Entry) string
 
 // var colorableStdout = colorable.NewColorableStdout()
+type MultipleWriter []io.Writer
 
+func (m *MultipleWriter) Write(p []byte) (n int, err error) {
+	for _, w := range *m {
+		n, err = w.Write(p)
+		if err != nil {
+			m.Delete(w)
+		}
+	}
+	return len(p), nil
+}
+func (m *MultipleWriter) Delete(writer io.Writer) {
+	for i, w := range *m {
+		if w == writer {
+			*m = append((*m)[:i], (*m)[i+1:]...)
+			return
+		}
+	}
+}
+func (m *MultipleWriter) Add(writer io.Writer) {
+	*m = append(*m, writer)
+}
+
+var multipleWriter = &MultipleWriter{os.Stdout}
+
+func AddWriter(writer io.Writer) {
+	multipleWriter.Add(writer)
+}
+func DeleteWriter(writer io.Writer) {
+	multipleWriter.Delete(writer)
+}
 func init() {
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
@@ -27,8 +59,11 @@ func init() {
 	}
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
-	l, _ := config.Build(zap.WithCaller(false))
-	logger = l.Sugar()
+
+	logger = zap.New(
+		zapcore.NewCore(zapcore.NewConsoleEncoder(config.EncoderConfig), zapcore.AddSync(multipleWriter), config.Level),
+	)
+	sugaredLogger = logger.Sugar()
 	// std.SetOutput(colorableStdout)
 	// std.SetFormatter(LogWriter(defaultFormatter))
 }
@@ -42,52 +77,52 @@ type Zap interface {
 }
 
 func With(fields ...zap.Field) *zap.Logger {
-	return logger.Desugar().With(fields...)
+	return logger.With(fields...)
 }
 
 func Debug(args ...any) {
-	logger.Debug(args...)
+	sugaredLogger.Debug(args...)
 }
 
 func Info(args ...any) {
-	logger.Info(args...)
+	sugaredLogger.Info(args...)
 }
 
 func Warn(args ...any) {
-	logger.Warn(args...)
+	sugaredLogger.Warn(args...)
 }
 
 func Error(args ...any) {
-	logger.Error(args...)
+	sugaredLogger.Error(args...)
 }
 
 func Debugf(format string, args ...interface{}) {
-	logger.Debugf(format, args...)
+	sugaredLogger.Debugf(format, args...)
 }
 
 // Infof logs a message at level Info on the standard logger.
 func Infof(format string, args ...interface{}) {
-	logger.Infof(format, args...)
+	sugaredLogger.Infof(format, args...)
 }
 
 // Warnf logs a message at level Warn on the standard logger.
 func Warnf(format string, args ...interface{}) {
-	logger.Warnf(format, args...)
+	sugaredLogger.Warnf(format, args...)
 }
 
 // Errorf logs a message at level Error on the standard logger.
 func Errorf(format string, args ...interface{}) {
-	logger.Errorf(format, args...)
+	sugaredLogger.Errorf(format, args...)
 }
 
 // Panicf logs a message at level Panic on the standard logger.
 func Panicf(format string, args ...interface{}) {
-	logger.Panicf(format, args...)
+	sugaredLogger.Panicf(format, args...)
 }
 
 // Fatalf logs a message at level Fatal on the standard logger then the process will exit with status set to 1.
 func Fatalf(format string, args ...interface{}) {
-	logger.Fatalf(format, args...)
+	sugaredLogger.Fatalf(format, args...)
 }
 
 // func defaultFormatter(entry *log.Entry) string {

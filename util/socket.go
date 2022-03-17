@@ -1,21 +1,13 @@
 package util
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"net"
 	"net/http"
 	"time"
-
-	"m7s.live/engine/v4/log"
 )
-
-type TCPListener interface {
-	context.Context
-	Process(*net.TCPConn)
-}
 
 func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("json") != "" {
@@ -56,17 +48,17 @@ func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWr
 func ListenUDP(address string, networkBuffer int) (*net.UDPConn, error) {
 	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
-		log.Fatalf("udp server ResolveUDPAddr :%s error, %v", address, err)
+		return nil, err
 	}
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
-		log.Fatalf("udp server ListenUDP :%s error, %v", address, err)
+		return nil, err
 	}
 	if err = conn.SetReadBuffer(networkBuffer); err != nil {
-		log.Errorf("udp server video conn set read buffer error, %v", err)
+		return nil, err
 	}
 	if err = conn.SetWriteBuffer(networkBuffer); err != nil {
-		log.Errorf("udp server video conn set write buffer error, %v", err)
+		return nil, err
 	}
 	return conn, err
 }
