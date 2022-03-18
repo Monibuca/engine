@@ -1,6 +1,10 @@
 package common
 
-import "time"
+import (
+	"time"
+
+	"github.com/pion/rtp/v2"
+)
 
 type Track interface {
 	GetName() string
@@ -12,6 +16,8 @@ type AVTrack interface {
 	Attach()
 	Detach()
 	WriteAVCC(ts uint32, frame AVCCFrame) //写入AVCC格式的数据
+	WriteRTP([]byte)
+	WriteRTPPack(*rtp.Packet)
 	Flush()
 }
 type VideoTrack interface {

@@ -64,7 +64,6 @@ type ISubscriber interface {
 	getIO() *IO[config.Subscribe, ISubscriber]
 	GetConfig() *config.Subscribe
 	IsPlaying() bool
-	Play(ISubscriber) func() error
 	PlayBlock(ISubscriber)
 	Stop()
 }

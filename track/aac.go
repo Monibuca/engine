@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pion/rtp/v2"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -17,27 +18,40 @@ func NewAAC(stream IStream) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Init(32)
 	aac.Poll = time.Millisecond * 20
+	aac.AVCCHead = []byte{0xAF, 1}
+	aac.SampleSize = 16
 	aac.DecoderConfiguration.PayloadType = 97
 	if config.Global.RTPReorder {
 		aac.orderQueue = make([]*RTPFrame, 20)
 	}
 	return
 }
-
 type AAC struct {
 	Audio
 }
 
+// WriteRTPPack 写入已反序列化的RTP包
+func (aac *AAC) WriteRTPPack(p *rtp.Packet) {
+	for frame := aac.UnmarshalRTPPacket(p); frame != nil; frame = aac.nextRTPFrame() {
+		aac.writeRTPFrame(frame)
+	}
+}
+
+// WriteRTP 写入未反序列化的RTP包
 func (aac *AAC) WriteRTP(raw []byte) {
 	for frame := aac.UnmarshalRTP(raw); frame != nil; frame = aac.nextRTPFrame() {
-		for _, payload := range codec.ParseRTPAAC(frame.Payload) {
-			aac.WriteSlice(payload)
-		}
-		aac.Value.AppendRTP(frame)
-		if frame.Marker {
-			aac.generateTimestamp()
-			aac.Flush()
-		}
+		aac.writeRTPFrame(frame)
+	}
+}
+
+func (aac *AAC) writeRTPFrame(frame *RTPFrame) {
+	for _, payload := range codec.ParseRTPAAC(frame.Payload) {
+		aac.WriteSlice(payload)
+	}
+	aac.Value.AppendRTP(frame)
+	if frame.Marker {
+		aac.generateTimestamp()
+		aac.Flush()
 	}
 }
 

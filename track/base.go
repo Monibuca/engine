@@ -112,10 +112,8 @@ func (av *Media[T]) generateTimestamp() {
 	av.Value.DTS = ts
 }
 
-func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
-	if frame = new(RTPFrame); frame.Unmarshal(raw) == nil {
-		return
-	}
+// 对RTP包乱序重排
+func (av *Media[T]) recorderRTP(frame *RTPFrame) *RTPFrame {
 	if config.Global.RTPReorder {
 		if frame.SequenceNumber < av.lastSeq && av.lastSeq-frame.SequenceNumber < 0x8000 {
 			// 出现旧的包直接丢弃
@@ -123,12 +121,12 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 		} else if av.lastSeq == 0 {
 			// 初始化
 			av.lastSeq = frame.SequenceNumber
-			return
+			return frame
 		} else if av.lastSeq+1 == frame.SequenceNumber {
 			// 正常顺序
 			av.lastSeq = frame.SequenceNumber
 			copy(av.orderQueue, av.orderQueue[1:])
-			return
+			return frame
 		} else if frame.SequenceNumber > av.lastSeq {
 			delta := int(frame.SequenceNumber - av.lastSeq)
 			queueLen := len(av.orderQueue)
@@ -162,11 +160,24 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 			av.lastSeq = frame.SequenceNumber
 			if av.lastSeq != av.lastSeq2+1 { //序号不连续
 				// av.Stream.Warn("RTP SequenceNumber error", av.lastSeq2, av.lastSeq)
-				return
+				return frame
 			}
 		}
+		return frame
+	}
+}
+func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
+	frame = &RTPFrame{
+		Packet: *p,
+	}
+	frame.Raw, _ = p.Marshal()
+	return av.recorderRTP(frame)
+}
+func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
+	if frame = new(RTPFrame); frame.Unmarshal(raw) == nil {
 		return
 	}
+	return av.recorderRTP(frame)
 }
 
 func (av *Media[T]) WriteSlice(slice T) {

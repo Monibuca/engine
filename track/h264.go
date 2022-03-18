@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pion/rtp/v2"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -77,35 +78,46 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 		vt.Flush()
 	}
 }
-
-func (vt *H264) WriteRTP(raw []byte) {
-	for frame := vt.UnmarshalRTP(raw); frame != nil; frame = vt.nextRTPFrame() {
-		if naluType := frame.H264Type(); naluType < 24 {
-			vt.WriteSlice(NALUSlice{frame.Payload})
-		} else {
-			switch naluType {
-			case codec.NALU_STAPA, codec.NALU_STAPB:
-				for buffer := util.Buffer(frame.Payload[naluType.Offset():]); buffer.CanRead(); {
-					vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
-				}
-			case codec.NALU_FUA, codec.NALU_FUB:
-				if util.Bit1(frame.Payload[1], 0) {
-					vt.Value.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
-				}
-				lastIndex := len(vt.Value.Raw) - 1
-				vt.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
-				if util.Bit1(frame.Payload[1], 1) {
-					vt.Value.Raw = vt.Value.Raw[:lastIndex]
-					vt.WriteSlice(vt.Value.Raw[lastIndex])
-				}
+func (vt *H264) writeRTPFrame(frame *RTPFrame) {
+	if naluType := frame.H264Type(); naluType < 24 {
+		vt.WriteSlice(NALUSlice{frame.Payload})
+	} else {
+		switch naluType {
+		case codec.NALU_STAPA, codec.NALU_STAPB:
+			for buffer := util.Buffer(frame.Payload[naluType.Offset():]); buffer.CanRead(); {
+				vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
+			}
+		case codec.NALU_FUA, codec.NALU_FUB:
+			if util.Bit1(frame.Payload[1], 0) {
+				vt.Value.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
+			}
+			lastIndex := len(vt.Value.Raw) - 1
+			vt.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
+			if util.Bit1(frame.Payload[1], 1) {
+				vt.Value.Raw = vt.Value.Raw[:lastIndex]
+				vt.WriteSlice(vt.Value.Raw[lastIndex])
 			}
 		}
-		vt.Value.AppendRTP(frame)
-		if frame.Marker {
-			vt.Value.PTS = frame.Timestamp
-			vt.Value.DTS = vt.dtsEst.Feed(frame.Timestamp)
-			vt.Flush()
-		}
+	}
+	vt.Value.AppendRTP(frame)
+	if frame.Marker {
+		vt.Value.PTS = frame.Timestamp
+		vt.Value.DTS = vt.dtsEst.Feed(frame.Timestamp)
+		vt.Flush()
+	}
+}
+
+// WriteRTPPack 写入已反序列化的RTP包
+func (vt *H264) WriteRTPPack(p *rtp.Packet) {
+	for frame := vt.UnmarshalRTPPacket(p); frame != nil; frame = vt.nextRTPFrame() {
+		vt.writeRTPFrame(frame)
+	}
+}
+
+// WriteRTP 写入未反序列化的RTP包
+func (vt *H264) WriteRTP(raw []byte) {
+	for frame := vt.UnmarshalRTP(raw); frame != nil; frame = vt.nextRTPFrame() {
+		vt.writeRTPFrame(frame)
 	}
 }
 

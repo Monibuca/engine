@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/pion/rtp/v2"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -74,43 +75,56 @@ func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 		vt.Flush()
 	}
 }
+
+// WriteRTPPack 写入已反序列化的RTP包
+func (vt *H265) WriteRTPPack(p *rtp.Packet) {
+	for frame := vt.UnmarshalRTPPacket(p); frame != nil; frame = vt.nextRTPFrame() {
+		vt.writeRTPFrame(frame)
+	}
+}
+
+// WriteRTP 写入未反序列化的RTP包
 func (vt *H265) WriteRTP(raw []byte) {
 	for frame := vt.UnmarshalRTP(raw); frame != nil; frame = vt.nextRTPFrame() {
-		// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
-		var usingDonlField bool
-		var buffer = util.Buffer(frame.Payload)
-		switch frame.H265Type() {
-		case codec.NAL_UNIT_RTP_AP:
+		vt.writeRTPFrame(frame)
+	}
+}
+
+func (vt *H265) writeRTPFrame(frame *RTPFrame) {
+	// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
+	var usingDonlField bool
+	var buffer = util.Buffer(frame.Payload)
+	switch frame.H265Type() {
+	case codec.NAL_UNIT_RTP_AP:
+		buffer.ReadUint16()
+		if usingDonlField {
 			buffer.ReadUint16()
+		}
+		for buffer.CanRead() {
+			vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
 			if usingDonlField {
-				buffer.ReadUint16()
-			}
-			for buffer.CanRead() {
-				vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
-				if usingDonlField {
-					buffer.ReadByte()
-				}
-			}
-		case codec.NAL_UNIT_RTP_FU:
-			first3 := buffer.ReadN(3)
-			fuHeader := first3[2]
-			if usingDonlField {
-				buffer.ReadUint16()
-			}
-			if naluType := fuHeader & 0b00111111; util.Bit1(fuHeader, 0) {
-				vt.Value.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
-			}
-			lastIndex := len(vt.Value.Raw) - 1
-			vt.Value.Raw[lastIndex].Append(buffer)
-			if util.Bit1(fuHeader, 1) {
-				vt.Value.Raw = vt.Value.Raw[:lastIndex]
-				vt.WriteSlice(vt.Value.Raw[lastIndex])
+				buffer.ReadByte()
 			}
 		}
-		if frame.Marker {
-			vt.generateTimestamp()
-			vt.Flush()
+	case codec.NAL_UNIT_RTP_FU:
+		first3 := buffer.ReadN(3)
+		fuHeader := first3[2]
+		if usingDonlField {
+			buffer.ReadUint16()
 		}
+		if naluType := fuHeader & 0b00111111; util.Bit1(fuHeader, 0) {
+			vt.Value.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
+		}
+		lastIndex := len(vt.Value.Raw) - 1
+		vt.Value.Raw[lastIndex].Append(buffer)
+		if util.Bit1(fuHeader, 1) {
+			vt.Value.Raw = vt.Value.Raw[:lastIndex]
+			vt.WriteSlice(vt.Value.Raw[lastIndex])
+		}
+	}
+	if frame.Marker {
+		vt.generateTimestamp()
+		vt.Flush()
 	}
 }
 func (vt *H265) Flush() {

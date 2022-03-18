@@ -16,7 +16,7 @@ type Audio struct {
 	Media[AudioSlice]
 	CodecID  codec.AudioCodecID
 	Channels byte
-	avccHead []byte
+	AVCCHead []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
 }
 
 func (a *Audio) IsAAC() bool {
@@ -60,7 +60,7 @@ func (a *Audio) WriteADTS(adts []byte) {
 func (a *Audio) Flush() {
 	// AVCC 格式补完
 	if a.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
-		a.Value.AppendAVCC(a.avccHead)
+		a.Value.AppendAVCC(a.AVCCHead)
 		for _, raw := range a.Value.Raw {
 			a.Value.AppendAVCC(raw)
 		}
@@ -106,7 +106,7 @@ func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			a := NewAAC(ua.Stream)
 			ua.AudioTrack = a
 			a.SampleSize = 16
-			a.avccHead = []byte{frame[0], 1}
+			a.AVCCHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
@@ -122,7 +122,7 @@ func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 				a.SampleSize = 8
 			}
 			a.Channels = frame[0]&0x01 + 1
-			a.avccHead = frame[:1]
+			a.AVCCHead = frame[:1]
 			ua.AudioTrack.WriteAVCC(ts, frame)
 		default:
 			ua.Stream.Error("audio codec not support yet", zap.Uint8("codecId", uint8(codecID)))
