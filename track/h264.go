@@ -25,6 +25,7 @@ func NewH264(stream IStream) (vt *H264) {
 	vt.Init(256)
 	vt.Poll = time.Millisecond * 20
 	vt.DecoderConfiguration.PayloadType = 96
+	vt.DecoderConfiguration.Raw = make(NALUSlice, 2)
 	if config.Global.RTPReorder {
 		vt.orderQueue = make([]*RTPFrame, 20)
 	}
@@ -38,19 +39,21 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 func (vt *H264) WriteSlice(slice NALUSlice) {
 	switch slice.H264Type() {
 	case codec.NALU_SPS:
-		vt.DecoderConfiguration.Raw.Reset().Append(slice[0])
-	case codec.NALU_PPS:
-		vt.DecoderConfiguration.Raw.Append(slice[0])
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])
+		vt.DecoderConfiguration.Raw[0] = slice[0]
+	case codec.NALU_PPS:
+		vt.DecoderConfiguration.Raw[1] = slice[0]
 		lenSPS := len(vt.DecoderConfiguration.Raw[0])
 		lenPPS := len(vt.DecoderConfiguration.Raw[1])
 		if lenSPS > 3 {
-			vt.DecoderConfiguration.AVCC = net.Buffers{codec.RTMP_AVC_HEAD[:6], vt.DecoderConfiguration.Raw[0][1:4]}
+			vt.DecoderConfiguration.AVCC = net.Buffers{codec.RTMP_AVC_HEAD[:6], vt.DecoderConfiguration.Raw[0][1:4], codec.RTMP_AVC_HEAD[9:10]}
 		} else {
 			vt.DecoderConfiguration.AVCC = net.Buffers{codec.RTMP_AVC_HEAD}
 		}
 		tmp := []byte{0xE1, 0, 0, 0x01, 0, 0}
-		vt.DecoderConfiguration.AVCC = append(vt.DecoderConfiguration.AVCC, tmp[:1], util.PutBE(tmp[1:3], lenSPS), vt.DecoderConfiguration.Raw[0], tmp[3:4], util.PutBE(tmp[3:6], lenPPS), vt.DecoderConfiguration.Raw[1])
+		util.PutBE(tmp[1:3], lenSPS)
+		util.PutBE(tmp[4:6], lenPPS)
+		vt.DecoderConfiguration.AVCC = append(vt.DecoderConfiguration.AVCC, tmp[:3], vt.DecoderConfiguration.Raw[0], tmp[3:], vt.DecoderConfiguration.Raw[1])
 		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(vt.DecoderConfiguration.AVCC, 0)
 
 	case codec.NALU_IDR_Picture:
@@ -91,11 +94,13 @@ func (vt *H264) writeRTPFrame(frame *RTPFrame) {
 			if util.Bit1(frame.Payload[1], 0) {
 				vt.Value.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
 			}
+			// 最后一个是半包缓存，用于拼接
 			lastIndex := len(vt.Value.Raw) - 1
 			vt.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
 			if util.Bit1(frame.Payload[1], 1) {
-				vt.Value.Raw = vt.Value.Raw[:lastIndex]
-				vt.WriteSlice(vt.Value.Raw[lastIndex])
+				complete := vt.Value.Raw[lastIndex]     //拼接完成
+				vt.Value.Raw = vt.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
+				vt.WriteSlice(complete)
 			}
 		}
 	}

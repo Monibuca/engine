@@ -59,14 +59,14 @@ func (a *Audio) WriteADTS(adts []byte) {
 
 func (a *Audio) Flush() {
 	// AVCC 格式补完
-	if a.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+	if len(a.Value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
 		a.Value.AppendAVCC(a.AVCCHead)
 		for _, raw := range a.Value.Raw {
 			a.Value.AppendAVCC(raw)
 		}
 	}
 	// FLV tag 补完
-	if a.Value.FLV == nil && config.Global.EnableFLV {
+	if len(a.Value.FLV) == 0 && config.Global.EnableFLV {
 		a.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, a.Value.AbsTime)
 	}
 	if a.Value.RTP == nil && config.Global.EnableRTP {

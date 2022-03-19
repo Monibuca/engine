@@ -2,7 +2,6 @@ package track
 
 import (
 	"bytes"
-	"net"
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
@@ -103,28 +102,37 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (vt *Video) Flush() {
 	// 没有实际媒体数据
-	if vt.Value.Raw == nil {
+	if len(vt.Value.Raw) == 0 {
 		vt.Value.Reset()
 		return
 	}
 	// AVCC格式补完
-	if vt.Value.AVCC == nil && (config.Global.EnableAVCC || config.Global.EnableFLV) {
-		b := []byte{byte(vt.CodecID), 1, 0, 0, 0}
+	if len(vt.Value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+		var b util.Buffer
+		if cap(vt.Value.AVCC) > 0 {
+			if avcc := vt.Value.AVCC[:1]; len(avcc[0]) == 5 {
+				b = util.Buffer(avcc[0])
+			}
+		}
+		if b == nil {
+			b = util.Buffer([]byte{0, 1, 0, 0, 0})
+		}
 		if vt.Value.IFrame {
-			b[0] |= 0x10
+			b[0] = 0x10 | byte(vt.CodecID)
 		} else {
-			b[0] |= 0x20
+			b[0] = 0x20 | byte(vt.CodecID)
 		}
 		// 写入CTS
 		util.PutBE(b[2:5], (vt.Value.PTS-vt.Value.DTS)/90)
-		vt.Value.AppendAVCC(b)
-		for _, nalu := range vt.Value.Raw {
-			vt.Value.AppendAVCC(util.PutBE(make([]byte, 4), util.SizeOfBuffers(net.Buffers(nalu))))
+		lengths := b.Malloc(len(vt.Value.Raw) * 4) //每个slice的长度内存复用
+		vt.Value.AppendAVCC(b.SubBuf(0, 5))
+		for i, nalu := range vt.Value.Raw {
+			vt.Value.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
 			vt.Value.AppendAVCC(nalu...)
 		}
 	}
 	// FLV tag 补完
-	if vt.Value.FLV == nil && config.Global.EnableFLV {
+	if len(vt.Value.FLV) == 0 && config.Global.EnableFLV {
 		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.Value.AbsTime)
 	}
 	// 下一帧为I帧，即将覆盖

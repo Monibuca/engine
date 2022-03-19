@@ -7,6 +7,7 @@ import (
 	"github.com/pion/rtp/v2"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
 type NALUSlice net.Buffers
@@ -133,8 +134,23 @@ func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }
 func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
-	av.FLV = codec.VideoAVCC2FLV(av.AVCC, ts)
-	av.FLV[0][0] = t
+	var bytes []byte
+	if cap(av.FLV) > 0 {
+		if flv := av.FLV[:1]; cap(flv[0]) == 15 {
+			bytes = flv[0][:0]
+		}
+	}
+	if bytes == nil {
+		bytes = make([]byte, 0, 15)
+	}
+	b := util.Buffer(bytes)
+	b.WriteByte(t)
+	dataSize := util.SizeOfBuffers(av.AVCC)
+	b.WriteUint24(uint32(dataSize))
+	b.WriteUint24(ts)
+	b.WriteByte(byte(ts >> 24))
+	b.WriteUint24(0)
+	av.FLV = append(append(append(av.FLV, b), av.AVCC...), util.PutBE(b.Malloc(4), dataSize+11))
 }
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)
@@ -144,8 +160,12 @@ func (av *AVFrame[T]) AppendRTP(rtp ...*RTPFrame) {
 }
 
 func (av *AVFrame[T]) Reset() {
-	av.FLV = nil
-	av.AVCC = nil
+	if av.FLV != nil {
+		av.FLV = av.FLV[:0]
+	}
+	if av.AVCC != nil {
+		av.AVCC = av.AVCC[:0]
+	}
 	av.RTP = nil
 	av.Raw = nil
 }

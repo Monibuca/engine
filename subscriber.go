@@ -123,11 +123,11 @@ func (s *Subscriber) IsPlaying() bool {
 	return s.TrackPlayer.Context != nil && s.TrackPlayer.Err() == nil
 }
 
-func (s *Subscriber) Stop() {
-	if s.IsPlaying() {
-		s.TrackPlayer.CancelFunc()
-	}
-}
+// func (s *Subscriber) Stop() {
+// 	if s.IsPlaying() {
+// 		s.TrackPlayer.CancelFunc()
+// 	}
+// }
 
 // 非阻塞式读取，通过反复调用返回的函数可以尝试读取数据，读取到数据后会调用OnEvent，这种模式自由的在不同的goroutine中调用
 func (s *Subscriber) Play(spesic ISubscriber) func() error {

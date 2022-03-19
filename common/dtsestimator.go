@@ -6,6 +6,7 @@ type DTSEstimator struct {
 	prevPTS     uint32
 	prevPrevPTS uint32
 	dts         func(uint32) uint32
+	delta       uint32
 }
 
 func (d *DTSEstimator) _dts(pts uint32) uint32 {
@@ -27,13 +28,17 @@ func (d *DTSEstimator) _dts(pts uint32) uint32 {
 	// increase by a small quantity
 	return d.prevDTS + 1
 }
+func (d *DTSEstimator) _dts2(pts uint32) uint32 {
+	return d.prevDTS + d.delta
+}
 
 // NewDTSEstimator allocates a DTSEstimator.
 func NewDTSEstimator() *DTSEstimator {
 	result := &DTSEstimator{}
 	result.dts = func(pts uint32) uint32 {
-		if pts > 0 {
-			result.dts = result._dts
+		if result.prevPTS > 0 {
+			result.delta = pts - result.prevPTS
+			result.dts = result._dts2
 		}
 		return pts
 	}
@@ -47,6 +52,16 @@ func (d *DTSEstimator) Feed(pts uint32) uint32 {
 	d.prevPrevPTS = d.prevPTS
 	d.prevPTS = pts
 	d.prevDTS = dts
-
+	if d.prevPTS > d.prevPrevPTS {
+		delta := d.prevPTS - d.prevPrevPTS
+		if delta < d.delta {
+			d.delta = delta
+		}
+	} else {
+		delta := d.prevPrevPTS - d.prevPTS
+		if delta < d.delta {
+			d.delta = delta
+		}
+	}
 	return dts
 }

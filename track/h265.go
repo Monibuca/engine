@@ -24,6 +24,7 @@ func NewH265(stream IStream) (vt *H265) {
 	vt.Init(256)
 	vt.Poll = time.Millisecond * 20
 	vt.DecoderConfiguration.PayloadType = 96
+	vt.DecoderConfiguration.Raw = make(NALUSlice, 3)
 	if config.Global.RTPReorder {
 		vt.orderQueue = make([]*RTPFrame, 20)
 	}
@@ -36,12 +37,12 @@ func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 func (vt *H265) WriteSlice(slice NALUSlice) {
 	switch slice.H265Type() {
 	case codec.NAL_UNIT_VPS:
-		vt.DecoderConfiguration.Raw.Reset().Append(slice[0])
+		vt.DecoderConfiguration.Raw[0] = slice[0]
 	case codec.NAL_UNIT_SPS:
-		vt.DecoderConfiguration.Raw.Append(slice[0])
+		vt.DecoderConfiguration.Raw[1] = slice[0]
 		vt.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
 	case codec.NAL_UNIT_PPS:
-		vt.DecoderConfiguration.Raw.Append(slice[0])
+		vt.DecoderConfiguration.Raw[2] = slice[0]
 		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.DecoderConfiguration.Raw[0], vt.DecoderConfiguration.Raw[1], vt.DecoderConfiguration.Raw[2])
 		if err == nil {
 			vt.DecoderConfiguration.AVCC = net.Buffers{extraData}
