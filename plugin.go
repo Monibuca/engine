@@ -124,8 +124,7 @@ func (opt *Plugin) run() {
 	opt.Debug("config", zap.Any("config", opt.Config))
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
 	if conf, ok := opt.Config.(config.HTTPConfig); ok {
-		httpconf := conf.GetHTTPConfig()
-		if httpconf.ListenAddr != "" && httpconf.ListenAddr != EngineConfig.ListenAddr {
+		if httpconf := conf.GetHTTPConfig(); httpconf.ListenAddr != "" && httpconf.ListenAddr != EngineConfig.ListenAddr {
 			go conf.Listen(opt)
 		}
 	}
@@ -133,7 +132,7 @@ func (opt *Plugin) run() {
 
 // Update 热更新配置
 func (opt *Plugin) Update(conf config.Config) {
-	conf.Unmarshal(opt.Config)
+	conf.Unmarshal(&opt.Config)
 	opt.Config.OnEvent(conf)
 }
 

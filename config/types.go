@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -130,7 +132,9 @@ func (cfg *Engine) OnEvent(event any) {
 						log.Error("read console server error:", err)
 						break
 					} else {
-						req, err := http.NewRequest("GET", string(msg), nil)
+						r := bufio.NewReader(bytes.NewReader(msg))
+						URL, _ := r.ReadString('\n')
+						req, err := http.NewRequest("GET", URL, r)
 						if err != nil {
 							log.Error("receive console request :", msg, err)
 							break
