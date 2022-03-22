@@ -29,10 +29,13 @@ func (p *Publisher) getAudioTrack() common.AudioTrack {
 func (p *Publisher) getVideoTrack() common.VideoTrack {
 	return p.VideoTrack
 }
+func (p *Publisher) Equal(p2 IPublisher) bool {
+	return p.getIO() == p2.getIO()
+}
 func (p *Publisher) OnEvent(event any) {
 	switch v := event.(type) {
 	case IPublisher:
-		if v.getIO() == p.getIO() { //第一任
+		if p.Equal(v) { //第一任
 			p.AudioTrack = p.Stream.NewAudioTrack()
 			p.VideoTrack = p.Stream.NewVideoTrack()
 		} else { // 使用前任的track，因为订阅者都挂在前任的上面
