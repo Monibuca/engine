@@ -83,6 +83,8 @@ type IIO interface {
 	IsClosed() bool
 	OnEvent(any)
 	Stop()
+	SetIO(any)
+	SetParentCtx(context.Context)
 }
 
 //Stop 停止订阅或者发布，由订阅者或者发布者调用
