@@ -34,6 +34,7 @@ type IO[C IOConfig, S IIO] struct {
 	io.Closer `json:"-"`
 	Args      url.Values
 	Config    *C
+	Spesic    S
 }
 
 func (io *IO[C, S]) IsClosed() bool {

@@ -64,7 +64,7 @@ type ISubscriber interface {
 	getIO() *IO[config.Subscribe, ISubscriber]
 	GetConfig() *config.Subscribe
 	IsPlaying() bool
-	PlayBlock(ISubscriber)
+	PlayBlock()
 	Stop()
 }
 type TrackPlayer struct {
@@ -197,7 +197,12 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 }
 
 //PlayBlock 阻塞式读取数据
-func (s *Subscriber) PlayBlock(spesic ISubscriber) {
+func (s *Subscriber) PlayBlock() {
+	spesic := s.Spesic
+	if spesic == nil {
+		s.Error("play before subscribe")
+		return
+	}
 	s.Info("playblock")
 	var t time.Time
 	var startTime time.Time     //读到第一个关键帧的时间

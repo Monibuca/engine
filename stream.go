@@ -276,6 +276,7 @@ func (s *Stream) run() {
 					}
 					if s.action(ACTION_PUBLISH) {
 						io := v.Value.getIO()
+						io.Spesic = v.Value
 						io.Stream = s
 						io.StartTime = time.Now()
 						io.Logger = s.With(zap.String("type", io.Type))
@@ -298,6 +299,7 @@ func (s *Stream) run() {
 					}
 					suber := v.Value
 					io := suber.getIO()
+					io.Spesic = suber
 					s.Subscribers = append(s.Subscribers, suber)
 					sbConfig := io.Config
 					if wt := sbConfig.WaitTimeout.Duration(); wt > s.WaitTimeout {

@@ -188,7 +188,7 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 
 func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber) (err error) {
 	if err = opt.Subscribe(streamPath, sub); err == nil {
-		sub.PlayBlock(sub)
+		sub.PlayBlock()
 	}
 	return
 }
