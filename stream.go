@@ -247,6 +247,7 @@ func (s *Stream) run() {
 				for i, sub := range s.Subscribers {
 					if sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:(i-deletes)], s.Subscribers[i-deletes+1:]...)
+						deletes++
 						s.Info("suber -1", zap.String("id", sub.getIO().ID), zap.String("type", sub.getIO().Type), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量

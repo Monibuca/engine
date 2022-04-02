@@ -27,8 +27,8 @@ type Record struct {
 	AutoRecord    bool
 	Filter        string
 	filterReg     *regexp.Regexp
-	CreateFileFn  func(filename string, append bool) (FileWr, error) `yaml:"_"`
-	GetDurationFn func(file io.ReadSeeker) uint32                    `yaml:"_"`
+	CreateFileFn  func(filename string, append bool) (FileWr, error) `yaml:"-"`
+	GetDurationFn func(file io.ReadSeeker) uint32                    `yaml:"-"`
 }
 
 func (r *Record) NeedRecord(streamPath string) bool {
