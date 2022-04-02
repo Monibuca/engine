@@ -243,16 +243,14 @@ func (s *Stream) run() {
 						s.broadcast(TrackRemoved{t})
 					}
 				}
-				deletes := 0
-				for i, sub := range s.Subscribers {
-					if sub.IsClosed() {
-						s.Subscribers = append(s.Subscribers[:(i-deletes)], s.Subscribers[i-deletes+1:]...)
-						deletes++
+				for l := len(s.Subscribers) - 1; l >= 0; l-- {
+					if sub := s.Subscribers[l]; sub.IsClosed() {
+						s.Subscribers = append(s.Subscribers[:l], s.Subscribers[l+1:]...)
 						s.Info("suber -1", zap.String("id", sub.getIO().ID), zap.String("type", sub.getIO().Type), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
-						if len(s.Subscribers) == 0 && s.WaitCloseTimeout > 0 {
+						if l == 0 && s.WaitCloseTimeout > 0 {
 							s.action(ACTION_LASTLEAVE)
 						}
 					}
