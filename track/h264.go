@@ -96,6 +96,9 @@ func (vt *H264) writeRTPFrame(frame *RTPFrame) {
 			}
 			// 最后一个是半包缓存，用于拼接
 			lastIndex := len(vt.Value.Raw) - 1
+			if lastIndex == -1 {
+				return
+			}
 			vt.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
 			if util.Bit1(frame.Payload[1], 1) {
 				complete := vt.Value.Raw[lastIndex]     //拼接完成

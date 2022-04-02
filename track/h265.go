@@ -117,6 +117,9 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 			vt.Value.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
 		}
 		lastIndex := len(vt.Value.Raw) - 1
+		if lastIndex == -1 {
+			return
+		}
 		vt.Value.Raw[lastIndex].Append(buffer)
 		if util.Bit1(fuHeader, 1) {
 			vt.Value.Raw = vt.Value.Raw[:lastIndex]
