@@ -122,10 +122,12 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 		}
 		vt.Value.Raw[lastIndex].Append(buffer)
 		if util.Bit1(fuHeader, 1) {
-			vt.Value.Raw = vt.Value.Raw[:lastIndex]
-			vt.WriteSlice(vt.Value.Raw[lastIndex])
+			complete := vt.Value.Raw[lastIndex]     //拼接完成
+			vt.Value.Raw = vt.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
+			vt.WriteSlice(complete)
 		}
 	}
+	vt.Value.AppendRTP(frame)
 	if frame.Marker {
 		vt.generateTimestamp()
 		vt.Flush()
