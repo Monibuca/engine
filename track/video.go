@@ -54,26 +54,26 @@ func (t *Video) ComputeGOP() {
 	t.IDRing = t.Ring
 }
 
-func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
+func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame, s *[]NALUSlice) {
 	for len(annexb) > 0 {
 		before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
 		if !found {
-			vt.WriteSlice(NALUSlice{annexb})
+			*s = append(*s, NALUSlice{annexb})
 			return
 		}
 		if len(before) > 0 {
-			vt.WriteSlice(NALUSlice{before})
+			*s = append(*s, NALUSlice{before})
 		}
 		annexb = after
 	}
 }
 
-func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
+func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) (s []NALUSlice) {
 	// vt.Stream.Tracef("WriteAnnexB:pts %d,dts %d,len %d", pts, dts, len(frame))
 	for len(frame) > 0 {
 		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)
 		if !found {
-			vt.writeAnnexBSlice(frame)
+			vt.writeAnnexBSlice(frame, &s)
 			if len(vt.Value.Raw) > 0 {
 				vt.Value.PTS = pts
 				vt.Value.DTS = dts
@@ -81,10 +81,11 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 			return
 		}
 		if len(before) > 0 {
-			vt.writeAnnexBSlice(AnnexBFrame(before))
+			vt.writeAnnexBSlice(AnnexBFrame(before), &s)
 		}
 		frame = after
 	}
+	return
 }
 func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	vt.Media.WriteAVCC(ts, frame)
