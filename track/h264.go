@@ -74,7 +74,8 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 		if _, err := info.Unmarshal(frame[5:]); err == nil {
 			vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)
 			vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
-			vt.DecoderConfiguration.Raw.Append(info.SequenceParameterSetNALUnit, info.PictureParameterSetNALUnit)
+			vt.DecoderConfiguration.Raw[0] = info.SequenceParameterSetNALUnit
+			vt.DecoderConfiguration.Raw[1] = info.PictureParameterSetNALUnit
 		}
 		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
 	} else {

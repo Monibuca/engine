@@ -27,35 +27,39 @@ type VideoFrame AVFrame[NALUSlice]
 type AudioDeConf DecoderConfiguration[AudioSlice]
 type VideoDeConf DecoderConfiguration[NALUSlice]
 
+func copyBuffers(b net.Buffers) (r net.Buffers) {
+	return append(r, b...)
+}
+
 func (a *AudioFrame) GetFLV() net.Buffers {
-	return a.FLV
+	return copyBuffers(a.FLV)
 }
 func (a *AudioFrame) GetAVCC() net.Buffers {
-	return a.AVCC
+	return copyBuffers(a.AVCC)
 }
 func (a *AudioFrame) GetRTP() []*RTPFrame {
 	return a.RTP
 }
 func (v *VideoFrame) GetFLV() net.Buffers {
-	return v.FLV
+	return copyBuffers(v.FLV)
 }
 func (v *VideoFrame) GetAVCC() net.Buffers {
-	return v.AVCC
+	return copyBuffers(v.AVCC)
 }
 func (v *VideoFrame) GetRTP() []*RTPFrame {
 	return v.RTP
 }
 func (a AudioDeConf) GetFLV() net.Buffers {
-	return a.FLV
+	return copyBuffers(a.FLV)
 }
 func (a VideoDeConf) GetFLV() net.Buffers {
-	return a.FLV
+	return copyBuffers(a.FLV)
 }
 func (a AudioDeConf) GetAVCC() net.Buffers {
-	return a.AVCC
+	return copyBuffers(a.AVCC)
 }
 func (a VideoDeConf) GetAVCC() net.Buffers {
-	return a.AVCC
+	return copyBuffers(a.AVCC)
 }
 
 type ISubscriber interface {

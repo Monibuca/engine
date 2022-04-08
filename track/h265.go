@@ -69,7 +69,9 @@ func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 		if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(frame); err == nil {
 			vt.SPSInfo, _ = codec.ParseHevcSPS(frame)
 			vt.nalulenSize = int(frame[26]) & 0x03
-			vt.DecoderConfiguration.Raw.Append(vps, sps, pps)
+			vt.DecoderConfiguration.Raw[0] = vps
+			vt.DecoderConfiguration.Raw[1] = sps
+			vt.DecoderConfiguration.Raw[2] = pps
 		}
 		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
 	} else {
