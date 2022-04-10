@@ -171,7 +171,8 @@ func (av *AVFrame[T]) Reset() {
 }
 
 func (avcc AVCCFrame) IsIDR() bool {
-	return avcc[0]>>4 == 1
+	v := avcc[0] >> 4
+	return v == 1 || v == 4 //generated keyframe
 }
 func (avcc AVCCFrame) IsSequence() bool {
 	return avcc[1] == 0
@@ -217,4 +218,5 @@ type DecoderConfiguration[T RawSlice] struct {
 	AVCC        net.Buffers
 	Raw         T
 	FLV         net.Buffers
+	Seq         int //收到第几个序列帧，用于变码率时让订阅者发送序列帧
 }

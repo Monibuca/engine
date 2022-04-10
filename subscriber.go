@@ -136,6 +136,7 @@ func (s *Subscriber) IsPlaying() bool {
 // 非阻塞式读取，通过反复调用返回的函数可以尝试读取数据，读取到数据后会调用OnEvent，这种模式自由的在不同的goroutine中调用
 func (s *Subscriber) Play(spesic ISubscriber) func() error {
 	s.Info("play")
+	var confSeqa, confSeqv int
 	var t time.Time
 	var startTime time.Time     //读到第一个关键帧的时间
 	var firstIFrame *VideoFrame //起始关键帧
@@ -156,6 +157,7 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 					if ctx.Err() != nil {
 						return ctx.Err()
 					}
+					confSeqv = s.VideoTrack.DecoderConfiguration.Seq
 					spesic.OnEvent(VideoDeConf(s.VideoTrack.DecoderConfiguration))
 					spesic.OnEvent(firstIFrame)
 					s.vr.MoveNext()
@@ -165,6 +167,10 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 					return nil
 				} else if firstIFrame == nil {
 					if vp := (s.vr.TryRead()); vp != nil {
+						if vp.IFrame && confSeqv != s.VideoTrack.DecoderConfiguration.Seq {
+							confSeqv = s.VideoTrack.DecoderConfiguration.Seq
+							spesic.OnEvent(VideoDeConf(s.VideoTrack.DecoderConfiguration))
+						}
 						spesic.OnEvent((*VideoFrame)(vp))
 						s.vr.MoveNext()
 						// 如果本次读取的视频时间戳比较大，下次给音频一个机会
@@ -183,6 +189,7 @@ func (s *Subscriber) Play(spesic ISubscriber) func() error {
 		// 正常模式下或者纯音频模式下，音频开始播放
 		if s.ar != nil && firstIFrame == nil {
 			if !audioSent {
+				confSeqa = s.AudioTrack.DecoderConfiguration.Seq
 				spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
 				audioSent = true
 			}

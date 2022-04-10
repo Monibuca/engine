@@ -57,7 +57,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 		util.PutBE(tmp[4:6], lenPPS)
 		vt.DecoderConfiguration.AVCC = append(vt.DecoderConfiguration.AVCC, tmp[:3], vt.DecoderConfiguration.Raw[0], tmp[3:], vt.DecoderConfiguration.Raw[1])
 		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(vt.DecoderConfiguration.AVCC, 0)
-
+		vt.DecoderConfiguration.Seq++
 	case codec.NALU_IDR_Picture:
 		vt.Value.IFrame = true
 		fallthrough
@@ -69,6 +69,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 
 func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
+		vt.DecoderConfiguration.Seq++
 		vt.DecoderConfiguration.AVCC = net.Buffers{frame}
 		var info codec.AVCDecoderConfigurationRecord
 		if _, err := info.Unmarshal(frame[5:]); err == nil {

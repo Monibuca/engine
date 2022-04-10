@@ -54,6 +54,7 @@ func (a *Audio) WriteADTS(adts []byte) {
 		net.Buffers{avcc},
 		avcc[:2],
 		net.Buffers{adcflv1, avcc, adcflv2},
+		0,
 	}
 }
 
