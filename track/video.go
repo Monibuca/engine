@@ -21,6 +21,9 @@ type Video struct {
 	idrCount    int //缓存中包含的idr数量
 }
 
+func (t *Video) GetDecConfSeq() int {
+	return t.DecoderConfiguration.Seq
+}
 func (t *Video) Attach() {
 	t.Stream.AddTrack(t)
 }

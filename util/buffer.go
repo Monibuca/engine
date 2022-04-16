@@ -87,6 +87,14 @@ func (b *Buffer) Glow(n int) {
 	*b = b.SubBuf(0, l)
 }
 
+// ConcatBuffers 合并碎片内存为一个完整内存
+func ConcatBuffers[T ~[]byte](input []T) (out []byte) {
+	for _, v := range input {
+		out = append(out, v...)
+	}
+	return
+}
+
 // SizeOfBuffers 计算Buffers的内容长度
 func SizeOfBuffers[T ~[]byte](buf []T) (size int) {
 	for _, b := range buf {

@@ -126,7 +126,7 @@ type AVFrame[T RawSlice] struct {
 	FLV     net.Buffers // 打包好的FLV Tag
 	AVCC    net.Buffers // 打包好的AVCC格式
 	RTP     []*RTPFrame
-	Raw     []T //裸数据
+	Raw     []T    // 裸数据
 	canRead bool
 }
 

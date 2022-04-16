@@ -17,12 +17,20 @@ type Audio struct {
 	CodecID  codec.AudioCodecID
 	Channels byte
 	AVCCHead []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
+	// Profile:
+	// 0: Main profile
+	// 1: Low Complexity profile(LC)
+	// 2: Scalable Sampling Rate profile(SSR)
+	// 3: Reserved
+	Profile byte
 }
 
 func (a *Audio) IsAAC() bool {
 	return a.CodecID == codec.CodecID_AAC
 }
-
+func (a *Audio) GetDecConfSeq() int {
+	return a.DecoderConfiguration.Seq
+}
 func (a *Audio) Attach() {
 	a.Stream.AddTrack(a)
 }
@@ -41,10 +49,10 @@ func (a *Audio) GetInfo() *Audio {
 }
 
 func (a *Audio) WriteADTS(adts []byte) {
-	profile := ((adts[2] & 0xc0) >> 6) + 1
+	a.Profile = ((adts[2] & 0xc0) >> 6) + 1
 	sampleRate := (adts[2] & 0x3c) >> 2
 	channel := ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
-	config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
+	config1 := (a.Profile << 3) | ((sampleRate & 0xe) >> 1)
 	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
 	a.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
 	a.Channels = channel

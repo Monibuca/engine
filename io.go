@@ -111,7 +111,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 	wt := time.Second * 5
 	var c any = conf
 	if v, ok := c.(*config.Subscribe); ok {
-		wt = v.WaitTimeout.Duration()
+		wt = util.Second2Duration(v.WaitTimeout)
 	}
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
@@ -134,8 +134,8 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 				return BadNameErr
 			}
 		}
-		s.PublishTimeout = v.PublishTimeout.Duration()
-		s.WaitCloseTimeout = v.WaitCloseTimeout.Duration()
+		s.PublishTimeout = util.Second2Duration(v.PublishTimeout)
+		s.WaitCloseTimeout = util.Second2Duration(v.WaitCloseTimeout)
 	} else if create {
 		EventBus <- s //通知发布者按需拉流
 	}

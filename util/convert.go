@@ -3,7 +3,12 @@ package util
 import (
 	"errors"
 	"io"
+	"time"
 )
+
+func Second2Duration(s int) time.Duration {
+	return time.Duration(s) * time.Second
+}
 
 /*
 func ReadByteToUintX(r io.Reader, l int) (data uint64, err error) {

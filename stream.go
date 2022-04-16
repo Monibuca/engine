@@ -301,7 +301,7 @@ func (s *Stream) run() {
 					io.Spesic = suber
 					s.Subscribers = append(s.Subscribers, suber)
 					sbConfig := io.Config
-					if wt := sbConfig.WaitTimeout.Duration(); wt > s.WaitTimeout {
+					if wt := util.Second2Duration(sbConfig.WaitTimeout); wt > s.WaitTimeout {
 						s.WaitTimeout = wt
 					}
 					io.Stream = s

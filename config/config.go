@@ -5,19 +5,12 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
-	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/log"
 )
 
 type Config map[string]any
-
-type Second int
-
-func (s Second) Duration() time.Duration {
-	return time.Duration(s) * time.Second
-}
 
 type Plugin interface {
 	// 可能的入参类型：FirstConfig 第一次初始化配置，Config 后续配置更新，SE系列（StateEvent）流状态变化事件

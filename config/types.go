@@ -32,8 +32,8 @@ type Publish struct {
 	PubAudio         bool
 	PubVideo         bool
 	KickExist        bool   // 是否踢掉已经存在的发布者
-	PublishTimeout   Second // 发布无数据超时
-	WaitCloseTimeout Second // 延迟自动关闭（无订阅时）
+	PublishTimeout   int // 发布无数据超时
+	WaitCloseTimeout int // 延迟自动关闭（无订阅时）
 }
 
 func (c *Publish) GetPublishConfig() *Publish {
@@ -44,7 +44,7 @@ type Subscribe struct {
 	SubAudio    bool
 	SubVideo    bool
 	IFrameOnly  bool   // 只要关键帧
-	WaitTimeout Second // 等待流超时
+	WaitTimeout int // 等待流超时
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {
