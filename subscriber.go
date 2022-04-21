@@ -90,10 +90,10 @@ func (p *PlayContext[T, R]) decConfChanged() bool {
 }
 
 type TrackPlayer struct {
-	context.Context
-	context.CancelFunc
-	Audio PlayContext[*track.Audio, AudioSlice]
-	Video PlayContext[*track.Video, NALUSlice]
+	context.Context    `json:"-"`
+	context.CancelFunc `json:"-"`
+	Audio              PlayContext[*track.Audio, AudioSlice]
+	Video              PlayContext[*track.Video, NALUSlice]
 }
 
 // Subscriber 订阅者实体定义
