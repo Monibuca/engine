@@ -24,8 +24,8 @@ type ClientConfig interface {
 type IO[C IOConfig, S IIO] struct {
 	ID                 string
 	Type               string
-	context.Context    //不要直接设置，应当通过OnEvent传入父级Context
-	context.CancelFunc //流关闭是关闭发布者或者订阅者
+	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
+	context.CancelFunc `json:"-"` //流关闭是关闭发布者或者订阅者
 	*zap.Logger
 	StartTime time.Time //创建时间
 	Stream    *Stream   `json:"-"`
