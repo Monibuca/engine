@@ -77,10 +77,6 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) (s []NAL
 		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)
 		if !found {
 			vt.writeAnnexBSlice(frame, &s)
-			if len(vt.Value.Raw) > 0 {
-				vt.Value.PTS = pts
-				vt.Value.DTS = dts
-			}
 			return
 		}
 		if len(before) > 0 {
