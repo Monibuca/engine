@@ -16,9 +16,10 @@ type Video struct {
 	CodecID     codec.VideoCodecID
 	IDRing      *util.Ring[AVFrame[NALUSlice]] `json:"-"` //最近的关键帧位置，首屏渲染
 	SPSInfo     codec.SPSInfo
-	GOP         int //关键帧间隔
-	nalulenSize int //avcc格式中表示nalu长度的字节数，通常为4
-	idrCount    int //缓存中包含的idr数量
+	GOP         int  //关键帧间隔
+	nalulenSize int  //avcc格式中表示nalu长度的字节数，通常为4
+	idrCount    int  //缓存中包含的idr数量
+	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
 }
 
 func (t *Video) GetDecConfSeq() int {
@@ -148,7 +149,13 @@ func (vt *Video) Flush() {
 	}
 	vt.Media.Flush()
 }
-
+func (vt *Video) PacketizeRTP(payloads ...[]byte) {
+	if vt.Value.IFrame && vt.dcChanged {
+		vt.dcChanged = false
+		payloads = append(append([][]byte{}, vt.DecoderConfiguration.Raw...), payloads...)
+	}
+	vt.Media.PacketizeRTP(payloads...)
+}
 func (vt *Video) ReadRing() *AVRing[NALUSlice] {
 	vr := vt.Media.ReadRing()
 	vr.Ring = vt.IDRing

@@ -46,6 +46,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		vt.DecoderConfiguration.Raw[1] = slice[0]
 		vt.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
 	case codec.NAL_UNIT_PPS:
+		vt.dcChanged = true
 		vt.DecoderConfiguration.Raw[2] = slice[0]
 		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.DecoderConfiguration.Raw[0], vt.DecoderConfiguration.Raw[1], vt.DecoderConfiguration.Raw[2])
 		if err == nil {
@@ -68,6 +69,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
+		vt.dcChanged = true
 		vt.DecoderConfiguration.Seq++
 		vt.DecoderConfiguration.AVCC = net.Buffers{frame}
 		if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(frame); err == nil {

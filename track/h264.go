@@ -46,6 +46,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])
 		vt.DecoderConfiguration.Raw[0] = slice[0]
 	case codec.NALU_PPS:
+		vt.dcChanged = true
 		vt.DecoderConfiguration.Raw[1] = slice[0]
 		lenSPS := len(vt.DecoderConfiguration.Raw[0])
 		lenPPS := len(vt.DecoderConfiguration.Raw[1])
@@ -71,6 +72,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 
 func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
+		vt.dcChanged = true
 		vt.DecoderConfiguration.Seq++
 		vt.DecoderConfiguration.AVCC = net.Buffers{frame}
 		var info codec.AVCDecoderConfigurationRecord
