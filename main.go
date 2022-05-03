@@ -88,6 +88,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 			for _, plugin := range Plugins {
 				plugin.Config.OnEvent(event)
 			}
+			HttpCallbackEvent(event)
 		case <-ctx.Done():
 			return
 		case <-reportTimer.C:
