@@ -330,6 +330,7 @@ func (s *Stream) run() {
 						waitP = append(waitP, v)
 					}
 					suber.OnEvent(suber) // 订阅成功事件
+					EventBus <- suber    // 全局广播
 					v.Resolve(util.Null)
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)
