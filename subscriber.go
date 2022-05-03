@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"time"
 
@@ -78,7 +79,11 @@ type PlayContext[T interface {
 	Track   T
 	ring    *AVRing[R]
 	confSeq int
-	First   AVFrame[R]
+	First   AVFrame[R] `json:"-"`
+}
+
+func (p *PlayContext[T, R]) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.Track)
 }
 
 func (p *PlayContext[T, R]) init(t T) {
@@ -99,7 +104,7 @@ type TrackPlayer struct {
 // Subscriber 订阅者实体定义
 type Subscriber struct {
 	IO[config.Subscribe, ISubscriber]
-	TrackPlayer
+	TrackPlayer `json:"-"`
 }
 
 func (s *Subscriber) OnEvent(event any) {

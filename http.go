@@ -32,12 +32,11 @@ func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
 			s.Close()
-			w.Write([]byte("success"))
 		} else {
-			w.Write([]byte("no such stream"))
+			http.Error(w, "no such stream", http.StatusNotFound)
 		}
 	} else {
-		w.Write([]byte("no query stream"))
+		http.Error(w, "no streamPath", http.StatusBadRequest)
 	}
 }
 
@@ -47,7 +46,7 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 		if c, ok := Plugins[configName]; ok {
 			json.NewEncoder(w).Encode(c.RawConfig)
 		} else {
-			w.Write([]byte("no such config"))
+			http.Error(w, "no such config", http.StatusNotFound)
 		}
 	} else {
 		json.NewEncoder(w).Encode(Engine.RawConfig)
@@ -62,7 +61,7 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 			c.Save()
 			c.RawConfig.Assign(c.Modified)
 		} else {
-			w.Write([]byte("no such config"))
+			http.Error(w, "no such config", http.StatusNotFound)
 		}
 	} else {
 		json.NewDecoder(r.Body).Decode(&Engine.Modified)
@@ -77,7 +76,7 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 		if c, ok := Plugins[configName]; ok {
 			c.Update(c.Modified)
 		} else {
-			w.Write([]byte("no such config"))
+			http.Error(w, "no such config", http.StatusNotFound)
 		}
 	} else {
 		Engine.Update(Engine.Modified)

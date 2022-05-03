@@ -26,15 +26,15 @@ type IO[C IOConfig, S IIO] struct {
 	Type               string
 	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
 	context.CancelFunc `json:"-"` //流关闭是关闭发布者或者订阅者
-	*zap.Logger
-	StartTime time.Time //创建时间
-	Stream    *Stream   `json:"-"`
-	io.Reader `json:"-"`
-	io.Writer `json:"-"`
-	io.Closer `json:"-"`
-	Args      url.Values
-	Config    *C
-	Spesic    S
+	*zap.Logger        `json:"-"`
+	StartTime          time.Time //创建时间
+	Stream             *Stream   `json:"-"`
+	io.Reader          `json:"-"`
+	io.Writer          `json:"-"`
+	io.Closer          `json:"-"`
+	Args               url.Values
+	Config             *C `json:"-"`
+	Spesic             S  `json:"-"`
 }
 
 func (io *IO[C, S]) IsClosed() bool {

@@ -16,10 +16,11 @@ type IPublisher interface {
 
 type Publisher struct {
 	IO[config.Publish, IPublisher]
-	common.AudioTrack
-	common.VideoTrack
+	common.AudioTrack `json:"-"`
+	common.VideoTrack `json:"-"`
 }
-func (p *Publisher) Stop()  {
+
+func (p *Publisher) Stop() {
 	p.IO.Stop()
 	p.Stream.Receive(ACTION_PUBLISHLOST)
 }

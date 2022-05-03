@@ -12,7 +12,7 @@ import (
 func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("json") != "" {
 		if err := json.NewEncoder(rw).Encode(fetch()); err != nil {
-			rw.WriteHeader(500)
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
 		}
 		return
 	}

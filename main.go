@@ -66,6 +66,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	Engine.registerHandler()
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
 	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
+	log.With(zap.String("config", "global")).Debug("", zap.Any("config", EngineConfig))
 	go EngineConfig.Listen(Engine)
 	for name, plugin := range Plugins {
 		plugin.RawConfig = cg.GetChild(name)
