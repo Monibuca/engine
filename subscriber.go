@@ -66,7 +66,7 @@ func (a VideoDeConf) GetAVCC() net.Buffers {
 type ISubscriber interface {
 	IIO
 	receive(string, ISubscriber, *config.Subscribe) error
-	getIO() *IO[config.Subscribe, ISubscriber]
+	GetIO() *IO[config.Subscribe, ISubscriber]
 	GetConfig() *config.Subscribe
 	IsPlaying() bool
 	PlayBlock()

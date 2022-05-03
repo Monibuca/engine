@@ -9,7 +9,7 @@ type IPublisher interface {
 	IIO
 	GetConfig() *config.Publish
 	receive(string, IPublisher, *config.Publish) error
-	getIO() *IO[config.Publish, IPublisher]
+	GetIO() *IO[config.Publish, IPublisher]
 	getAudioTrack() common.AudioTrack
 	getVideoTrack() common.VideoTrack
 }
@@ -31,7 +31,7 @@ func (p *Publisher) getVideoTrack() common.VideoTrack {
 	return p.VideoTrack
 }
 func (p *Publisher) Equal(p2 IPublisher) bool {
-	return p.getIO() == p2.getIO()
+	return p.GetIO() == p2.GetIO()
 }
 func (p *Publisher) OnEvent(event any) {
 	switch v := event.(type) {

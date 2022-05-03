@@ -71,7 +71,7 @@ func (i *IO[C, S]) OnEvent(event any) {
 	}
 }
 
-func (io *IO[C, S]) getIO() *IO[C, S] {
+func (io *IO[C, S]) GetIO() *IO[C, S] {
 	return io
 }
 

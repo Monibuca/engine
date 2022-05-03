@@ -246,7 +246,7 @@ func (s *Stream) run() {
 				for l := len(s.Subscribers) - 1; l >= 0; l-- {
 					if sub := s.Subscribers[l]; sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:l], s.Subscribers[l+1:]...)
-						s.Info("suber -1", zap.String("id", sub.getIO().ID), zap.String("type", sub.getIO().Type), zap.Int("remains", len(s.Subscribers)))
+						s.Info("suber -1", zap.String("id", sub.GetIO().ID), zap.String("type", sub.GetIO().Type), zap.Int("remains", len(s.Subscribers)))
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
@@ -274,7 +274,7 @@ func (s *Stream) run() {
 						oldPublisher = v.Value
 					}
 					if s.action(ACTION_PUBLISH) {
-						io := v.Value.getIO()
+						io := v.Value.GetIO()
 						io.Spesic = v.Value
 						io.Stream = s
 						io.StartTime = time.Now()
@@ -297,7 +297,7 @@ func (s *Stream) run() {
 						v.Reject(StreamIsClosedErr)
 					}
 					suber := v.Value
-					io := suber.getIO()
+					io := suber.GetIO()
 					io.Spesic = suber
 					s.Subscribers = append(s.Subscribers, suber)
 					sbConfig := io.Config
