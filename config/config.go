@@ -67,11 +67,16 @@ func (config Config) Unmarshal(s any) {
 			l := value.Len()
 			s := reflect.MakeSlice(fv.Type(), l, value.Cap())
 			for i := 0; i < l; i++ {
-				fv := value.Field(i)
+				fv := value.Index(i)
 				if fv.Type() == reflect.TypeOf(config) {
-					fv.FieldByName("Unmarshal").Call([]reflect.Value{s.Field(i)})
+					fv.FieldByName("Unmarshal").Call([]reflect.Value{fv})
 				} else {
-					s.Field(i).Set(fv)
+					item := s.Index(i)
+					if fv.Kind() == reflect.Interface {
+						item.Set(reflect.ValueOf(fv.Interface()).Convert(item.Type()))
+					} else {
+						item.Set(fv)
+					}
 				}
 			}
 			fv.Set(s)
