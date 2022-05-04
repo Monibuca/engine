@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
@@ -52,36 +51,28 @@ func doRequest(host string, data any) error {
 
 func HttpCallbackEvent(event any) {
 	data := HttpCallbackData{}
-	var streamIo any
+	var s *Stream
 	for _, endpoint := range EngineConfig.HTTPCallback {
 		switch e := event.(type) {
 		case SEclose:
 			data.Event = "close"
-			streamIo = e.Stream.Publisher.GetIO()
-
+			s = e.Stream
 		case SEpublish:
 			data.Event = "publish"
-			streamIo = e.Stream.Publisher.GetIO()
-
+			s = e.Stream
 		case ISubscriber:
 			data.Event = "subscribe"
-			streamIo = e.GetIO()
+			s = e.GetIO().Stream
 		default:
 		}
-		if streamIo == nil {
+		if s == nil {
 			return
 		}
-		switch s := streamIo.(type) {
-		case *IO[config.Publish, IPublisher]:
-			data.StreamName = s.Stream.StreamName
-			data.AppName = s.Stream.AppName
-			data.Schema = s.Type
-		case *IO[config.Subscribe, ISubscriber]:
-			data.StreamName = s.Stream.StreamName
-			data.AppName = s.Stream.AppName
-			data.Schema = s.Type
+		data.StreamName = s.StreamName
+		data.AppName = s.AppName
+		if s.Publisher != nil {
+			data.Schema = s.Publisher.GetIO().Type
 		}
-
 		data.Time = time.Now().Unix()
 		go doRequest(endpoint, data)
 	}

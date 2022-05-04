@@ -90,12 +90,12 @@ type Engine struct {
 	Subscribe
 	HTTP
 	RTPReorder   bool
-	EnableAVCC   bool   //启用AVCC格式，rtmp协议使用
-	EnableRTP    bool   //启用RTP格式，rtsp、gb18181等协议使用
-	EnableFLV    bool   //开启FLV格式，hdl协议使用
-	ConsoleURL   string //远程控制台地址
-	Secret       string //远程控制台密钥
-	HTTPCallback []string
+	EnableAVCC   bool     //启用AVCC格式，rtmp协议使用
+	EnableRTP    bool     //启用RTP格式，rtsp、gb18181等协议使用
+	EnableFLV    bool     //开启FLV格式，hdl协议使用
+	ConsoleURL   string   //远程控制台地址
+	Secret       string   //远程控制台密钥
+	HTTPCallback []string //http回调地址
 }
 type myResponseWriter struct {
 	io.Writer
