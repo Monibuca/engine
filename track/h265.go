@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp/v2"
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -45,6 +46,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 	case codec.NAL_UNIT_SPS:
 		vt.DecoderConfiguration.Raw[1] = slice[0]
 		vt.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
+		vt.Stream.Info("h265 sps",zap.Any("sps",vt.SPSInfo))
 	case codec.NAL_UNIT_PPS:
 		vt.dcChanged = true
 		vt.DecoderConfiguration.Raw[2] = slice[0]
@@ -136,6 +138,8 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 			vt.Value.Raw = vt.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
 			vt.WriteSlice(complete)
 		}
+	default:
+		vt.WriteSlice(NALUSlice{frame.Payload})
 	}
 	vt.Value.AppendRTP(frame)
 	if frame.Marker {
