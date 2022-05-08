@@ -65,7 +65,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		codec.NAL_UNIT_CODED_SLICE_CRA:
 		vt.Value.IFrame = true
 		fallthrough
-	case 0, 1, 2, 3, 4, 5, 6, 7, 9:
+	case 0, 1, 2, 3, 4, 5, 6, 7, 9, codec.NAL_UNIT_SEI:
 		vt.Media.WriteSlice(slice)
 	default:
 		vt.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(slice.H265Type())))
