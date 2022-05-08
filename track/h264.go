@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp/v2"
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -45,6 +46,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 	case codec.NALU_SPS:
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])
 		vt.DecoderConfiguration.Raw[0] = slice[0]
+		vt.Stream.Info("h264 sps parsed", zap.Uint("width", vt.SPSInfo.Width), zap.Uint("height", vt.SPSInfo.Height))
 	case codec.NALU_PPS:
 		vt.dcChanged = true
 		vt.DecoderConfiguration.Raw[1] = slice[0]

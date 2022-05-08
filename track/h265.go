@@ -46,7 +46,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 	case codec.NAL_UNIT_SPS:
 		vt.DecoderConfiguration.Raw[1] = slice[0]
 		vt.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
-		vt.Stream.Info("h265 sps",zap.Any("sps",vt.SPSInfo))
+		vt.Stream.Info("h265 sps parsed", zap.Uint("width", vt.SPSInfo.Width), zap.Uint("height", vt.SPSInfo.Height))
 	case codec.NAL_UNIT_PPS:
 		vt.dcChanged = true
 		vt.DecoderConfiguration.Raw[2] = slice[0]
@@ -67,6 +67,8 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		fallthrough
 	case 0, 1, 2, 3, 4, 5, 6, 7, 9:
 		vt.Media.WriteSlice(slice)
+	default:
+		vt.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(slice.H265Type())))
 	}
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
