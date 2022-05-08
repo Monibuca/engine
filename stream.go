@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,33 @@ func FindStream(streamPath string) *Stream {
 	return Streams.GetStream(streamPath)
 }
 
+func WaitStream(streamPath string, waitTimeout time.Duration) (s *Stream) {
+	s = nil
+	p := strings.Split(streamPath, "/")
+	if len(p) < 2 {
+		utils.Print(Red("Stream Path Format Error:"), streamPath)
+		return nil
+	}
+	TriggerHook(HOOK_ONDEMAND_PUBLISH, streamPath)
+	c2 := make(chan string, 1)
+	//defer c2.close()
+	go func() {
+		for {
+			if s = FindStream(streamPath); s != nil {
+				c2 <- "done"
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	select {
+	case res := <-c2:
+		fmt.Println(streamPath + " '" + res + "'")
+	case <-time.After(waitTimeout):
+		fmt.Println("timeout 2")
+	}
+	return s
+}
+
 // Publish 直接发布
 func Publish(streamPath, t string) *Stream {
 	var stream = &Stream{
@@ -110,8 +138,8 @@ type Stream struct {
 	AudioTracks Tracks
 	DataTracks  Tracks
 
-	//AutoCloseAfter 当无人订阅时延迟N秒后自动停止发布
-	AutoCloseAfter *int
+	//AutoCloseDelay 当无人订阅时延迟N秒后自动停止发布
+	AutoCloseDelay *int
 
 	//Transcoding 转码配置，key：目标编码，value：发布者提供的编码
 	Transcoding    map[string]string
@@ -158,12 +186,12 @@ func (r *Stream) Publish() bool {
 	if _, ok := Streams.m[r.StreamPath]; ok {
 		return false
 	}
-	if r.AutoCloseAfter == nil {
-		r.AutoCloseAfter = &config.AutoCloseAfter
+	if r.AutoCloseDelay == nil {
+		r.AutoCloseDelay = &config.AutoCloseDelay
 	}
 	var closeChann <-chan time.Time
-	if *r.AutoCloseAfter > 0 {
-		r.closeDelay = time.NewTimer(time.Duration(*r.AutoCloseAfter) * time.Second)
+	if *r.AutoCloseDelay > 0 {
+		r.closeDelay = time.NewTimer(time.Duration(*r.AutoCloseDelay) * time.Second)
 		r.closeDelay.Stop()
 		closeChann = r.closeDelay.C
 	}
@@ -243,7 +271,7 @@ func (r *Stream) Subscribe(s *Subscriber) {
 		utils.Print(Sprintf(Yellow("subscribe :%s %s,to Stream %s"), Blue(s.Type), Cyan(s.ID), BrightCyan(r.StreamPath)))
 		s.Context, s.cancel = context.WithCancel(r)
 		r.subscribeMutex.Lock()
-		if *r.AutoCloseAfter > 0 {
+		if *r.AutoCloseDelay > 0 {
 			r.closeDelay.Stop()
 		}
 		r.Subscribers = append(r.Subscribers, s)
@@ -264,11 +292,11 @@ func (r *Stream) UnSubscribe(s *Subscriber) {
 			utils.Print(Sprintf(Yellow("%s subscriber %s removed remains:%d"), BrightCyan(r.StreamPath), Cyan(s.ID), Blue(len(r.Subscribers))))
 			l := len(r.Subscribers)
 			TriggerHook(HOOK_UNSUBSCRIBE, s, l)
-			if l == 0 && *r.AutoCloseAfter >= 0 {
-				if *r.AutoCloseAfter == 0 {
+			if l == 0 && *r.AutoCloseDelay >= 0 {
+				if *r.AutoCloseDelay == 0 {
 					r.Close()
 				} else {
-					r.closeDelay.Reset(time.Duration(*r.AutoCloseAfter) * time.Second)
+					r.closeDelay.Reset(time.Duration(*r.AutoCloseDelay) * time.Second)
 				}
 			}
 		}

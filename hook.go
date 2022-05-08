@@ -14,6 +14,7 @@ const (
 	HOOK_UNSUBSCRIBE        = "UnSubscibe"
 	HOOK_STREAMCLOSE        = "StreamClose"
 	HOOK_PUBLISH            = "Publish"
+	HOOK_ONDEMAND_PUBLISH   = "hookOndemandPublish"
 	HOOK_REQUEST_TRANSAUDIO = "RequestTransAudio"
 )
 

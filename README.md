@@ -13,6 +13,8 @@ PublishTimeout = 60
 AutoCloseDelay = 10
 # 启用RTP包乱序重排
 RTPReorder = false
+# 按需发布等流时间 单位秒
+OnDemandPublishTimeout = 20
 ```
 
 # 引擎的基本功能

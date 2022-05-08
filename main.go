@@ -27,13 +27,14 @@ var Version = "3.2.2"
 
 var (
 	config = &struct {
-		EnableAudio    bool
-		EnableVideo    bool
-		PublishTimeout time.Duration
-		MaxRingSize    int
-		AutoCloseAfter int
-		RTPReorder     bool
-	}{true, true, 60, 256, -1, false}
+		EnableAudio            bool
+		EnableVideo            bool
+		PublishTimeout         time.Duration
+		MaxRingSize            int
+		AutoCloseDelay         int
+		RTPReorder             bool
+		OnDemandPublishTimeout time.Duration
+	}{true, true, 60, 256, -1, false, 10}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw     []byte
 	StartTime     time.Time                        //启动时间
@@ -96,6 +97,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 				log.Println(err)
 			}
 			config.PublishTimeout *= time.Second
+			config.OnDemandPublishTimeout *= time.Second
 		}
 		for name, config := range Plugins {
 			if cfg, ok := cg[name]; ok {
