@@ -67,7 +67,7 @@ type Media[T RawSlice] struct {
 }
 
 func (av *Media[T]) LastWriteTime() time.Time {
-	return av.PreValue().Timestamp
+	return av.AVRing.RingBuffer.PreValue().Timestamp
 }
 
 func (av *Media[T]) Play(ctx context.Context, onMedia func(*AVFrame[T]) error) error {
@@ -90,10 +90,10 @@ func (av *Media[T]) GetDecoderConfiguration() DecoderConfiguration[T] {
 }
 
 func (av *Media[T]) CurrentFrame() *AVFrame[T] {
-	return &av.Value
+	return &av.AVRing.RingBuffer.Value
 }
 func (av *Media[T]) PreFrame() *AVFrame[T] {
-	return av.PreValue()
+	return av.AVRing.RingBuffer.PreValue()
 }
 
 // 获取缓存中下一个rtpFrame
@@ -107,9 +107,9 @@ func (av *Media[T]) nextRTPFrame() (frame *RTPFrame) {
 }
 
 func (av *Media[T]) generateTimestamp() {
-	ts := av.Value.RTP[0].Timestamp
-	av.Value.PTS = ts
-	av.Value.DTS = ts
+	ts := av.AVRing.RingBuffer.Value.RTP[0].Timestamp
+	av.AVRing.RingBuffer.Value.PTS = ts
+	av.AVRing.RingBuffer.Value.DTS = ts
 }
 
 // 对RTP包乱序重排
@@ -181,28 +181,28 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 }
 
 func (av *Media[T]) WriteSlice(slice T) {
-	av.Value.AppendRaw(slice)
+	av.AVRing.RingBuffer.Value.AppendRaw(slice)
 }
 
 func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 	cts := frame.CTS()
-	av.Value.BytesIn = len(frame)
-	av.Value.AppendAVCC(frame)
-	av.Value.DTS = ts * 90
-	av.Value.PTS = (ts + cts) * 90
+	av.AVRing.RingBuffer.Value.BytesIn = len(frame)
+	av.AVRing.RingBuffer.Value.AppendAVCC(frame)
+	av.AVRing.RingBuffer.Value.DTS = ts * 90
+	av.AVRing.RingBuffer.Value.PTS = (ts + cts) * 90
 	// av.Stream.Tracef("WriteAVCC:ts %d,cts %d,len %d", ts, cts, len(frame))
 }
 
 func (av *Media[T]) Flush() {
-	preValue := av.PreValue()
+	preValue := av.AVRing.RingBuffer.PreValue()
 	if av.起始时间.IsZero() {
-		av.重置(av.Value.AbsTime)
+		av.重置(av.AVRing.RingBuffer.Value.AbsTime)
 	} else {
-		av.Value.DeltaTime = (av.Value.DTS - preValue.DTS) / 90
-		av.Value.AbsTime = preValue.AbsTime + av.Value.DeltaTime
+		av.AVRing.RingBuffer.Value.DeltaTime = (av.AVRing.RingBuffer.Value.DTS - preValue.DTS) / 90
+		av.AVRing.RingBuffer.Value.AbsTime = preValue.AbsTime + av.AVRing.RingBuffer.Value.DeltaTime
 	}
-	av.Base.Flush(&av.Value.BaseFrame)
-	av.控制流速(av.Value.AbsTime)
+	av.Base.Flush(&av.AVRing.RingBuffer.Value.BaseFrame)
+	av.控制流速(av.AVRing.RingBuffer.Value.AbsTime)
 	av.Step()
 }
 
@@ -218,12 +218,12 @@ func (av *Media[T]) PacketizeRTP(payloads ...[]byte) {
 				Marker:         i == len(payloads)-1,
 				PayloadType:    av.DecoderConfiguration.PayloadType,
 				SequenceNumber: av.rtpSequence,
-				Timestamp:      av.Value.PTS, // Figure out how to do timestamps
+				Timestamp:      av.AVRing.RingBuffer.Value.PTS, // Figure out how to do timestamps
 				SSRC:           av.Stream.SSRC(),
 			},
 			Payload: pp,
 		}}
 		frame.Marshal()
-		av.Value.AppendRTP(frame)
+		av.AVRing.RingBuffer.Value.AppendRTP(frame)
 	}
 }

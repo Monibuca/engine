@@ -18,44 +18,44 @@ type H265 struct {
 
 func NewH265(stream IStream) (vt *H265) {
 	vt = &H265{}
-	vt.Name = "h265"
-	vt.CodecID = codec.CodecID_H265
-	vt.SampleRate = 90000
-	vt.Stream = stream
-	vt.Init(256)
-	vt.Poll = time.Millisecond * 20
-	vt.DecoderConfiguration.PayloadType = 96
-	vt.DecoderConfiguration.Raw = make(NALUSlice, 3)
+	vt.Video.Name = "h265"
+	vt.Video.CodecID = codec.CodecID_H265
+	vt.Video.SampleRate = 90000
+	vt.Video.Stream = stream
+	vt.Video.Init(256)
+	vt.Video.Media.Poll = time.Millisecond * 20
+	vt.Video.DecoderConfiguration.PayloadType = 96
+	vt.Video.DecoderConfiguration.Raw = make(NALUSlice, 3)
 	if config.Global.RTPReorder {
-		vt.orderQueue = make([]*RTPFrame, 20)
+		vt.Video.orderQueue = make([]*RTPFrame, 20)
 	}
 	return
 }
 func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
-	vt.Value.PTS = pts
-	vt.Value.DTS = dts
+	vt.Video.Media.RingBuffer.Value.PTS = pts
+	vt.Video.Media.RingBuffer.Value.DTS = dts
 	for _, slice := range vt.Video.WriteAnnexB(pts, dts, frame) {
-		vt.WriteSlice(slice)
+		vt.Video.WriteSlice(slice)
 	}
-	vt.Flush()
+	vt.Video.Flush()
 }
 func (vt *H265) WriteSlice(slice NALUSlice) {
 	switch slice.H265Type() {
 	case codec.NAL_UNIT_VPS:
-		vt.DecoderConfiguration.Raw[0] = slice[0]
+		vt.Video.DecoderConfiguration.Raw[0] = slice[0]
 	case codec.NAL_UNIT_SPS:
-		vt.DecoderConfiguration.Raw[1] = slice[0]
-		vt.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
-		vt.Stream.Info("h265 sps parsed", zap.Uint("width", vt.SPSInfo.Width), zap.Uint("height", vt.SPSInfo.Height))
+		vt.Video.DecoderConfiguration.Raw[1] = slice[0]
+		vt.Video.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
+		vt.Video.Stream.Info("h265 sps parsed", zap.Uint("width", vt.Video.SPSInfo.Width), zap.Uint("height", vt.Video.SPSInfo.Height))
 	case codec.NAL_UNIT_PPS:
-		vt.dcChanged = true
-		vt.DecoderConfiguration.Raw[2] = slice[0]
-		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.DecoderConfiguration.Raw[0], vt.DecoderConfiguration.Raw[1], vt.DecoderConfiguration.Raw[2])
+		vt.Video.dcChanged = true
+		vt.Video.DecoderConfiguration.Raw[2] = slice[0]
+		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.Video.DecoderConfiguration.Raw[0], vt.Video.DecoderConfiguration.Raw[1], vt.Video.DecoderConfiguration.Raw[2])
 		if err == nil {
-			vt.DecoderConfiguration.AVCC = net.Buffers{extraData}
+			vt.Video.DecoderConfiguration.AVCC = net.Buffers{extraData}
 		}
-		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
-		vt.DecoderConfiguration.Seq++
+		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.Video.DecoderConfiguration.AVCC), 0)
+		vt.Video.DecoderConfiguration.Seq++
 	case
 		codec.NAL_UNIT_CODED_SLICE_BLA,
 		codec.NAL_UNIT_CODED_SLICE_BLANT,
@@ -63,31 +63,31 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		codec.NAL_UNIT_CODED_SLICE_IDR,
 		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 		codec.NAL_UNIT_CODED_SLICE_CRA:
-		vt.Value.IFrame = true
+		vt.Video.Media.RingBuffer.Value.IFrame = true
 		fallthrough
 	case 0, 1, 2, 3, 4, 5, 6, 7, 9, codec.NAL_UNIT_SEI:
-		vt.Media.WriteSlice(slice)
+		vt.Video.Media.WriteSlice(slice)
 	default:
-		vt.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(slice.H265Type())))
+		vt.Video.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(slice.H265Type())))
 	}
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
-		vt.dcChanged = true
-		vt.DecoderConfiguration.Seq++
-		vt.DecoderConfiguration.AVCC = net.Buffers{frame}
+		vt.Video.dcChanged = true
+		vt.Video.DecoderConfiguration.Seq++
+		vt.Video.DecoderConfiguration.AVCC = net.Buffers{frame}
 		if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(frame); err == nil {
-			vt.SPSInfo, _ = codec.ParseHevcSPS(frame)
-			vt.nalulenSize = int(frame[26]) & 0x03
-			vt.DecoderConfiguration.Raw[0] = vps
-			vt.DecoderConfiguration.Raw[1] = sps
-			vt.DecoderConfiguration.Raw[2] = pps
+			vt.Video.SPSInfo, _ = codec.ParseHevcSPS(frame)
+			vt.Video.nalulenSize = int(frame[26]) & 0x03
+			vt.Video.DecoderConfiguration.Raw[0] = vps
+			vt.Video.DecoderConfiguration.Raw[1] = sps
+			vt.Video.DecoderConfiguration.Raw[2] = pps
 		}
-		vt.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.DecoderConfiguration.AVCC), 0)
+		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.Video.DecoderConfiguration.AVCC), 0)
 	} else {
 		vt.Video.WriteAVCC(ts, frame)
-		vt.Value.IFrame = frame.IsIDR()
-		vt.Flush()
+		vt.Video.Media.RingBuffer.Value.IFrame = frame.IsIDR()
+		vt.Video.Flush()
 	}
 }
 
@@ -116,7 +116,7 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 			buffer.ReadUint16()
 		}
 		for buffer.CanRead() {
-			vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
+			vt.Video.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
 			if usingDonlField {
 				buffer.ReadByte()
 			}
@@ -128,38 +128,38 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 			buffer.ReadUint16()
 		}
 		if naluType := fuHeader & 0b00111111; util.Bit1(fuHeader, 0) {
-			vt.Value.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
+			vt.Video.Media.RingBuffer.Value.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
 		}
-		lastIndex := len(vt.Value.Raw) - 1
+		lastIndex := len(vt.Video.Media.RingBuffer.Value.Raw) - 1
 		if lastIndex == -1 {
 			return
 		}
-		vt.Value.Raw[lastIndex].Append(buffer)
+		vt.Video.Media.RingBuffer.Value.Raw[lastIndex].Append(buffer)
 		if util.Bit1(fuHeader, 1) {
-			complete := vt.Value.Raw[lastIndex]     //拼接完成
-			vt.Value.Raw = vt.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
-			vt.WriteSlice(complete)
+			complete := vt.Video.Media.RingBuffer.Value.Raw[lastIndex]                            //拼接完成
+			vt.Video.Media.RingBuffer.Value.Raw = vt.Video.Media.RingBuffer.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
+			vt.Video.WriteSlice(complete)
 		}
 	default:
 		vt.WriteSlice(NALUSlice{frame.Payload})
 	}
-	vt.Value.AppendRTP(frame)
+	vt.Video.Media.RingBuffer.Value.AppendRTP(frame)
 	if frame.Marker {
-		vt.generateTimestamp()
-		vt.Flush()
+		vt.Video.generateTimestamp()
+		vt.Video.Flush()
 	}
 }
 func (vt *H265) Flush() {
-	if vt.Value.IFrame {
-		if vt.IDRing == nil {
-			defer vt.Attach()
+	if vt.Video.Media.RingBuffer.Value.IFrame {
+		if vt.Video.IDRing == nil {
+			defer vt.Video.Attach()
 		}
 		vt.Video.ComputeGOP()
 	}
 	// RTP格式补完
-	if vt.Value.RTP == nil && config.Global.EnableRTP {
+	if vt.Video.Media.RingBuffer.Value.RTP == nil && config.Global.EnableRTP {
 		var out [][]byte
-		for _, nalu := range vt.Value.Raw {
+		for _, nalu := range vt.Video.Media.RingBuffer.Value.Raw {
 			buffers := util.SplitBuffers(nalu, 1200)
 			firstBuffer := NALUSlice(buffers[0])
 			if l := len(buffers); l == 1 {
@@ -186,7 +186,7 @@ func (vt *H265) Flush() {
 				lastBuf[2] |= 1 << 6 // set end bit
 			}
 		}
-		vt.PacketizeRTP(out...)
+		vt.Video.PacketizeRTP(out...)
 	}
 	vt.Video.Flush()
 }

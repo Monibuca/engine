@@ -12,8 +12,9 @@ type AVRing[T RawSlice] struct {
 }
 
 func (r *AVRing[T]) Step() *AVFrame[T] {
-	last := &r.Value
-	current := r.MoveNext()
+
+	last := &r.RingBuffer.Value
+	current := r.RingBuffer.MoveNext()
 	current.Sequence = r.MoveCount
 	current.canRead = false
 	current.Reset()
@@ -30,13 +31,13 @@ func (r *AVRing[T]) wait() {
 }
 
 func (r *AVRing[T]) Read(ctx context.Context) (item *AVFrame[T]) {
-	for item = &r.Value; ctx.Err() == nil && !item.canRead; r.wait() {
+	for item = &r.RingBuffer.Value; ctx.Err() == nil && !item.canRead; r.wait() {
 	}
 	return
 }
 
 func (r *AVRing[T]) TryRead() (item *AVFrame[T]) {
-	if item = &r.Value; item.canRead {
+	if item = &r.RingBuffer.Value; item.canRead {
 		return
 	}
 	return nil

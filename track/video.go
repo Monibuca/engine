@@ -2,6 +2,7 @@ package track
 
 import (
 	"bytes"
+	"unsafe"
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
@@ -22,40 +23,40 @@ type Video struct {
 	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
 }
 
-func (t *Video) GetDecConfSeq() int {
-	return t.DecoderConfiguration.Seq
+func (vt *Video) GetDecConfSeq() int {
+	return vt.DecoderConfiguration.Seq
 }
-func (t *Video) Attach() {
-	t.Stream.AddTrack(t)
+func (vt *Video) Attach() {
+	vt.Stream.AddTrack(vt)
 }
-func (t *Video) Detach() {
-	t.Stream = nil
-	t.Stream.RemoveTrack(t)
+func (vt *Video) Detach() {
+	vt.Stream = nil
+	vt.Stream.RemoveTrack(vt)
 }
-func (t *Video) GetName() string {
-	if t.Name == "" {
-		return t.CodecID.String()
+func (vt *Video) GetName() string {
+	if vt.Name == "" {
+		return vt.CodecID.String()
 	}
-	return t.Name
+	return vt.Name
 }
 
-func (t *Video) ComputeGOP() {
-	t.idrCount++
-	if t.IDRing != nil {
-		t.GOP = int(t.Value.Sequence - t.IDRing.Value.Sequence)
-		if l := t.Size - t.GOP - 5; l > 5 {
-			t.Size -= l
-			t.Stream.Debug(Sprintf("resize(%d%s%d)", t.Size+l, Blink("→"), t.Size), zap.String("name", t.Name))
+func (vt *Video) ComputeGOP() {
+	vt.idrCount++
+	if vt.IDRing != nil {
+		vt.GOP = int(vt.AVRing.RingBuffer.Value.Sequence - vt.IDRing.Value.Sequence)
+		if l := vt.AVRing.RingBuffer.Size - vt.GOP - 5; l > 5 {
+			vt.AVRing.RingBuffer.Size -= l
+			vt.Stream.Debug(Sprintf("resize(%d%s%d)", vt.AVRing.RingBuffer.Size+l, Blink("→"), vt.AVRing.RingBuffer.Size), zap.String("name", vt.Name))
 			//缩小缓冲环节省内存
-			t.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
+			vt.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
 				if v.IFrame {
-					t.idrCount--
+					vt.idrCount--
 				}
 				v.Reset()
 			})
 		}
 	}
-	t.IDRing = t.Ring
+	vt.IDRing = vt.AVRing.RingBuffer.Ring
 }
 
 func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame, s *[]NALUSlice) {
@@ -92,7 +93,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
 		nalulen := util.ReadBE[int](nalus[:vt.nalulenSize])
 		if end := nalulen + vt.nalulenSize; len(nalus) >= end {
-			vt.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
+			vt.AVRing.RingBuffer.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
 			nalus = nalus[end:]
 		} else {
 			vt.Stream.Error("WriteAVCC", zap.Int("len", len(nalus)), zap.Int("naluLenSize", vt.nalulenSize), zap.Int("end", end))
@@ -103,44 +104,44 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (vt *Video) Flush() {
 	// 没有实际媒体数据
-	if len(vt.Value.Raw) == 0 {
-		vt.Value.Reset()
+	if len(vt.AVRing.RingBuffer.Value.Raw) == 0 {
+		vt.AVRing.RingBuffer.Value.Reset()
 		return
 	}
 	// AVCC格式补完
-	if len(vt.Value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+	if len(vt.AVRing.RingBuffer.Value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
 		var b util.Buffer
-		if cap(vt.Value.AVCC) > 0 {
-			if avcc := vt.Value.AVCC[:1]; len(avcc[0]) == 5 {
+		if cap(vt.AVRing.RingBuffer.Value.AVCC) > 0 {
+			if avcc := vt.AVRing.RingBuffer.Value.AVCC[:1]; len(avcc[0]) == 5 {
 				b = util.Buffer(avcc[0])
 			}
 		}
 		if b == nil {
 			b = util.Buffer([]byte{0, 1, 0, 0, 0})
 		}
-		if vt.Value.IFrame {
+		if vt.AVRing.RingBuffer.Value.IFrame {
 			b[0] = 0x10 | byte(vt.CodecID)
 		} else {
 			b[0] = 0x20 | byte(vt.CodecID)
 		}
 		// 写入CTS
-		util.PutBE(b[2:5], (vt.Value.PTS-vt.Value.DTS)/90)
-		lengths := b.Malloc(len(vt.Value.Raw) * 4) //每个slice的长度内存复用
-		vt.Value.AppendAVCC(b.SubBuf(0, 5))
-		for i, nalu := range vt.Value.Raw {
-			vt.Value.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
-			vt.Value.AppendAVCC(nalu...)
+		util.PutBE(b[2:5], (vt.AVRing.RingBuffer.Value.PTS-vt.AVRing.RingBuffer.Value.DTS)/90)
+		lengths := b.Malloc(len(vt.AVRing.RingBuffer.Value.Raw) * 4) //每个slice的长度内存复用
+		vt.AVRing.RingBuffer.Value.AppendAVCC(b.SubBuf(0, 5))
+		for i, nalu := range vt.AVRing.RingBuffer.Value.Raw {
+			vt.AVRing.RingBuffer.Value.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
+			vt.AVRing.RingBuffer.Value.AppendAVCC(nalu...)
 		}
 	}
 	// FLV tag 补完
-	if len(vt.Value.FLV) == 0 && config.Global.EnableFLV {
-		vt.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.Value.AbsTime)
+	if len(vt.AVRing.RingBuffer.Value.FLV) == 0 && config.Global.EnableFLV {
+		vt.AVRing.RingBuffer.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.AVRing.RingBuffer.Value.AbsTime)
 	}
 	// 下一帧为I帧，即将覆盖
 	if vt.Next().Value.IFrame {
 		// 仅存一枚I帧，需要扩环
 		if vt.idrCount == 1 {
-			if vt.Size < 256 {
+			if vt.AVRing.RingBuffer.Size < 256 {
 				vt.Link(util.NewRing[AVFrame[NALUSlice]](5)) // 扩大缓冲环
 			}
 		} else {
@@ -150,7 +151,7 @@ func (vt *Video) Flush() {
 	vt.Media.Flush()
 }
 func (vt *Video) PacketizeRTP(payloads ...[]byte) {
-	if vt.Value.IFrame && vt.dcChanged {
+	if vt.AVRing.RingBuffer.Value.IFrame && vt.dcChanged {
 		vt.dcChanged = false
 		payloads = append(append([][]byte{}, vt.DecoderConfiguration.Raw...), payloads...)
 	}
@@ -204,9 +205,11 @@ func (vt *UnknowVideo) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			switch codecID {
 			case codec.CodecID_H264:
-				vt.VideoTrack = NewH264(vt.Stream)
+				h264 := (*VideoTrack)(unsafe.Pointer(NewH264(vt.Stream)))
+				vt.VideoTrack = *h264
 			case codec.CodecID_H265:
-				vt.VideoTrack = NewH265(vt.Stream)
+				h265 := (*VideoTrack)(unsafe.Pointer(NewH265(vt.Stream)))
+				vt.VideoTrack = *h265
 			default:
 				vt.Stream.Error("video codecID not support: ", zap.Uint8("codeId", uint8(codecID)))
 				return
