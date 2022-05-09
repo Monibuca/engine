@@ -244,7 +244,13 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 var NoPushConfigErr = errors.New("no push config")
 
 func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
-	opt.Info("push", zap.String("path", streamPath), zap.String("url", url))
+	zp, zu := zap.String("path", streamPath), zap.String("url", url)
+	opt.Info("push", zp, zu)
+	defer func() {
+		if err != nil {
+			opt.Error("push faild", zap.Error(err))
+		}
+	}()
 	conf, ok := opt.Config.(config.PushConfig)
 	if !ok {
 		return NoPushConfigErr
@@ -262,9 +268,13 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 	}
 
 	go func() {
-		defer opt.Info("stop push", zap.String("remoteURL", url))
+		defer opt.Info("push finished", zp, zu)
 		for pusher.Reconnect() {
-			if pusher.Push(); !pusher.IsClosed() {
+			opt.Info("start push", zp, zu)
+			if err = pusher.Push(); !pusher.IsClosed() {
+				if err != nil {
+					opt.Info("stop push", zp, zu, zap.Error(err))
+				}
 				if err = pusher.Connect(); err != nil {
 					return
 				}

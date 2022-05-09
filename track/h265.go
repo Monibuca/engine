@@ -65,7 +65,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		codec.NAL_UNIT_CODED_SLICE_CRA:
 		vt.Video.Media.RingBuffer.Value.IFrame = true
 		fallthrough
-	case 0, 1, 2, 3, 4, 5, 6, 7, 9, codec.NAL_UNIT_SEI:
+	case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, codec.NAL_UNIT_SEI:
 		vt.Video.Media.WriteSlice(slice)
 	default:
 		vt.Video.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(slice.H265Type())))
@@ -177,7 +177,7 @@ func (vt *H265) Flush() {
 				}
 				out = append(out, buf)
 				for _, bufs := range buffers[1:] {
-					buf := []byte{firstByte, firstBuffer[0][1], byte(naluType) >> 1}
+					buf := []byte{firstByte, firstBuffer[0][1], byte(naluType)}
 					for _, sp := range bufs {
 						buf = append(buf, sp...)
 					}

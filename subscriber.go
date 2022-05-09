@@ -329,7 +329,7 @@ func (s *Subscriber) sendAudioDecConf() {
 
 type IPusher interface {
 	ISubscriber
-	Push()
+	Push() error
 	Connect() error
 	init(string, string, *config.Push)
 	Reconnect() bool
