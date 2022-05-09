@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -70,20 +69,21 @@ func WaitStream(streamPath string, waitTimeout time.Duration) (s *Stream) {
 	}
 	TriggerHook(HOOK_ONDEMAND_PUBLISH, streamPath)
 	c2 := make(chan string, 1)
-	//defer c2.close()
+	defer close(c2)
 	go func() {
 		for {
 			if s = FindStream(streamPath); s != nil {
 				c2 <- "done"
+				break
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 	select {
 	case res := <-c2:
-		fmt.Println(streamPath + " '" + res + "'")
+		utils.Println(streamPath + " is published OnDemand '" + res + "'")
 	case <-time.After(waitTimeout):
-		fmt.Println("timeout 2")
+		//fmt.Println("timeout 2")
 	}
 	return s
 }
