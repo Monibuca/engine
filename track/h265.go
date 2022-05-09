@@ -157,6 +157,7 @@ func (vt *H265) Flush() {
 		vt.Video.ComputeGOP()
 	}
 	// RTP格式补完
+	// H265打包： https://blog.csdn.net/fanyun_01/article/details/114234290
 	if vt.Video.Media.RingBuffer.Value.RTP == nil && config.Global.EnableRTP {
 		var out [][]byte
 		for _, nalu := range vt.Video.Media.RingBuffer.Value.Raw {
@@ -167,7 +168,7 @@ func (vt *H265) Flush() {
 			} else {
 				naluType := firstBuffer.H265Type()
 				firstByte := (byte(codec.NAL_UNIT_RTP_FU) << 1) | (firstBuffer[0][0] & 0b10000001)
-				buf := []byte{firstByte, firstBuffer[0][1], (1 << 7) | (byte(naluType) >> 1)}
+				buf := []byte{firstByte, firstBuffer[0][1], (1 << 7) | byte(naluType)}
 				for i, sp := range firstBuffer {
 					if i == 0 {
 						sp = sp[2:]
