@@ -2,7 +2,6 @@ package track
 
 import (
 	"bytes"
-	"unsafe"
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
@@ -205,11 +204,9 @@ func (vt *UnknowVideo) WriteAVCC(ts uint32, frame AVCCFrame) {
 			}
 			switch codecID {
 			case codec.CodecID_H264:
-				h264 := (*VideoTrack)(unsafe.Pointer(NewH264(vt.Stream)))
-				vt.VideoTrack = *h264
+				vt.VideoTrack = NewH264(vt.Stream)
 			case codec.CodecID_H265:
-				h265 := (*VideoTrack)(unsafe.Pointer(NewH265(vt.Stream)))
-				vt.VideoTrack = *h265
+				vt.VideoTrack = NewH265(vt.Stream)
 			default:
 				vt.Stream.Error("video codecID not support: ", zap.Uint8("codeId", uint8(codecID)))
 				return

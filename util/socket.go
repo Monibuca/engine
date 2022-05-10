@@ -62,15 +62,17 @@ func ListenUDP(address string, networkBuffer int) (*net.UDPConn, error) {
 	}
 	return conn, err
 }
-
+// CORS 加入跨域策略头包含CORP
 func CORS(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		header := w.Header()
+		header.Set("Access-Control-Allow-Credentials", "true")
+		header.Set("Cross-Origin-Resource-Policy", "cross-origin")
 		origin := r.Header["Origin"]
 		if len(origin) == 0 {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			header.Set("Access-Control-Allow-Origin", "*")
 		} else {
-			w.Header().Set("Access-Control-Allow-Origin", origin[0])
+			header.Set("Access-Control-Allow-Origin", origin[0])
 		}
 		if next != nil {
 			next.ServeHTTP(w, r)

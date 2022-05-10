@@ -35,9 +35,9 @@ func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	vt.Video.Media.RingBuffer.Value.PTS = pts
 	vt.Video.Media.RingBuffer.Value.DTS = dts
 	for _, slice := range vt.Video.WriteAnnexB(pts, dts, frame) {
-		vt.Video.WriteSlice(slice)
+		vt.WriteSlice(slice)
 	}
-	vt.Video.Flush()
+	vt.Flush()
 }
 func (vt *H265) WriteSlice(slice NALUSlice) {
 	switch slice.H265Type() {
@@ -87,7 +87,7 @@ func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 	} else {
 		vt.Video.WriteAVCC(ts, frame)
 		vt.Video.Media.RingBuffer.Value.IFrame = frame.IsIDR()
-		vt.Video.Flush()
+		vt.Flush()
 	}
 }
 
@@ -116,7 +116,7 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 			buffer.ReadUint16()
 		}
 		for buffer.CanRead() {
-			vt.Video.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
+			vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
 			if usingDonlField {
 				buffer.ReadByte()
 			}
@@ -138,7 +138,7 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 		if util.Bit1(fuHeader, 1) {
 			complete := vt.Video.Media.RingBuffer.Value.Raw[lastIndex]                            //拼接完成
 			vt.Video.Media.RingBuffer.Value.Raw = vt.Video.Media.RingBuffer.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
-			vt.Video.WriteSlice(complete)
+			vt.WriteSlice(complete)
 		}
 	default:
 		vt.WriteSlice(NALUSlice{frame.Payload})
@@ -146,7 +146,7 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 	vt.Video.Media.RingBuffer.Value.AppendRTP(frame)
 	if frame.Marker {
 		vt.Video.generateTimestamp()
-		vt.Video.Flush()
+		vt.Flush()
 	}
 }
 func (vt *H265) Flush() {
