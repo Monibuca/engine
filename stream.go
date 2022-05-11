@@ -268,11 +268,7 @@ func (s *Stream) run() {
 			if ok {
 				switch v := action.(type) {
 				case *util.Promise[IPublisher, struct{}]:
-					oldPublisher := s.Publisher
 					s.Publisher = v.Value
-					if oldPublisher == nil {
-						oldPublisher = v.Value
-					}
 					if s.action(ACTION_PUBLISH) {
 						io := v.Value.GetIO()
 						io.Spesic = v.Value
@@ -282,7 +278,6 @@ func (s *Stream) run() {
 						if io.ID != "" {
 							io.Logger = io.Logger.With(zap.String("ID", io.ID))
 						}
-						v.Value.OnEvent(oldPublisher) // 发出成功发布事件
 						v.Resolve(util.Null)
 						for _, p := range waitP {
 							p.Resolve(util.Null)
@@ -329,9 +324,6 @@ func (s *Stream) run() {
 					} else {
 						waitP = append(waitP, v)
 					}
-					suber.OnEvent(suber) // 订阅成功事件
-					EventBus <- suber    // 全局广播
-					v.Resolve(util.Null)
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)
 					}

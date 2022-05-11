@@ -125,6 +125,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
 	}
 	if v, ok := c.(*config.Publish); ok {
+		oldPublisher := s.Publisher
 		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
@@ -136,8 +137,25 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		}
 		s.PublishTimeout = util.Second2Duration(v.PublishTimeout)
 		s.WaitCloseTimeout = util.Second2Duration(v.WaitCloseTimeout)
-	} else if create {
-		EventBus <- s //通知发布者按需拉流
+		defer func() {
+			if err != nil {
+				if oldPublisher == nil {
+					specific.OnEvent(specific)
+				} else {
+					specific.OnEvent(oldPublisher)
+				}
+			}
+		}()
+	} else {
+		if create {
+			EventBus <- s // 通知发布者按需拉流
+		}
+		EventBus <- specific    // 全局广播订阅事件
+		defer func() {
+			if err != nil {
+				specific.OnEvent(specific)
+			}
+		}()
 	}
 	if promise := util.NewPromise[S, struct{}](specific); s.Receive(promise) {
 		return promise.Catch()
