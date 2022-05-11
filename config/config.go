@@ -1,11 +1,9 @@
 package config
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -88,13 +86,13 @@ func (config Config) Unmarshal(s any) {
 			}
 			child.Unmarshal(fv)
 		} else {
-			// 修复类型为Uint16的反射序列化问题。
 			switch fv.Type().Kind() {
-			case reflect.Uint16:
-				val := fmt.Sprintf("%d", value)
-				uintVal, _ := strconv.Atoi(val)
-				fv.SetUint(uint64(uintVal))
-				break
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				fv.SetUint(value.Uint())
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				fv.SetInt(value.Int())
+			case reflect.Float32, reflect.Float64:
+				fv.SetFloat(value.Float())
 			default:
 				fv.Set(value)
 			}

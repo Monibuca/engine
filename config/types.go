@@ -121,7 +121,7 @@ func (cfg *Engine) OnEvent(event any) {
 					time.Sleep(time.Second * 5)
 					continue
 				}
-				err = wsutil.WriteClientMessage(conn, ws.OpText, []byte(cfg.Secret))
+				err = wsutil.WriteClientMessage(conn, ws.OpText, []byte(`{"command":"init","secret":"123456"}`))
 				if err != nil {
 					time.Sleep(time.Second * 5)
 					continue
@@ -152,5 +152,5 @@ var Global = &Engine{
 	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	false, true, true, true, "wss://console.monibuca.com:8080", "",
+	false, true, true, true, "wss://console.monibuca.com", "",
 }
