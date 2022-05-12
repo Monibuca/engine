@@ -27,7 +27,7 @@ func (lr *LockRing[T]) Init(n int) *LockRing[T] {
 }
 
 func (rb *LockRing[T]) Read() *DataFrame[T] {
-	current := rb.Value
+	current := &rb.Value
 	current.RLock()
 	defer current.RUnlock()
 	return &current.DataFrame

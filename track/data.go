@@ -29,7 +29,6 @@ func (dt *Data) Push(data any) {
 		defer dt.Unlock()
 	}
 	dt.Write(data)
-	dt.Step()
 }
 
 func (d *Data) Play(ctx context.Context, onData func(any) error) error {
