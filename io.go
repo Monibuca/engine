@@ -138,7 +138,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		s.PublishTimeout = util.Second2Duration(v.PublishTimeout)
 		s.WaitCloseTimeout = util.Second2Duration(v.WaitCloseTimeout)
 		defer func() {
-			if err != nil {
+			if err == nil {
 				if oldPublisher == nil {
 					specific.OnEvent(specific)
 				} else {
@@ -152,7 +152,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		}
 		EventBus <- specific    // 全局广播订阅事件
 		defer func() {
-			if err != nil {
+			if err == nil {
 				specific.OnEvent(specific)
 			}
 		}()
