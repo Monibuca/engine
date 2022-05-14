@@ -1,8 +1,13 @@
 package engine
 
 import (
+	"io"
+
+	"go.uber.org/zap"
+	"m7s.live/engine/v4/codec/mpegts"
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/track"
 )
 
 type IPublisher interface {
@@ -43,8 +48,9 @@ func (p *Publisher) OnEvent(event any) {
 			p.AudioTrack = v.getAudioTrack()
 			p.VideoTrack = v.getVideoTrack()
 		}
+	default:
+		p.IO.OnEvent(event)
 	}
-	p.IO.OnEvent(event)
 }
 
 type IPuller interface {
@@ -65,4 +71,77 @@ func (pub *Puller) Reconnect() (ok bool) {
 	ok = pub.Config.RePull == -1 || pub.ReConnectCount <= pub.Config.RePull
 	pub.ReConnectCount++
 	return
+}
+
+type TSPublisher struct {
+	Publisher
+	*mpegts.MpegTsStream
+	adts []byte
+}
+
+func (t *TSPublisher) OnEvent(event any) {
+	switch v := event.(type) {
+	case IPublisher:
+		t.MpegTsStream = mpegts.NewMpegTsStream()
+		if !t.Equal(v) {
+			t.AudioTrack = v.getAudioTrack()
+			t.VideoTrack = v.getVideoTrack()
+		}
+	case io.Reader:
+		t.Feed(v, t.OnPmtStream, t.OnPES)
+	default:
+		t.Publisher.OnEvent(event)
+	}
+}
+
+func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
+	switch s.StreamType {
+	case mpegts.STREAM_TYPE_H264:
+		if t.VideoTrack == nil {
+			t.VideoTrack = track.NewH264(t.Stream)
+		}
+	case mpegts.STREAM_TYPE_H265:
+		if t.VideoTrack == nil {
+			t.VideoTrack = track.NewH265(t.Stream)
+		}
+	case mpegts.STREAM_TYPE_AAC:
+		if t.AudioTrack == nil {
+			t.AudioTrack = track.NewAAC(t.Stream)
+		}
+	default:
+		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))
+	}
+}
+
+func (t *TSPublisher) OnPES(pes mpegts.MpegTsPESPacket) {
+	if pes.Header.Dts == 0 {
+		pes.Header.Dts = pes.Header.Pts
+	}
+	switch pes.Header.StreamID & 0xF0 {
+	case mpegts.STREAM_ID_AUDIO:
+		if t.AudioTrack != nil {
+			if t.adts == nil {
+				t.adts = append(t.adts, pes.Payload[:7]...)
+				t.AudioTrack.WriteADTS(t.adts)
+			}
+			t.AudioTrack.CurrentFrame().PTS = uint32(pes.Header.Pts)
+			t.AudioTrack.CurrentFrame().DTS = uint32(pes.Header.Dts)
+			for remainLen := len(pes.Payload); remainLen > 0; {
+				// AACFrameLength(13)
+				// xx xxxxxxxx xxx
+				frameLen := (int(pes.Payload[3]&3) << 11) | (int(pes.Payload[4]) << 3) | (int(pes.Payload[5]) >> 5)
+				if frameLen > remainLen {
+					break
+				}
+				t.AudioTrack.WriteSlice(pes.Payload[7:frameLen])
+				pes.Payload = pes.Payload[frameLen:remainLen]
+				remainLen -= frameLen
+				t.AudioTrack.Flush()
+			}
+		}
+	case mpegts.STREAM_ID_VIDEO:
+		if t.VideoTrack != nil {
+			t.VideoTrack.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), pes.Payload)
+		}
+	}
 }

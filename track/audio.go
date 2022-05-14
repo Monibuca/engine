@@ -60,10 +60,11 @@ func (a *Audio) WriteADTS(adts []byte) {
 	a.DecoderConfiguration = DecoderConfiguration[AudioSlice]{
 		97,
 		net.Buffers{avcc},
-		avcc[:2],
+		avcc[2:],
 		net.Buffers{adcflv1, avcc, adcflv2},
 		0,
 	}
+	a.Attach()
 }
 
 func (a *Audio) Flush() {
