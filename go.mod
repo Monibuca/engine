@@ -7,7 +7,7 @@ require (
 	github.com/gobwas/ws v1.1.0
 	github.com/google/uuid v1.3.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
-	github.com/pion/rtp/v2 v2.0.0-20220302185659-b3d10fc096b0
+	github.com/pion/rtp v1.6.2
 	github.com/q191201771/naza v0.19.1
 	github.com/shirou/gopsutil/v3 v3.22.1
 	go.uber.org/zap v1.21.0
