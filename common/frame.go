@@ -4,7 +4,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -126,7 +126,7 @@ type AVFrame[T RawSlice] struct {
 	FLV     net.Buffers // 打包好的FLV Tag
 	AVCC    net.Buffers // 打包好的AVCC格式
 	RTP     []*RTPFrame
-	Raw     []T    // 裸数据
+	Raw     []T // 裸数据
 	canRead bool
 }
 

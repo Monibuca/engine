@@ -3,7 +3,7 @@ package common
 import (
 	"time"
 
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 )
 
 type Track interface {
