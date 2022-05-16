@@ -79,6 +79,10 @@ type TSPublisher struct {
 	adts []byte
 }
 
+func (t *TSPublisher) Feed(r io.Reader) error {
+	return t.MpegTsStream.Feed(r, t.OnPmtStream, t.OnPES)
+}
+
 func (t *TSPublisher) OnEvent(event any) {
 	switch v := event.(type) {
 	case IPublisher:
@@ -87,8 +91,6 @@ func (t *TSPublisher) OnEvent(event any) {
 			t.AudioTrack = v.getAudioTrack()
 			t.VideoTrack = v.getVideoTrack()
 		}
-	case io.Reader:
-		t.Feed(v, t.OnPmtStream, t.OnPES)
 	default:
 		t.Publisher.OnEvent(event)
 	}

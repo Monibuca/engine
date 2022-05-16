@@ -14,9 +14,24 @@ import (
 type Base struct {
 	Name   string
 	Stream IStream `json:"-"`
-	BPS
+	ts     time.Time
+	bytes  int
+	frames int
+	BPS    int
+	FPS    int
 }
 
+func (bt *Base) ComputeBPS(bytes int) {
+	bt.bytes += bytes
+	bt.frames++
+	if elapse := time.Since(bt.ts).Seconds(); elapse > 1 {
+		bt.BPS = bt.bytes / int(elapse)
+		bt.FPS = bt.frames / int(elapse)
+		bt.bytes = 0
+		bt.frames = 0
+		bt.ts = time.Now()
+	}
+}
 func (bt *Base) GetName() string {
 	return bt.Name
 }

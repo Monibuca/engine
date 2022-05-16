@@ -18,7 +18,7 @@ func NewG711(stream IStream, alaw bool) (g711 *G711) {
 		g711.CodecID = codec.CodecID_PCMU
 	}
 	g711.Init(32)
-	g711.Poll = time.Millisecond * 20
+	g711.Poll = time.Millisecond * 10
 	g711.DecoderConfiguration.PayloadType = 97
 	if config.Global.RTPReorder {
 		g711.orderQueue = make([]*RTPFrame, 20)
