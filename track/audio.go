@@ -105,13 +105,13 @@ func (ua *UnknowAudio) Flush() {
 func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if ua.AudioTrack == nil {
 		codecID := frame.AudioCodecID()
-		if ua.Name == "" {
-			ua.Name = codecID.String()
-		}
 		switch codecID {
 		case codec.CodecID_AAC:
-			if !frame.IsSequence() {
+			if !frame.IsSequence() || len(frame) < 4 {
 				return
+			}
+			if ua.Name == "" {
+				ua.Name = codecID.String()
 			}
 			a := NewAAC(ua.Stream)
 			ua.AudioTrack = a
@@ -120,6 +120,9 @@ func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
 			a.WriteAVCC(0, frame)
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
+			if ua.Name == "" {
+				ua.Name = codecID.String()
+			}
 			alaw := true
 			if codecID == codec.CodecID_PCMU {
 				alaw = false
