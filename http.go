@@ -21,6 +21,18 @@ func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 	util.ReturnJson(summary.collect, time.Second, rw, r)
 }
 
+func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
+	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
+		if s := Streams.Get(streamPath); s != nil {
+			json.NewEncoder(rw).Encode(s)
+		} else {
+			http.Error(rw, "no such stream", http.StatusNotFound)
+		}
+	} else {
+		http.Error(rw, "no streamPath", http.StatusBadRequest)
+	}
+}
+
 func (conf *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(rw).Encode(&struct {
 		Version   string

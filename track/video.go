@@ -162,19 +162,6 @@ func (vt *Video) ReadRing() *AVRing[NALUSlice] {
 	return vr
 }
 
-type UnknowVideo struct {
-	Base
-	VideoTrack
-}
-
-func (uv *UnknowVideo) GetName() string {
-	return uv.Base.GetName()
-}
-
-func (uv *UnknowVideo) Flush() {
-	uv.VideoTrack.Flush()
-}
-
 /*
 Access Unit的首个nalu是4字节起始码。
 这里举个例子说明，用JM可以生成这样一段码流（不要使用JM8.6，它在这部分与标准不符），这个码流可以见本楼附件：
@@ -190,32 +177,3 @@ Access Unit的首个nalu是4字节起始码。
 I0(slice0)是序列第一帧（I帧）的第一个slice，是当前Access Unit的首个nalu，所以是4字节头。而I0(slice1)表示第一帧的第二个slice，所以是3字节头。P1(slice0) 、P1(slice1)同理。
 
 */
-func (vt *UnknowVideo) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
-
-}
-
-func (vt *UnknowVideo) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if vt.VideoTrack == nil {
-		if frame.IsSequence() {
-			ts = 0
-			codecID := frame.VideoCodecID()
-			if vt.Name == "" {
-				vt.Name = codecID.String()
-			}
-			switch codecID {
-			case codec.CodecID_H264:
-				vt.VideoTrack = NewH264(vt.Stream)
-			case codec.CodecID_H265:
-				vt.VideoTrack = NewH265(vt.Stream)
-			default:
-				vt.Stream.Error("video codecID not support: ", zap.Uint8("codeId", uint8(codecID)))
-				return
-			}
-			vt.VideoTrack.WriteAVCC(ts, frame)
-		} else {
-			vt.Stream.Warn("need sequence frame")
-		}
-	} else {
-		vt.VideoTrack.WriteAVCC(ts, frame)
-	}
-}

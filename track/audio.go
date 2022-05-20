@@ -3,7 +3,6 @@ package track
 import (
 	"net"
 
-	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -87,60 +86,4 @@ func (a *Audio) Flush() {
 		a.PacketizeRTP(o)
 	}
 	a.Media.Flush()
-}
-
-type UnknowAudio struct {
-	Base
-	AudioTrack
-}
-
-func (ua *UnknowAudio) GetName() string {
-	return ua.Base.GetName()
-}
-
-func (ua *UnknowAudio) Flush() {
-	ua.AudioTrack.Flush()
-}
-
-func (ua *UnknowAudio) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if ua.AudioTrack == nil {
-		codecID := frame.AudioCodecID()
-		switch codecID {
-		case codec.CodecID_AAC:
-			if !frame.IsSequence() || len(frame) < 4 {
-				return
-			}
-			if ua.Name == "" {
-				ua.Name = codecID.String()
-			}
-			a := NewAAC(ua.Stream)
-			ua.AudioTrack = a
-			a.SampleSize = 16
-			a.AVCCHead = []byte{frame[0], 1}
-			a.WriteAVCC(0, frame)
-		case codec.CodecID_PCMA,
-			codec.CodecID_PCMU:
-			if ua.Name == "" {
-				ua.Name = codecID.String()
-			}
-			alaw := true
-			if codecID == codec.CodecID_PCMU {
-				alaw = false
-			}
-			a := NewG711(ua.Stream, alaw)
-			ua.AudioTrack = a
-			a.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
-			a.SampleSize = 16
-			if frame[0]&0x02 == 0 {
-				a.SampleSize = 8
-			}
-			a.Channels = frame[0]&0x01 + 1
-			a.AVCCHead = frame[:1]
-			ua.AudioTrack.WriteAVCC(ts, frame)
-		default:
-			ua.Stream.Error("audio codec not support yet", zap.Uint8("codecId", uint8(codecID)))
-		}
-	} else {
-		ua.AudioTrack.WriteAVCC(ts, frame)
-	}
 }

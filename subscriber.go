@@ -138,7 +138,7 @@ func (s *Subscriber) AddTrack(t Track) bool {
 	default:
 		return false
 	}
-	s.Info("track+1", zap.String("name", t.GetName()))
+	s.Info("track+1", zap.String("name", t.GetBase().Name))
 	return true
 }
 
@@ -335,7 +335,7 @@ type IPusher interface {
 	Reconnect() bool
 }
 type Pusher struct {
-	Client[config.Push]
+	ClientIO[config.Push]
 }
 
 // 是否需要重连

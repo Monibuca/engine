@@ -6,8 +6,40 @@ import (
 	"github.com/pion/rtp"
 )
 
+// Base 基础Track类
+type Base struct {
+	Name   string
+	Stream IStream `json:"-"`
+	ts     time.Time
+	bytes  int
+	frames int
+	BPS    int
+	FPS    int
+}
+
+func (bt *Base) ComputeBPS(bytes int) {
+	bt.bytes += bytes
+	bt.frames++
+	if elapse := time.Since(bt.ts).Seconds(); elapse > 1 {
+		bt.BPS = bt.bytes / int(elapse)
+		bt.FPS = bt.frames / int(elapse)
+		bt.bytes = 0
+		bt.frames = 0
+		bt.ts = time.Now()
+	}
+}
+
+func (bt *Base) GetBase() *Base {
+	return bt
+}
+
+func (bt *Base) Flush(bf *BaseFrame) {
+	bt.ComputeBPS(bf.BytesIn)
+	bf.Timestamp = time.Now()
+}
+
 type Track interface {
-	GetName() string
+	GetBase() *Base
 	LastWriteTime() time.Time
 }
 
@@ -37,4 +69,3 @@ type AudioTrack interface {
 	WriteSlice(AudioSlice)
 	WriteADTS([]byte)
 }
-

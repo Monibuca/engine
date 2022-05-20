@@ -37,7 +37,7 @@ type Summary struct {
 		Usage float64
 	}
 	NetWork     []NetWorkInfo
-	Streams     []*Stream
+	Streams     []StreamSummay
 	lastNetWork []net.IOCountersStat
 	ref         int32
 }
@@ -62,6 +62,7 @@ func (s *Summary) Start() {
 func (s *Summary) Point() *Summary {
 	return s
 }
+
 // Running 是否正在采集数据
 func (s *Summary) Running() bool {
 	return s.ref > 0
@@ -87,7 +88,7 @@ func (s *Summary) Report(slave *Summary) {
 	children.Set(slave.Address, slave)
 }
 
-func (s *Summary) collect() *Summary{
+func (s *Summary) collect() *Summary {
 	v, _ := mem.VirtualMemory()
 	d, _ := disk.Usage("/")
 	nv, _ := net.IOCounters(true)
@@ -107,9 +108,9 @@ func (s *Summary) collect() *Summary{
 	s.NetWork = []NetWorkInfo{}
 	for i, n := range nv {
 		info := NetWorkInfo{
-			Name: n.Name,
+			Name:    n.Name,
 			Receive: n.BytesRecv,
-			Sent: n.BytesSent,
+			Sent:    n.BytesSent,
 		}
 		if s.lastNetWork != nil && len(s.lastNetWork) > i {
 			info.ReceiveSpeed = n.BytesRecv - s.lastNetWork[i].BytesRecv
@@ -118,6 +119,9 @@ func (s *Summary) collect() *Summary{
 		s.NetWork = append(s.NetWork, info)
 	}
 	s.lastNetWork = nv
-	s.Streams = Streams.ToList()
+	s.Streams = nil
+	Streams.Range(func(ss *Stream) {
+		s.Streams = append(s.Streams, ss.Summary())
+	})
 	return s
 }

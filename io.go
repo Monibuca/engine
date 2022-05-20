@@ -21,6 +21,7 @@ type ClientConfig interface {
 	config.Pull | config.Push
 }
 
+// 发布者或者订阅者的共用结构体
 type IO[C IOConfig, S IIO] struct {
 	ID                 string
 	Type               string
@@ -150,7 +151,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		if create {
 			EventBus <- s // 通知发布者按需拉流
 		}
-		EventBus <- specific    // 全局广播订阅事件
+		EventBus <- specific // 全局广播订阅事件
 		defer func() {
 			if err == nil {
 				specific.OnEvent(specific)
@@ -162,15 +163,15 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 	}
 	return StreamIsClosedErr
 }
-
-type Client[C ClientConfig] struct {
+// ClientIO 作为Client角色(Puller，Pusher)的公共结构体
+type ClientIO[C ClientConfig] struct {
 	Config         *C
 	StreamPath     string // 本地流标识
 	RemoteURL      string // 远程服务器地址（用于推拉）
 	ReConnectCount int    //重连次数
 }
 
-func (c *Client[C]) init(streamPath string, url string, conf *C) {
+func (c *ClientIO[C]) init(streamPath string, url string, conf *C) {
 	c.Config = conf
 	c.StreamPath = streamPath
 	c.RemoteURL = url

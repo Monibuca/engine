@@ -88,7 +88,7 @@ func (config Config) Unmarshal(s any) {
 		} else {
 			switch fv.Type().Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				fv.SetUint(value.Uint())
+				fv.SetUint(uint64(value.Int()))
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				fv.SetInt(value.Int())
 			case reflect.Float32, reflect.Float64:

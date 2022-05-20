@@ -2,6 +2,7 @@ package config
 
 import (
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,8 +28,13 @@ type Record struct {
 	AutoRecord    bool
 	Filter        string
 	filterReg     *regexp.Regexp
+	fs            http.Handler
 	CreateFileFn  func(filename string, append bool) (FileWr, error) `yaml:"-"`
 	GetDurationFn func(file io.ReadSeeker) uint32                    `yaml:"-"`
+}
+
+func (r *Record) ServeHTTP (w http.ResponseWriter, req *http.Request) {
+	r.fs.ServeHTTP(w, req)
 }
 
 func (r *Record) NeedRecord(streamPath string) bool {
@@ -40,6 +46,7 @@ func (r *Record) Init() {
 	if r.Filter != "" {
 		r.filterReg = regexp.MustCompile(r.Filter)
 	}
+	r.fs = http.FileServer(http.Dir(r.Path))
 	r.CreateFileFn = func(filename string, append bool) (file FileWr, err error) {
 		filePath := filepath.Join(r.Path, filename)
 		flag := os.O_CREATE

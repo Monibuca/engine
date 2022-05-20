@@ -137,6 +137,32 @@ type Stream struct {
 	AppName     string
 	StreamName  string
 }
+type StreamSummay struct {
+	Path        string
+	State       StreamState
+	Subscribers int
+	Tracks      []string
+	StartTime   int64
+	Type        string
+	BPS         int
+}
+
+// Summary 返回流的简要信息
+func (s *Stream) Summary() (r StreamSummay) {
+	if s.Publisher != nil {
+		r.Type = s.Publisher.GetIO().Type
+	}
+	//TODO: Lock
+	for _, t := range s.Tracks {
+		r.BPS += t.GetBase().BPS
+		r.Tracks = append(r.Tracks, t.GetBase().Name)
+	}
+	r.Path = s.Path
+	r.State = s.State
+	r.Subscribers = len(s.Subscribers)
+	r.StartTime = s.StartTime.Unix()
+	return
+}
 
 func (s *Stream) SSRC() uint32 {
 	return uint32(uintptr(unsafe.Pointer(s)))
@@ -329,14 +355,14 @@ func (s *Stream) run() {
 						s.action(ACTION_FIRSTENTER)
 					}
 				case Track:
-					name := v.GetName()
+					name := v.GetBase().Name
 					if _, ok := s.Tracks[name]; !ok {
 						s.Tracks[name] = v
 						s.Info("track +1", zap.String("name", name))
 						s.broadcast(v)
 					}
 				case TrackRemoved:
-					name := v.GetName()
+					name := v.GetBase().Name
 					if t, ok := s.Tracks[name]; ok {
 						s.Info("track -1", zap.String("name", name))
 						delete(s.Tracks, name)
@@ -378,19 +404,6 @@ type TrackRemoved struct {
 
 func (s *Stream) RemoveTrack(t Track) {
 	s.Receive(TrackRemoved{t})
-}
-
-// 如果暂时不知道编码格式可以用这个
-func (r *Stream) NewVideoTrack() (vt *track.UnknowVideo) {
-	vt = &track.UnknowVideo{}
-	vt.Stream = r
-	return
-}
-
-func (r *Stream) NewAudioTrack() (at *track.UnknowAudio) {
-	at = &track.UnknowAudio{}
-	at.Stream = r
-	return
 }
 
 func (r *Stream) NewDataTrack(locker sync.Locker) (dt *track.Data) {
