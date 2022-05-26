@@ -11,6 +11,11 @@ import (
 
 func NewG711(stream IStream, alaw bool) (g711 *G711) {
 	g711 = &G711{}
+	if alaw {
+		g711.Name = "pcma"
+	} else {
+		g711.Name = "pcmu"
+	}
 	g711.Stream = stream
 	if alaw {
 		g711.CodecID = codec.CodecID_PCMA

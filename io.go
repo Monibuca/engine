@@ -126,6 +126,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
 	}
 	if v, ok := c.(*config.Publish); ok {
+		io.Type = strings.TrimSuffix(io.Type, "Publisher")
 		oldPublisher := s.Publisher
 		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
@@ -148,6 +149,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 			}
 		}()
 	} else {
+		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		if create {
 			EventBus <- s // 通知发布者按需拉流
 		}

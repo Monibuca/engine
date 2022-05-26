@@ -46,7 +46,6 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 	case codec.NAL_UNIT_SPS:
 		vt.Video.DecoderConfiguration.Raw[1] = slice[0]
 		vt.Video.SPSInfo, _ = codec.ParseHevcSPS(slice[0])
-		vt.Video.Stream.Info("h265 sps parsed", zap.Uint("width", vt.Video.SPSInfo.Width), zap.Uint("height", vt.Video.SPSInfo.Height))
 	case codec.NAL_UNIT_PPS:
 		vt.Video.dcChanged = true
 		vt.Video.DecoderConfiguration.Raw[2] = slice[0]
@@ -54,7 +53,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		if err == nil {
 			vt.Video.DecoderConfiguration.AVCC = net.Buffers{extraData}
 		}
-		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.Video.DecoderConfiguration.AVCC), 0)
+		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(vt.Video.DecoderConfiguration.AVCC, 0)
 		vt.Video.DecoderConfiguration.Seq++
 	case
 		codec.NAL_UNIT_CODED_SLICE_BLA,

@@ -86,7 +86,9 @@ func Run(ctx context.Context, configFile string) (err error) {
 		select {
 		case event := <-EventBus:
 			for _, plugin := range Plugins {
-				plugin.Config.OnEvent(event)
+				if plugin.RawConfig["enable"] != false {
+					plugin.Config.OnEvent(event)
+				}
 			}
 		case <-ctx.Done():
 			return
