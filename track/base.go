@@ -31,7 +31,11 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
 	if 过快毫秒 := 数据时间差 - 实际时间差; 过快毫秒 > time.Millisecond*100 {
 		// println("休息", 过快毫秒/time.Millisecond, 绝对时间戳, p.起始时间戳)
-		time.Sleep(过快毫秒)
+		if 过快毫秒 > time.Millisecond*500 {
+			time.Sleep(time.Millisecond*500)
+		} else {
+			time.Sleep(过快毫秒)
+		}
 	}
 }
 
@@ -169,24 +173,26 @@ func (av *Media[T]) WriteSlice(slice T) {
 }
 
 func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
+	curValue := &av.AVRing.RingBuffer.Value
 	cts := frame.CTS()
-	av.AVRing.RingBuffer.Value.BytesIn = len(frame)
-	av.AVRing.RingBuffer.Value.AppendAVCC(frame)
-	av.AVRing.RingBuffer.Value.DTS = ts * 90
-	av.AVRing.RingBuffer.Value.PTS = (ts + cts) * 90
+	curValue.BytesIn = len(frame)
+	curValue.AppendAVCC(frame)
+	curValue.DTS = ts * 90
+	curValue.PTS = (ts + cts) * 90
 	// av.Stream.Tracef("WriteAVCC:ts %d,cts %d,len %d", ts, cts, len(frame))
 }
 
 func (av *Media[T]) Flush() {
+	curValue := &av.AVRing.RingBuffer.Value
 	preValue := av.AVRing.RingBuffer.PreValue()
 	if av.起始时间.IsZero() {
-		av.重置(av.AVRing.RingBuffer.Value.AbsTime)
+		av.重置(curValue.AbsTime)
 	} else {
-		av.AVRing.RingBuffer.Value.DeltaTime = (av.AVRing.RingBuffer.Value.DTS - preValue.DTS) / 90
-		av.AVRing.RingBuffer.Value.AbsTime = preValue.AbsTime + av.AVRing.RingBuffer.Value.DeltaTime
+		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
+		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
 	}
-	av.Base.Flush(&av.AVRing.RingBuffer.Value.BaseFrame)
-	av.控制流速(av.AVRing.RingBuffer.Value.AbsTime)
+	av.Base.Flush(&curValue.BaseFrame)
+	av.控制流速(curValue.AbsTime)
 	av.Step()
 }
 

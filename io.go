@@ -100,8 +100,6 @@ var StreamIsClosedErr = errors.New("Stream Is Closed")
 
 // receive 用于接收发布或者订阅
 func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
-	Streams.Lock()
-	defer Streams.Unlock()
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
@@ -117,7 +115,9 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
+	Streams.Lock()
 	s, create := findOrCreateStream(u.Path, wt)
+	Streams.Unlock()
 	if s == nil {
 		return BadNameErr
 	}
@@ -165,6 +165,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 	}
 	return StreamIsClosedErr
 }
+
 // ClientIO 作为Client角色(Puller，Pusher)的公共结构体
 type ClientIO[C ClientConfig] struct {
 	Config         *C

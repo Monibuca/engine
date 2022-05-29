@@ -29,6 +29,7 @@ func NewH265(stream IStream) (vt *H265) {
 	if config.Global.RTPReorder {
 		vt.Video.orderQueue = make([]*RTPFrame, 20)
 	}
+	vt.dtsEst = NewDTSEstimator()
 	return
 }
 func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
@@ -105,6 +106,7 @@ func (vt *H265) WriteRTP(raw []byte) {
 }
 
 func (vt *H265) writeRTPFrame(frame *RTPFrame) {
+	rv := &vt.Video.Media.RingBuffer.Value
 	// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
 	var usingDonlField bool
 	var buffer = util.Buffer(frame.Payload)
@@ -127,24 +129,24 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 			buffer.ReadUint16()
 		}
 		if naluType := fuHeader & 0b00111111; util.Bit1(fuHeader, 0) {
-			vt.Video.Media.RingBuffer.Value.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
+			rv.AppendRaw(NALUSlice{[]byte{first3[0]&0b10000001 | (naluType << 1), first3[1]}})
 		}
-		lastIndex := len(vt.Video.Media.RingBuffer.Value.Raw) - 1
+		lastIndex := len(rv.Raw) - 1
 		if lastIndex == -1 {
 			return
 		}
-		vt.Video.Media.RingBuffer.Value.Raw[lastIndex].Append(buffer)
+		rv.Raw[lastIndex].Append(buffer)
 		if util.Bit1(fuHeader, 1) {
-			complete := vt.Video.Media.RingBuffer.Value.Raw[lastIndex]                            //拼接完成
-			vt.Video.Media.RingBuffer.Value.Raw = vt.Video.Media.RingBuffer.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
+			complete := rv.Raw[lastIndex] //拼接完成
+			rv.Raw = rv.Raw[:lastIndex]   // 缩短一个元素，因为后面的方法会加回去
 			vt.WriteSlice(complete)
 		}
 	default:
 		vt.WriteSlice(NALUSlice{frame.Payload})
 	}
-	vt.Video.Media.RingBuffer.Value.AppendRTP(frame)
+	rv.AppendRTP(frame)
 	if frame.Marker {
-		vt.Video.generateTimestamp()
+		vt.Video.generateTimestamp(frame.Timestamp)
 		vt.Flush()
 	}
 }

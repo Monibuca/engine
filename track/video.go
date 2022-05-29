@@ -20,6 +20,7 @@ type Video struct {
 	nalulenSize int  //avcc格式中表示nalu长度的字节数，通常为4
 	idrCount    int  //缓存中包含的idr数量
 	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
+	dtsEst      *DTSEstimator
 }
 
 func (vt *Video) GetDecConfSeq() int {
@@ -101,40 +102,46 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	}
 }
 
+func (av *Video) generateTimestamp(ts uint32) {
+	av.AVRing.RingBuffer.Value.PTS = ts
+	av.AVRing.RingBuffer.Value.DTS = av.dtsEst.Feed(ts)
+}
+
 func (vt *Video) Flush() {
+	rv := &vt.AVRing.RingBuffer.Value
 	// 没有实际媒体数据
-	if len(vt.AVRing.RingBuffer.Value.Raw) == 0 {
-		vt.AVRing.RingBuffer.Value.Reset()
+	if len(rv.Raw) == 0 {
+		rv.Reset()
 		return
 	}
 	// AVCC格式补完
-	if len(vt.AVRing.RingBuffer.Value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+	if len(rv.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
 		var b util.Buffer
-		if cap(vt.AVRing.RingBuffer.Value.AVCC) > 0 {
-			if avcc := vt.AVRing.RingBuffer.Value.AVCC[:1]; len(avcc[0]) == 5 {
+		if cap(rv.AVCC) > 0 {
+			if avcc := rv.AVCC[:1]; len(avcc[0]) == 5 {
 				b = util.Buffer(avcc[0])
 			}
 		}
 		if b == nil {
 			b = util.Buffer([]byte{0, 1, 0, 0, 0})
 		}
-		if vt.AVRing.RingBuffer.Value.IFrame {
+		if rv.IFrame {
 			b[0] = 0x10 | byte(vt.CodecID)
 		} else {
 			b[0] = 0x20 | byte(vt.CodecID)
 		}
 		// 写入CTS
-		util.PutBE(b[2:5], (vt.AVRing.RingBuffer.Value.PTS-vt.AVRing.RingBuffer.Value.DTS)/90)
-		lengths := b.Malloc(len(vt.AVRing.RingBuffer.Value.Raw) * 4) //每个slice的长度内存复用
-		vt.AVRing.RingBuffer.Value.AppendAVCC(b.SubBuf(0, 5))
-		for i, nalu := range vt.AVRing.RingBuffer.Value.Raw {
-			vt.AVRing.RingBuffer.Value.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
-			vt.AVRing.RingBuffer.Value.AppendAVCC(nalu...)
+		util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
+		lengths := b.Malloc(len(rv.Raw) * 4) //每个slice的长度内存复用
+		rv.AppendAVCC(b.SubBuf(0, 5))
+		for i, nalu := range rv.Raw {
+			rv.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
+			rv.AppendAVCC(nalu...)
 		}
 	}
 	// FLV tag 补完
-	if len(vt.AVRing.RingBuffer.Value.FLV) == 0 && config.Global.EnableFLV {
-		vt.AVRing.RingBuffer.Value.FillFLV(codec.FLV_TAG_TYPE_VIDEO, vt.AVRing.RingBuffer.Value.AbsTime)
+	if len(rv.FLV) == 0 && config.Global.EnableFLV {
+		rv.FillFLV(codec.FLV_TAG_TYPE_VIDEO, rv.AbsTime)
 	}
 	// 下一帧为I帧，即将覆盖
 	if vt.Next().Value.IFrame {

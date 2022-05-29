@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -26,6 +27,7 @@ func NewAAC(stream IStream) (aac *AAC) {
 	}
 	return
 }
+
 type AAC struct {
 	Audio
 }
@@ -57,6 +59,10 @@ func (aac *AAC) writeRTPFrame(frame *RTPFrame) {
 
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
+		if len(frame) < 2 {
+			aac.Stream.Error("AVCC sequence header too short", zap.ByteString("data", frame))
+			return
+		}
 		aac.DecoderConfiguration.AVCC = net.Buffers{frame}
 		config1, config2 := frame[2], frame[3]
 		aac.Profile = (config1 & 0xF8) >> 3

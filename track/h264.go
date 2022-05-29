@@ -13,7 +13,6 @@ import (
 
 type H264 struct {
 	Video
-	dtsEst *DTSEstimator
 }
 
 func NewH264(stream IStream) (vt *H264) {
@@ -90,6 +89,7 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 	}
 }
 func (vt *H264) writeRTPFrame(frame *RTPFrame) {
+	rv := &vt.Video.Media.RingBuffer.Value
 	if naluType := frame.H264Type(); naluType < 24 {
 		vt.WriteSlice(NALUSlice{frame.Payload})
 	} else {
@@ -100,25 +100,24 @@ func (vt *H264) writeRTPFrame(frame *RTPFrame) {
 			}
 		case codec.NALU_FUA, codec.NALU_FUB:
 			if util.Bit1(frame.Payload[1], 0) {
-				vt.Video.Media.RingBuffer.Value.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
+				rv.AppendRaw(NALUSlice{[]byte{naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60)}})
 			}
 			// 最后一个是半包缓存，用于拼接
-			lastIndex := len(vt.Video.Media.RingBuffer.Value.Raw) - 1
+			lastIndex := len(rv.Raw) - 1
 			if lastIndex == -1 {
 				return
 			}
-			vt.Video.Media.RingBuffer.Value.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
+			rv.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
 			if util.Bit1(frame.Payload[1], 1) {
-				complete := vt.Video.Media.RingBuffer.Value.Raw[lastIndex]                            //拼接完成
-				vt.Video.Media.RingBuffer.Value.Raw = vt.Video.Media.RingBuffer.Value.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
+				complete := rv.Raw[lastIndex]                            //拼接完成
+				rv.Raw = rv.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
 				vt.WriteSlice(complete)
 			}
 		}
 	}
-	vt.Video.Media.RingBuffer.Value.AppendRTP(frame)
+	rv.AppendRTP(frame)
 	if frame.Marker {
-		vt.Video.Media.RingBuffer.Value.PTS = frame.Timestamp
-		vt.Video.Media.RingBuffer.Value.DTS = vt.dtsEst.Feed(frame.Timestamp)
+		vt.generateTimestamp(frame.Timestamp)
 		vt.Flush()
 	}
 }
