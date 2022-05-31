@@ -28,6 +28,11 @@ type HTTPPlugin interface {
 }
 
 func (config Config) Unmarshal(s any) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error("Unmarshal error:", err)
+		}
+	}()
 	if s == nil {
 		return
 	}

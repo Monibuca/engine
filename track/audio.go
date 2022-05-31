@@ -68,19 +68,20 @@ func (a *Audio) WriteADTS(adts []byte) {
 
 func (a *Audio) Flush() {
 	// AVCC 格式补完
-	if len(a.Value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
-		a.Value.AppendAVCC(a.AVCCHead)
-		for _, raw := range a.Value.Raw {
-			a.Value.AppendAVCC(raw)
+	value := a.Media.RingBuffer.Value
+	if len(value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+		value.AppendAVCC(a.AVCCHead)
+		for _, raw := range value.Raw {
+			value.AppendAVCC(raw)
 		}
 	}
 	// FLV tag 补完
-	if len(a.Value.FLV) == 0 && config.Global.EnableFLV {
-		a.Value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, a.Value.AbsTime)
+	if len(value.FLV) == 0 && config.Global.EnableFLV {
+		value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, value.AbsTime)
 	}
-	if a.Value.RTP == nil && config.Global.EnableRTP {
+	if value.RTP == nil && config.Global.EnableRTP {
 		var o []byte
-		for _, raw := range a.Value.Raw {
+		for _, raw := range value.Raw {
 			o = append(o, raw...)
 		}
 		a.PacketizeRTP(o)

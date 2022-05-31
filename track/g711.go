@@ -12,25 +12,25 @@ import (
 func NewG711(stream IStream, alaw bool) (g711 *G711) {
 	g711 = &G711{}
 	if alaw {
-		g711.Name = "pcma"
+		g711.Audio.Name = "pcma"
 	} else {
-		g711.Name = "pcmu"
+		g711.Audio.Name = "pcmu"
 	}
-	g711.Stream = stream
+	g711.Audio.Stream = stream
 	if alaw {
-		g711.CodecID = codec.CodecID_PCMA
+		g711.Audio.CodecID = codec.CodecID_PCMA
 	} else {
-		g711.CodecID = codec.CodecID_PCMU
+		g711.Audio.CodecID = codec.CodecID_PCMU
 	}
-	g711.Init(32)
-	g711.Poll = time.Millisecond * 10
-	g711.DecoderConfiguration.PayloadType = 97
+	g711.Audio.Init(32)
+	g711.Audio.Media.Poll = time.Millisecond * 10
+	g711.Audio.DecoderConfiguration.PayloadType = 97
 	if config.Global.RTPReorder {
-		g711.orderQueue = make([]*RTPFrame, 20)
+		g711.Audio.orderQueue = make([]*RTPFrame, 20)
 	}
-	g711.SampleSize = 8
-	g711.SampleRate = 8000
-	g711.Attach()
+	g711.Audio.SampleSize = 8
+	g711.Audio.SampleRate = 8000
+	g711.Audio.Attach()
 	return
 }
 
@@ -60,7 +60,7 @@ func (g711 *G711) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (g711 *G711) writeRTPFrame(frame *RTPFrame) {
 	g711.WriteSlice(frame.Payload)
-	g711.Value.AppendRTP(frame)
+	g711.Audio.Media.AVRing.RingBuffer.Value.AppendRTP(frame)
 	if frame.Marker {
 		g711.generateTimestamp()
 		g711.Flush()
