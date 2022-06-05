@@ -3,13 +3,12 @@ package engine
 import (
 	"context"
 	"encoding/json"
-	"net"
-	"time"
-
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/track"
+	"net"
+	"time"
 )
 
 type HaveFLV interface {
@@ -254,7 +253,7 @@ func (s *Subscriber) PlayBlock() {
 				var vp *VideoFrame
 				// 如果进入正常模式
 				if normal {
-					vp = (*VideoFrame)(s.Video.ring.Read(ctx))
+					vp = (*VideoFrame)(&(*s.Video.ring.Read(ctx)))
 					if ctx.Err() != nil {
 						return
 					}
@@ -270,7 +269,7 @@ func (s *Subscriber) PlayBlock() {
 						s.Debug("skip to latest key frame", zap.Uint32("seq", s.Video.Track.IDRing.Value.Sequence))
 						continue
 					} else {
-						vp = (*VideoFrame)(s.Video.ring.Read(ctx))
+						vp = (*VideoFrame)(&(*s.Video.ring.Read(ctx)))
 						if ctx.Err() != nil {
 							return
 						}
@@ -300,7 +299,7 @@ func (s *Subscriber) PlayBlock() {
 				audioSent = true
 			}
 			for {
-				ap := (*AudioFrame)(s.Audio.ring.Read(ctx))
+				ap := (*AudioFrame)(&(*s.Audio.ring.Read(ctx)))
 				if ctx.Err() != nil {
 					return
 				}

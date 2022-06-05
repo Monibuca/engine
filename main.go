@@ -60,6 +60,8 @@ func Run(ctx context.Context, configFile string) (err error) {
 			Engine.RawConfig = cg.GetChild("global")
 			//将配置信息同步到结构体
 			Engine.RawConfig.Unmarshal(config.Global)
+		} else {
+			log.Error("parsing yml error:", err)
 		}
 	}
 	Engine.Logger = log.With(zap.Bool("engine", true))

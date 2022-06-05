@@ -22,21 +22,21 @@ func (lr *LockRing[T]) Init(n int) *LockRing[T] {
 	}
 	lr.RingBuffer.Init(n)
 	lr.Flag = &flag
-	lr.Value.Lock()
+	lr.RingBuffer.Value.Lock()
 	return lr
 }
 
 func (rb *LockRing[T]) Read() *DataFrame[T] {
-	current := &rb.Value
+	current := &rb.RingBuffer.Value
 	current.RLock()
 	defer current.RUnlock()
 	return &current.DataFrame
 }
 
 func (rb *LockRing[T]) Step() {
-	last := &rb.Value
+	last := &rb.RingBuffer.Value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
-		current := rb.MoveNext()
+		current := rb.RingBuffer.MoveNext()
 		current.Lock()
 		last.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
@@ -47,10 +47,10 @@ func (rb *LockRing[T]) Step() {
 }
 
 func (rb *LockRing[T]) Write(value T) {
-	last := &rb.Value
+	last := &rb.RingBuffer.Value
 	last.Value = value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
-		current := rb.MoveNext()
+		current := rb.RingBuffer.MoveNext()
 		current.Lock()
 		last.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
@@ -61,7 +61,7 @@ func (rb *LockRing[T]) Write(value T) {
 }
 
 func (rb *LockRing[T]) Dispose() {
-	current := &rb.Value
+	current := &rb.RingBuffer.Value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 2) {
 		current.Unlock()
 	} else if atomic.CompareAndSwapInt32(rb.Flag, 1, 2) {

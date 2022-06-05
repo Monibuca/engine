@@ -86,7 +86,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
 			}
 			a := track.NewAAC(p.Stream)
 			p.AudioTrack = a
-			a.SampleSize = 16
+			a.Audio.SampleSize = 16
 			a.AVCCHead = []byte{frame[0], 1}
 			a.WriteAVCC(0, frame)
 		case codec.CodecID_PCMA,
@@ -97,10 +97,10 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
 			}
 			a := track.NewG711(p.Stream, alaw)
 			p.AudioTrack = a
-			a.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
-			a.SampleSize = 16
+			a.Audio.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
+			a.Audio.SampleSize = 16
 			if frame[0]&0x02 == 0 {
-				a.SampleSize = 8
+				a.Audio.SampleSize = 8
 			}
 			a.Channels = frame[0]&0x01 + 1
 			a.AVCCHead = frame[:1]
@@ -160,15 +160,15 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 	switch s.StreamType {
 	case mpegts.STREAM_TYPE_H264:
 		if t.VideoTrack == nil {
-			t.VideoTrack = track.NewH264(t.Stream)
+			t.VideoTrack = track.NewH264(t.Publisher.Stream)
 		}
 	case mpegts.STREAM_TYPE_H265:
 		if t.VideoTrack == nil {
-			t.VideoTrack = track.NewH265(t.Stream)
+			t.VideoTrack = track.NewH265(t.Publisher.Stream)
 		}
 	case mpegts.STREAM_TYPE_AAC:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewAAC(t.Stream)
+			t.AudioTrack = track.NewAAC(t.Publisher.Stream)
 		}
 	default:
 		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))

@@ -14,16 +14,16 @@ import (
 
 func NewAAC(stream IStream) (aac *AAC) {
 	aac = &AAC{}
-	aac.Name = "aac"
-	aac.Stream = stream
+	aac.Audio.Name = "aac"
+	aac.Audio.Stream = stream
 	aac.CodecID = codec.CodecID_AAC
 	aac.Init(32)
-	aac.Poll = time.Millisecond * 10
+	aac.Audio.Media.Poll = time.Millisecond * 10
 	aac.AVCCHead = []byte{0xAF, 1}
-	aac.SampleSize = 16
-	aac.DecoderConfiguration.PayloadType = 97
+	aac.Audio.SampleSize = 16
+	aac.Audio.DecoderConfiguration.PayloadType = 97
 	if config.Global.RTPReorder {
-		aac.orderQueue = make([]*RTPFrame, 20)
+		aac.Audio.orderQueue = make([]*RTPFrame, 20)
 	}
 	return
 }
@@ -50,7 +50,7 @@ func (aac *AAC) writeRTPFrame(frame *RTPFrame) {
 	for _, payload := range codec.ParseRTPAAC(frame.Payload) {
 		aac.WriteSlice(payload)
 	}
-	aac.Value.AppendRTP(frame)
+	aac.Audio.Media.AVRing.RingBuffer.Value.AppendRTP(frame)
 	if frame.Marker {
 		aac.generateTimestamp()
 		aac.Flush()
@@ -60,16 +60,16 @@ func (aac *AAC) writeRTPFrame(frame *RTPFrame) {
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 	if frame.IsSequence() {
 		if len(frame) < 2 {
-			aac.Stream.Error("AVCC sequence header too short", zap.ByteString("data", frame))
+			aac.Audio.Stream.Error("AVCC sequence header too short", zap.ByteString("data", frame))
 			return
 		}
-		aac.DecoderConfiguration.AVCC = net.Buffers{frame}
+		aac.Audio.DecoderConfiguration.AVCC = net.Buffers{frame}
 		config1, config2 := frame[2], frame[3]
 		aac.Profile = (config1 & 0xF8) >> 3
 		aac.Channels = ((config2 >> 3) & 0x0F) //声道
-		aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
-		aac.DecoderConfiguration.Raw = AudioSlice(frame[2:])
-		aac.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
+		aac.Audio.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
+		aac.Audio.DecoderConfiguration.Raw = AudioSlice(frame[2:])
+		aac.Audio.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
 		aac.Attach()
 	} else {
 		aac.Audio.WriteAVCC(ts, frame)
@@ -80,8 +80,9 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 func (aac *AAC) Flush() {
 	// RTP格式补完
 	// TODO: MTU 分割
-	if aac.Value.RTP == nil && config.Global.EnableRTP {
-		l := util.SizeOfBuffers(aac.Value.Raw)
+	value := aac.Audio.Media.RingBuffer.Value
+	if value.RTP == nil && config.Global.EnableRTP {
+		l := util.SizeOfBuffers(value.Raw)
 		o := make([]byte, 4, l+4)
 		//AU_HEADER_LENGTH,因为单位是bit, 除以8就是auHeader的字节长度；又因为单个auheader字节长度2字节，所以再除以2就是auheader的个数。
 		o[0] = 0x00 //高位
@@ -89,7 +90,7 @@ func (aac *AAC) Flush() {
 		//AU_HEADER
 		o[2] = (byte)((l & 0x1fe0) >> 5) //高位
 		o[3] = (byte)((l & 0x1f) << 3)   //低位
-		for _, raw := range aac.Value.Raw {
+		for _, raw := range value.Raw {
 			o = append(o, raw...)
 		}
 		aac.PacketizeRTP(o)
