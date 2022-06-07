@@ -14,17 +14,28 @@ type GlobalConfig struct {
 }
 
 func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	rw.Write([]byte("Monibuca API Server"))
+	rw.Write([]byte("Monibuca API Server\n"))
+	for _, api := range apiList {
+		rw.Write([]byte(api + "\n"))
+	}
 }
 
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 	util.ReturnJson(summary.collect, time.Second, rw, r)
 }
 
+func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
+	if err := json.NewEncoder(rw).Encode(Plugins); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
-			json.NewEncoder(rw).Encode(s)
+			if err := json.NewEncoder(rw).Encode(s); err != nil {
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			}
 		} else {
 			http.Error(rw, "no such stream", http.StatusNotFound)
 		}
@@ -34,10 +45,12 @@ func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (conf *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(rw).Encode(&struct {
+	if err := json.NewEncoder(rw).Encode(&struct {
 		Version   string
 		StartTime string
-	}{Engine.Version, StartTime.Format("2006-01-02 15:04:05")})
+	}{Engine.Version, StartTime.Format("2006-01-02 15:04:05")}); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request) {
@@ -56,12 +69,14 @@ func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request
 func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) {
 	if configName := r.URL.Query().Get("name"); configName != "" {
 		if c, ok := Plugins[configName]; ok {
-			json.NewEncoder(w).Encode(c.RawConfig)
+			if err := json.NewEncoder(w).Encode(c.RawConfig); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 		} else {
 			http.Error(w, "no such config", http.StatusNotFound)
 		}
-	} else {
-		json.NewEncoder(w).Encode(Engine.RawConfig)
+	} else if err := json.NewEncoder(w).Encode(Engine.RawConfig); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -69,16 +84,20 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Request) {
 	if configName := r.URL.Query().Get("name"); configName != "" {
 		if c, ok := Plugins[configName]; ok {
-			json.NewDecoder(r.Body).Decode(&c.Modified)
-			c.Save()
-			c.RawConfig.Assign(c.Modified)
+			if err := json.NewDecoder(r.Body).Decode(&c.Modified); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			} else {
+				c.Save()
+				c.RawConfig.Assign(c.Modified)
+			}
 		} else {
 			http.Error(w, "no such config", http.StatusNotFound)
 		}
-	} else {
-		json.NewDecoder(r.Body).Decode(&Engine.Modified)
+	} else if err := json.NewDecoder(r.Body).Decode(&Engine.Modified); err != nil {
 		Engine.Save()
 		Engine.RawConfig.Assign(Engine.Modified)
+	} else {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }
 

@@ -48,11 +48,11 @@ type Plugin struct {
 	context.Context    `json:"-"`
 	context.CancelFunc `json:"-"`
 	Name               string        //插件名称
-	Config             config.Plugin //插件配置
+	Config             config.Plugin `json:"-"` //插件配置
 	Version            string        //插件版本
 	RawConfig          config.Config //配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
-	*zap.Logger
+	*zap.Logger        `json:"-"`
 }
 
 func (opt *Plugin) logHandler(pattern string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
@@ -76,6 +76,7 @@ func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, 
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
 		opt.Info("http handle added to engine:" + pattern)
+		apiList = append(apiList, pattern)
 		EngineConfig.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
 }

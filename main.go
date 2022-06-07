@@ -34,6 +34,7 @@ var (
 	Engine       = InstallPlugin(EngineConfig)              //复用安装插件逻辑，将全局配置信息注入，并启动server
 	MergeConfigs = []string{"Publish", "Subscribe", "HTTP"} //需要合并配置的属性项，插件若没有配置则使用全局配置
 	EventBus     = make(chan any, 10)
+	apiList      []string //注册到引擎的API接口列表
 )
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有

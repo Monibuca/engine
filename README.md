@@ -17,6 +17,7 @@
 - 终止某一个流 `/api/closeStream?streamPath=xxx`
 - 获取engine信息 `/api/sysInfo` 返回值{Version:xxx,StartTime:xxx}
 - 获取系统基本情况 `/api/summary` 返回值Summary数据
+- 获取所有插件信息 `/api/plugins` 返回值Plugin数据
 - 获取指定的配置信息 `/api/getconfig?name=xxx` 返回xxx插件的配置信息，如果不带参数或参数为空则返回全局配置
 - 修改并保存配置信息 `/api/modifyconfig?name=xxx` 修改xxx插件的配置信息,在请求的body中传入修改后的配置json字符串
 - 热更新配置信息 `/api/updateconfig?name=xxx` 热更新xxx插件的配置信息，如果不带参数或参数为空则热更新全局配置
@@ -64,7 +65,7 @@ global:
   # 启用flv格式缓存，用于HDL协议，以及flv格式写文件
   enableflv : true
   # 连接远程控制台的地址
-  consoleurl : wss://console.monibuca.com:8080
+  consoleurl : wss://console.monibuca.com/ws/v1
   # 远程控制台的秘钥
   secret: ""
 ```

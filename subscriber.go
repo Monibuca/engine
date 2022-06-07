@@ -260,7 +260,9 @@ func (s *Subscriber) PlayBlock() {
 					if vp.IFrame && s.Video.decConfChanged() {
 						s.sendVideoDecConf()
 					}
-					spesic.OnEvent(vp)
+					if !s.Config.IFrameOnly || vp.IFrame {
+						spesic.OnEvent(vp)
+					}
 					s.Video.ring.MoveNext()
 				} else {
 					if s.Video.Track.IDRing.Value.Sequence != s.Video.First.Sequence {
@@ -273,7 +275,9 @@ func (s *Subscriber) PlayBlock() {
 						if ctx.Err() != nil {
 							return
 						}
-						spesic.OnEvent(vp)
+						if !s.Config.IFrameOnly || vp.IFrame {
+							spesic.OnEvent(vp)
+						}
 						if fast := time.Duration(vp.AbsTime-s.Video.First.AbsTime)*time.Millisecond - time.Since(startTime); fast > 0 {
 							time.Sleep(fast)
 						}
