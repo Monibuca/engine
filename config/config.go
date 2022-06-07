@@ -66,12 +66,14 @@ func (config Config) Unmarshal(s any) {
 		}
 		// 需要被写入的字段
 		fv := el.FieldByName(name)
+		ft := fv.Type()
+		// 先处理值是数组的情况
 		if value := reflect.ValueOf(v); value.Kind() == reflect.Slice {
 			l := value.Len()
-			s := reflect.MakeSlice(fv.Type(), l, value.Cap())
+			s := reflect.MakeSlice(ft, l, value.Cap())
 			for i := 0; i < l; i++ {
 				fv := value.Index(i)
-				if fv.Type() == reflect.TypeOf(config) {
+				if ft == reflect.TypeOf(config) {
 					fv.FieldByName("Unmarshal").Call([]reflect.Value{fv})
 				} else {
 					item := s.Index(i)
@@ -83,21 +85,25 @@ func (config Config) Unmarshal(s any) {
 				}
 			}
 			fv.Set(s)
-		} else if child, ok := v.(Config); ok {
+		} else if child, ok := v.(Config); ok { //然后处理值是递归情况（map)
 			if fv.Kind() == reflect.Map {
 				if fv.IsNil() {
-					fv.Set(reflect.MakeMap(fv.Type()))
+					fv.Set(reflect.MakeMap(ft))
 				}
 			}
 			child.Unmarshal(fv)
 		} else {
-			switch fv.Type().Kind() {
+			switch fv.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				fv.SetUint(uint64(value.Int()))
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				fv.SetInt(value.Int())
 			case reflect.Float32, reflect.Float64:
 				fv.SetFloat(value.Float())
+			case reflect.Slice: //值是单值，但类型是数组，默认解析为一个元素的数组
+				s := reflect.MakeSlice(ft, 1, 1)
+				s.Index(0).Set(value)
+				fv.Set(s)
 			default:
 				fv.Set(value)
 			}
