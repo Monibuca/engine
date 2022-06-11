@@ -116,7 +116,12 @@ func (config Config) Assign(source Config) {
 	for k, v := range source {
 		switch m := config[k].(type) {
 		case Config:
-			m.Assign(v.(Config))
+			switch vv := v.(type) {
+			case Config:
+				m.Assign(vv)
+			case map[string]any:
+				m.Assign(Config(vv))
+			}
 		default:
 			config[k] = v
 		}

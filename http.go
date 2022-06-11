@@ -9,6 +9,11 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
+const (
+	NO_SUCH_CONIFG = "no such config"
+	NO_SUCH_STREAM = "no such stream"
+)
+
 type GlobalConfig struct {
 	*config.Engine
 }
@@ -37,7 +42,7 @@ func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 				http.Error(rw, err.Error(), http.StatusInternalServerError)
 			}
 		} else {
-			http.Error(rw, "no such stream", http.StatusNotFound)
+			http.Error(rw, NO_SUCH_STREAM, http.StatusNotFound)
 		}
 	} else {
 		http.Error(rw, "no streamPath", http.StatusBadRequest)
@@ -58,7 +63,7 @@ func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request
 		if s := Streams.Get(streamPath); s != nil {
 			s.Close()
 		} else {
-			http.Error(w, "no such stream", http.StatusNotFound)
+			http.Error(w, NO_SUCH_STREAM, http.StatusNotFound)
 		}
 	} else {
 		http.Error(w, "no streamPath", http.StatusBadRequest)
@@ -73,7 +78,7 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		} else {
-			http.Error(w, "no such config", http.StatusNotFound)
+			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
 	} else if err := json.NewEncoder(w).Encode(Engine.RawConfig); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -91,9 +96,9 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 				c.RawConfig.Assign(c.Modified)
 			}
 		} else {
-			http.Error(w, "no such config", http.StatusNotFound)
+			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
-	} else if err := json.NewDecoder(r.Body).Decode(&Engine.Modified); err != nil {
+	} else if err := json.NewDecoder(r.Body).Decode(&Engine.Modified); err == nil {
 		Engine.Save()
 		Engine.RawConfig.Assign(Engine.Modified)
 	} else {
@@ -107,7 +112,7 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 		if c, ok := Plugins[configName]; ok {
 			c.Update(c.Modified)
 		} else {
-			http.Error(w, "no such config", http.StatusNotFound)
+			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
 	} else {
 		Engine.Update(Engine.Modified)
