@@ -3,12 +3,14 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"net"
+	"time"
+
 	"go.uber.org/zap"
+	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/track"
-	"net"
-	"time"
 )
 
 type HaveFLV interface {
@@ -49,17 +51,33 @@ func (v *VideoFrame) GetAVCC() net.Buffers {
 func (v *VideoFrame) GetRTP() []*RTPFrame {
 	return v.RTP
 }
+func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
+	r = append(r, codec.NALU_Delimiter2)
+	for i, nalu := range v.Raw {
+		if i > 0 {
+			r = append(r, codec.NALU_Delimiter1)
+		}
+		r = append(r, nalu...)
+	}
+	return
+}
 func (a AudioDeConf) GetFLV() net.Buffers {
 	return copyBuffers(a.FLV)
 }
-func (a VideoDeConf) GetFLV() net.Buffers {
-	return copyBuffers(a.FLV)
+func (v VideoDeConf) GetFLV() net.Buffers {
+	return copyBuffers(v.FLV)
 }
 func (a AudioDeConf) GetAVCC() net.Buffers {
 	return copyBuffers(a.AVCC)
 }
-func (a VideoDeConf) GetAVCC() net.Buffers {
-	return copyBuffers(a.AVCC)
+func (v VideoDeConf) GetAVCC() net.Buffers {
+	return copyBuffers(v.AVCC)
+}
+func (v VideoDeConf) GetAnnexB() (r net.Buffers) {
+	for _, nalu := range v.Raw {
+		r = append(r, codec.NALU_Delimiter2, nalu)
+	}
+	return
 }
 
 type ISubscriber interface {
