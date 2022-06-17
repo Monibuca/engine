@@ -117,11 +117,11 @@ func (cfg *Engine) OnEvent(event any) {
 				conn, _, _, err := ws.Dial(v, cfg.ConsoleURL)
 				wr := &myResponseWriter{conn}
 				if err != nil {
-					log.Error("connect to console server error:", err)
+					log.Error("connect to console server ", cfg.ConsoleURL, " ", err)
 					time.Sleep(time.Second * 5)
 					continue
 				}
-				err = wsutil.WriteClientMessage(conn, ws.OpText, []byte(`{"command":"init","secret":"123456"}`))
+				err = wsutil.WriteClientMessage(conn, ws.OpText, []byte(cfg.Secret))
 				if err != nil {
 					time.Sleep(time.Second * 5)
 					continue
