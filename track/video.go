@@ -139,10 +139,6 @@ func (vt *Video) Flush() {
 			rv.AppendAVCC(nalu...)
 		}
 	}
-	// FLV tag 补完
-	if len(rv.FLV) == 0 && config.Global.EnableFLV {
-		rv.FillFLV(codec.FLV_TAG_TYPE_VIDEO, rv.AbsTime)
-	}
 	// 下一帧为I帧，即将覆盖
 	if vt.Next().Value.IFrame {
 		// 仅存一枚I帧，需要扩环

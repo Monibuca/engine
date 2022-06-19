@@ -1,15 +1,12 @@
 package config
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"io"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
+	"golang.org/x/net/websocket"
 	"m7s.live/engine/v4/log"
 )
 
@@ -43,6 +40,7 @@ func (c *Publish) GetPublishConfig() *Publish {
 type Subscribe struct {
 	SubAudio    bool
 	SubVideo    bool
+	LiveMode    bool // 实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后调到该帧。
 	IFrameOnly  bool // 只要关键帧
 	WaitTimeout int  // 等待流超时
 }
@@ -97,11 +95,11 @@ type Engine struct {
 	Secret     string //远程控制台密钥
 }
 type myResponseWriter struct {
-	io.Writer
+	*websocket.Conn
 }
 
 func (w *myResponseWriter) Write(b []byte) (int, error) {
-	return len(b), wsutil.WriteClientMessage(w, ws.OpBinary, b)
+	return len(b), websocket.Message.Send(w.Conn,b)
 }
 
 func (w *myResponseWriter) Header() http.Header {
@@ -110,37 +108,59 @@ func (w *myResponseWriter) Header() http.Header {
 func (w *myResponseWriter) WriteHeader(statusCode int) {
 }
 func (cfg *Engine) OnEvent(event any) {
-	switch v := event.(type) {
+	switch event.(type) {
 	case context.Context:
 		go func() {
 			for {
-				conn, _, _, err := ws.Dial(v, cfg.ConsoleURL)
+				conn, err := websocket.Dial(cfg.ConsoleURL, "", "https://console.monibuca.com")
 				wr := &myResponseWriter{conn}
 				if err != nil {
 					log.Error("connect to console server ", cfg.ConsoleURL, " ", err)
 					time.Sleep(time.Second * 5)
 					continue
 				}
-				err = wsutil.WriteClientMessage(conn, ws.OpText, []byte(cfg.Secret))
-				if err != nil {
+				if err = websocket.Message.Send(conn, cfg.Secret); err != nil {
 					time.Sleep(time.Second * 5)
 					continue
 				}
+				var rMessage map[string]interface{}
+				if err := websocket.JSON.Receive(conn, &rMessage); err == nil {
+					if rMessage["code"].(float64) != 0 {
+						log.Error("connect to console server ", cfg.ConsoleURL, " ", rMessage["msg"])
+						return
+					} else {
+						log.Info("connect to console server ", cfg.ConsoleURL, " success")
+					}
+				}
 				for {
-					msg, _, err := wsutil.ReadServerData(conn)
+					var msg string
+					err := websocket.Message.Receive(conn, &msg)
 					if err != nil {
 						log.Error("read console server error:", err)
 						break
 					} else {
-						r := bufio.NewReader(bytes.NewReader(msg))
-						URL, _ := r.ReadString('\n')
-						req, err := http.NewRequest("GET", URL, r)
-						if err != nil {
-							log.Error("receive console request :", msg, err)
-							break
+						b, a, f := strings.Cut(msg, "\n")
+						if f {
+							if len(a) > 0 {
+								req, err := http.NewRequest("POST", b, strings.NewReader(a))
+								if err != nil {
+									log.Error("read console server error:", err)
+									break
+								}
+								h, _ := cfg.mux.Handler(req)
+								h.ServeHTTP(wr, req)
+							} else {
+								req, err := http.NewRequest("GET", b, nil)
+								if err != nil {
+									log.Error("read console server error:", err)
+									break
+								}
+								h, _ := cfg.mux.Handler(req)
+								h.ServeHTTP(wr, req)
+							}
+						} else {
+
 						}
-						h, _ := cfg.mux.Handler(req)
-						h.ServeHTTP(wr, req)
 					}
 				}
 			}
@@ -150,7 +170,7 @@ func (cfg *Engine) OnEvent(event any) {
 
 var Global = &Engine{
 	Publish{true, true, false, 10, 0},
-	Subscribe{true, true, false, 10},
+	Subscribe{true, true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, true, "wss://console.monibuca.com/ws/v1", "",
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/pion/rtp"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/log"
-	"m7s.live/engine/v4/util"
 )
 
 type NALUSlice net.Buffers
@@ -113,17 +112,12 @@ type DataFrame[T any] struct {
 	BaseFrame
 	Value T
 }
-type MediaFrame interface {
-	GetFLV() net.Buffers
-	GetAVCC() net.Buffers
-	GetRTP() []*RTPFrame
-}
+
 type AVFrame[T RawSlice] struct {
 	BaseFrame
 	IFrame  bool
 	PTS     uint32
 	DTS     uint32
-	FLV     net.Buffers // 打包好的FLV Tag
 	AVCC    net.Buffers // 打包好的AVCC格式
 	RTP     []*RTPFrame
 	Raw     []T // 裸数据
@@ -133,36 +127,16 @@ type AVFrame[T RawSlice] struct {
 func (av *AVFrame[T]) AppendRaw(raw ...T) {
 	av.Raw = append(av.Raw, raw...)
 }
-func (av *AVFrame[T]) FillFLV(t byte, ts uint32) {
-	var bytes []byte
-	if cap(av.FLV) > 0 {
-		if flv := av.FLV[:1]; cap(flv[0]) == 15 {
-			bytes = flv[0][:0]
-		}
-	}
-	if bytes == nil {
-		bytes = make([]byte, 0, 15)
-	}
-	b := util.Buffer(bytes)
-	b.WriteByte(t)
-	dataSize := util.SizeOfBuffers(av.AVCC)
-	b.WriteUint24(uint32(dataSize))
-	b.WriteUint24(ts)
-	b.WriteByte(byte(ts >> 24))
-	b.WriteUint24(0)
-	av.FLV = append(append(append(av.FLV, b), av.AVCC...), util.PutBE(b.Malloc(4), dataSize+11))
-}
+
 func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
 	av.AVCC = append(av.AVCC, avcc...)
 }
+
 func (av *AVFrame[T]) AppendRTP(rtp ...*RTPFrame) {
 	av.RTP = append(av.RTP, rtp...)
 }
 
 func (av *AVFrame[T]) Reset() {
-	if av.FLV != nil {
-		av.FLV = av.FLV[:0]
-	}
 	if av.AVCC != nil {
 		av.AVCC = av.AVCC[:0]
 	}

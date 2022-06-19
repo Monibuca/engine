@@ -75,10 +75,6 @@ func (a *Audio) Flush() {
 			value.AppendAVCC(raw)
 		}
 	}
-	// FLV tag 补完
-	if len(value.FLV) == 0 && config.Global.EnableFLV {
-		value.FillFLV(codec.FLV_TAG_TYPE_AUDIO, value.AbsTime)
-	}
 	if value.RTP == nil && config.Global.EnableRTP {
 		var o []byte
 		for _, raw := range value.Raw {

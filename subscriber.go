@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"time"
 
@@ -11,46 +12,31 @@ import (
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/track"
+	"m7s.live/engine/v4/util"
 )
 
-type HaveFLV interface {
-	GetFLV() net.Buffers
-}
-type HaveAVCC interface {
-	GetAVCC() net.Buffers
-}
-
-type HaveRTP interface {
-	GetRTP() []*RTPFrame
-}
+const (
+	SUBTYPE_RAW = iota
+	SUBTYPE_AVCC
+	SUBTYPE_RTP
+	SUBTYPE_FLV
+)
 
 type AudioFrame AVFrame[AudioSlice]
 type VideoFrame AVFrame[NALUSlice]
 type AudioDeConf DecoderConfiguration[AudioSlice]
 type VideoDeConf DecoderConfiguration[NALUSlice]
+type FLVFrame net.Buffers
+
+func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
+	t := (net.Buffers)(f)
+	return t.WriteTo(w)
+}
 
 func copyBuffers(b net.Buffers) (r net.Buffers) {
 	return append(r, b...)
 }
 
-func (a *AudioFrame) GetFLV() net.Buffers {
-	return copyBuffers(a.FLV)
-}
-func (a *AudioFrame) GetAVCC() net.Buffers {
-	return copyBuffers(a.AVCC)
-}
-func (a *AudioFrame) GetRTP() []*RTPFrame {
-	return a.RTP
-}
-func (v *VideoFrame) GetFLV() net.Buffers {
-	return copyBuffers(v.FLV)
-}
-func (v *VideoFrame) GetAVCC() net.Buffers {
-	return copyBuffers(v.AVCC)
-}
-func (v *VideoFrame) GetRTP() []*RTPFrame {
-	return v.RTP
-}
 func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
 	r = append(r, codec.NALU_Delimiter2)
 	for i, nalu := range v.Raw {
@@ -61,18 +47,7 @@ func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
 	}
 	return
 }
-func (a AudioDeConf) GetFLV() net.Buffers {
-	return copyBuffers(a.FLV)
-}
-func (v VideoDeConf) GetFLV() net.Buffers {
-	return copyBuffers(v.FLV)
-}
-func (a AudioDeConf) GetAVCC() net.Buffers {
-	return copyBuffers(a.AVCC)
-}
-func (v VideoDeConf) GetAVCC() net.Buffers {
-	return copyBuffers(v.AVCC)
-}
+
 func (v VideoDeConf) GetAnnexB() (r net.Buffers) {
 	for _, nalu := range v.Raw {
 		r = append(r, codec.NALU_Delimiter2, nalu)
@@ -86,7 +61,9 @@ type ISubscriber interface {
 	GetIO() *IO[config.Subscribe, ISubscriber]
 	GetConfig() *config.Subscribe
 	IsPlaying() bool
-	PlayBlock()
+	PlayRaw()
+	PlayBlock(byte)
+	PlayFLV()
 	Stop()
 }
 type PlayContext[T interface {
@@ -96,7 +73,7 @@ type PlayContext[T interface {
 	Track   T
 	ring    *AVRing[R]
 	confSeq int
-	First   AVFrame[R] `json:"-"`
+	Frame   *AVFrame[R]
 }
 
 func (p *PlayContext[T, R]) MarshalJSON() ([]byte, error) {
@@ -107,6 +84,7 @@ func (p *PlayContext[T, R]) init(t T) {
 	p.Track = t
 	p.ring = t.ReadRing()
 }
+
 func (p *PlayContext[T, R]) decConfChanged() bool {
 	return p.confSeq != p.Track.GetDecConfSeq()
 }
@@ -116,6 +94,8 @@ type TrackPlayer struct {
 	context.CancelFunc `json:"-"`
 	Audio              PlayContext[*track.Audio, AudioSlice]
 	Video              PlayContext[*track.Video, NALUSlice]
+	SkipTS             uint32 //跳过的时间戳
+	FirstAbsTS         uint32 //订阅起始时间戳
 }
 
 // Subscriber 订阅者实体定义
@@ -163,189 +143,178 @@ func (s *Subscriber) IsPlaying() bool {
 	return s.TrackPlayer.Context != nil && s.TrackPlayer.Err() == nil
 }
 
-// 非阻塞式读取，通过反复调用返回的函数可以尝试读取数据，读取到数据后会调用OnEvent，这种模式自由的在不同的goroutine中调用
-// func (s *Subscriber) Play(spesic ISubscriber) func() error {
-// 	s.Info("play")
-// 	var confSeqa, confSeqv int
-// 	var t time.Time
-// 	var startTime time.Time     //读到第一个关键帧的时间
-// 	var firstIFrame *VideoFrame //起始关键帧
-// 	var audioSent bool          //音频是否发送过
-// 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
-// 	ctx := s.TrackPlayer.Context
-// 	var nextRoundReadAudio bool //下一次读取音频
-// 	return func() error {
-// 		if ctx.Err() != nil {
-// 			return ctx.Err()
-// 		}
-// 		if !nextRoundReadAudio || s.ar == nil {
-// 			if s.Video.ring != nil {
-// 				if startTime.IsZero() {
-// 					startTime = time.Now()
-// 					firstIFrame = (*VideoFrame)(s.Video.ring.Read(ctx)) // 这里阻塞读取为0耗时
-// 					s.FirstVideo = *firstIFrame
-// 					s.Debug("firstIFrame", zap.Uint32("seq", firstIFrame.Sequence))
-// 					if ctx.Err() != nil {
-// 						return ctx.Err()
-// 					}
-// 					confSeqv = s.VideoTrack.DecoderConfiguration.Seq
-// 					spesic.OnEvent(VideoDeConf(s.VideoTrack.DecoderConfiguration))
-// 					spesic.OnEvent(firstIFrame)
-// 					s.Video.ring.MoveNext()
-// 					if firstIFrame.Timestamp.After(t) {
-// 						t = firstIFrame.Timestamp
-// 					}
-// 					return nil
-// 				} else if firstIFrame == nil {
-// 					if vp := (s.Video.ring.TryRead()); vp != nil {
-// 						if vp.IFrame && confSeqv != s.VideoTrack.DecoderConfiguration.Seq {
-// 							confSeqv = s.VideoTrack.DecoderConfiguration.Seq
-// 							spesic.OnEvent(VideoDeConf(s.VideoTrack.DecoderConfiguration))
-// 						}
-// 						spesic.OnEvent((*VideoFrame)(vp))
-// 						s.Video.ring.MoveNext()
-// 						// 如果本次读取的视频时间戳比较大，下次给音频一个机会
-// 						if nextRoundReadAudio = vp.Timestamp.After(t); nextRoundReadAudio {
-// 							t = vp.Timestamp
-// 						}
-// 						return nil
-// 					}
-// 				}
-// 			} else if s.Config.SubVideo && (s.Stream == nil || s.Stream.Publisher == nil || s.Stream.Publisher.GetConfig().PubVideo) {
-// 				// 如果订阅了视频需要等待视频轨道
-// 				// TODO: 如果发布配置了视频，订阅配置了视频，但是实际上没有视频，需要处理播放纯音频
-// 				return nil
-// 			}
-// 		}
-// 		// 正常模式下或者纯音频模式下，音频开始播放
-// 		if s.ar != nil && firstIFrame == nil {
-// 			if !audioSent {
-// 				confSeqa = s.AudioTrack.DecoderConfiguration.Seq
-// 				spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
-// 				audioSent = true
-// 			}
-// 			if ap := s.ar.TryRead(); ap != nil {
-// 				if s.AudioTrack.DecoderConfiguration.Raw != nil && confSeqa != s.AudioTrack.DecoderConfiguration.Seq {
-// 					spesic.OnEvent(AudioDeConf(s.AudioTrack.DecoderConfiguration))
-// 				}
-// 				spesic.OnEvent(ap)
-// 				s.ar.MoveNext()
-// 				// 这次如果音频比较大，则下次读取给视频一个机会
-// 				if nextRoundReadAudio = !ap.Timestamp.After(t); !nextRoundReadAudio {
-// 					t = ap.Timestamp
-// 				}
-// 				return nil
-// 			}
-// 		}
-// 		return nil
-// 	}
-// }
+func (s *Subscriber) PlayRaw() {
+	s.PlayBlock(SUBTYPE_RAW)
+}
+
+func (s *Subscriber) PlayFLV() {
+	s.PlayBlock(SUBTYPE_FLV)
+}
 
 //PlayBlock 阻塞式读取数据
-func (s *Subscriber) PlayBlock() {
+func (s *Subscriber) PlayBlock(subType byte) {
 	spesic := s.Spesic
 	if spesic == nil {
 		s.Error("play before subscribe")
 		return
 	}
 	s.Info("playblock")
-	var t time.Time
-	var startTime time.Time //读到第一个关键帧的时间
-	var normal bool         //正常模式——已追上正常的进度
-	var audioSent bool      //音频是否发送过
+	var t time.Time                 //最新的音频或者视频的时间戳，用于音视频同步
+	var startTime time.Time         //读到第一个关键帧的时间
+	var vstate byte = 0             //video发送状态，0：尚未发送首帧，1：已发送首帧，2：已追上正常进度
+	var audioSent bool              //音频是否发送过
+	var firstSeq, beforeJump uint32 //第一个关键帧的seq
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
+	var sendVideoDecConf, sendAudioDecConf func()
+	var sendVideoFrame func(*AVFrame[NALUSlice])
+	var sendAudioFrame func(*AVFrame[AudioSlice])
+	var flvHeadCache []byte
+	switch subType {
+	case SUBTYPE_RAW:
+		sendVideoDecConf = func() {
+			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
+			spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
+		}
+		sendAudioDecConf = func() {
+			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
+			s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+		}
+		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+			spesic.OnEvent((*VideoFrame)(frame))
+		}
+		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+			spesic.OnEvent((*AudioFrame)(frame))
+		}
+	// case SUBTYPE_RTP:
+	// 	sendVideoDecConf = func() {
+	// 		s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
+	// 		spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
+	// 	}
+	// 	sendAudioDecConf = func() {
+	// 		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
+	// 		s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+	// 	}
+	// 	sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+	// 		s.Video.Frame = frame
+	// 		spesic.OnEvent((RTPVideoFrame)(frame.RTP))
+	// 	}
+	// 	sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+	// 		s.Audio.Frame = frame
+	// 		spesic.OnEvent((RTPAudioFrame)(frame.RTP))
+	// 	}
+	case SUBTYPE_FLV:
+		flvHeadCache = make([]byte, 15, 15) //内存复用
+		sendVideoDecConf = func() {
+			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
+			spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
+		}
+		sendAudioDecConf = func() {
+			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
+			spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
+		}
+		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+			result := FLVFrame{flvHeadCache[:11]}
+			ts := frame.AbsTime - s.SkipTS
+			flvHeadCache[0] = codec.FLV_TAG_TYPE_VIDEO
+			dataSize := uint32(util.SizeOfBuffers(frame.AVCC))
+			util.PutBE(flvHeadCache[1:4], dataSize)
+			util.PutBE(flvHeadCache[4:7], ts)
+			flvHeadCache[7] = byte(ts >> 24)
+			result = append(append(result, frame.AVCC...), util.PutBE(flvHeadCache[11:15], dataSize+11))
+			spesic.OnEvent(result)
+		}
+		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+			result := FLVFrame{flvHeadCache[:11]}
+			ts := frame.AbsTime - s.SkipTS
+			flvHeadCache[0] = codec.FLV_TAG_TYPE_AUDIO
+			dataSize := uint32(util.SizeOfBuffers(frame.AVCC))
+			util.PutBE(flvHeadCache[1:4], dataSize)
+			util.PutBE(flvHeadCache[4:7], ts)
+			flvHeadCache[7] = byte(ts >> 24)
+			result = append(append(result, frame.AVCC...), util.PutBE(flvHeadCache[11:15], dataSize+11))
+			spesic.OnEvent(result)
+		}
+	}
+
 	defer s.Info("stop")
 	for ctx.Err() == nil {
-		if s.Video.ring != nil {
-			if startTime.IsZero() {
-				startTime = time.Now()
-				s.Video.First = *(s.Video.ring.Read(ctx)) //不使用指针存储，为了永久保留数据
-				s.Debug("firstIFrame", zap.Uint32("seq", s.Video.First.Sequence))
+		if s.Video.ring != nil && s.Config.SubVideo {
+			for {
+				vp := s.Video.ring.Read(ctx)
+				s.Video.Frame = vp
 				if ctx.Err() != nil {
 					return
 				}
-				s.sendVideoDecConf()
-			}
-			for {
-				var vp *VideoFrame
-				// 如果进入正常模式
-				if normal {
-					vp = (*VideoFrame)(&(*s.Video.ring.Read(ctx)))
-					if ctx.Err() != nil {
-						return
-					}
-					if vp.IFrame && s.Video.decConfChanged() {
-						s.sendVideoDecConf()
-					}
-					if !s.Config.IFrameOnly || vp.IFrame {
-						spesic.OnEvent(vp)
-					}
-					s.Video.ring.MoveNext()
-				} else {
-					if s.Video.Track.IDRing.Value.Sequence != s.Video.First.Sequence {
-						normal = true
-						s.Video.ring = s.Video.Track.ReadRing()
-						s.Debug("skip to latest key frame", zap.Uint32("seq", s.Video.Track.IDRing.Value.Sequence))
-						continue
-					} else {
-						vp = (*VideoFrame)(&(*s.Video.ring.Read(ctx)))
-						if ctx.Err() != nil {
-							return
-						}
-						if !s.Config.IFrameOnly || vp.IFrame {
-							spesic.OnEvent(vp)
-						}
-						if fast := time.Duration(vp.AbsTime-s.Video.First.AbsTime)*time.Millisecond - time.Since(startTime); fast > 0 {
-							time.Sleep(fast)
-						}
-						s.Video.ring.MoveNext()
-					}
+				if vp.IFrame && s.Video.decConfChanged() {
+					sendVideoDecConf()
 				}
+				switch vstate {
+				case 0:
+					startTime = time.Now()
+					s.FirstAbsTS = vp.AbsTime
+					firstSeq = vp.Sequence
+					s.Debug("firstIFrame", zap.Uint32("seq", vp.Sequence))
+					if s.Config.LiveMode {
+						vstate = 1
+					} else {
+						vstate = 3
+					}
+				case 1:
+					// 防止过快消费
+					if fast := time.Duration(vp.AbsTime-s.FirstAbsTS)*time.Millisecond - time.Since(startTime); fast > 0 {
+						time.Sleep(fast)
+					}
+					if s.Video.Track.IDRing.Value.Sequence != firstSeq {
+						s.Video.ring.Ring = s.Video.Track.IDRing // 直接跳到最近的关键帧
+						vstate = 2
+						beforeJump = vp.AbsTime
+						continue
+					}
+				case 2:
+					vstate = 3
+					s.SkipTS = vp.AbsTime - beforeJump
+					s.Debug("skip to latest key frame", zap.Uint32("seq", vp.Sequence), zap.Uint32("skipTS", s.SkipTS))
+				}
+				if !s.Config.IFrameOnly || vp.IFrame {
+					sendVideoFrame(vp)
+				}
+				s.Video.ring.MoveNext()
 				if vp.Timestamp.After(t) {
 					t = vp.Timestamp
 					break
 				}
 			}
-		} else if s.Config.SubVideo && (s.Stream == nil || s.Stream.Publisher == nil || s.Stream.Publisher.GetConfig().PubVideo) {
-			// 如果订阅了视频需要等待视频轨道
-			time.Sleep(time.Second)
 			continue
 		}
 		// 正常模式下或者纯音频模式下，音频开始播放
-		if s.Audio.ring != nil && normal {
+		if s.Audio.ring != nil && s.Config.SubAudio {
 			if !audioSent {
 				if s.Audio.Track.IsAAC() {
-					s.sendAudioDecConf()
+					sendAudioDecConf()
 				}
 				audioSent = true
 			}
 			for {
-				ap := (*AudioFrame)(&(*s.Audio.ring.Read(ctx)))
+				ap := s.Audio.ring.Read(ctx)
+				s.Audio.Frame = ap
 				if ctx.Err() != nil {
 					return
 				}
 				if s.Audio.Track.IsAAC() && s.Audio.decConfChanged() {
-					s.sendAudioDecConf()
+					sendAudioDecConf()
 				}
-				spesic.OnEvent(ap)
+				sendAudioFrame(ap)
 				s.Audio.ring.MoveNext()
 				if ap.Timestamp.After(t) {
 					t = ap.Timestamp
 					break
 				}
 			}
+			continue
 		}
+		time.Sleep(time.Second)
 	}
-}
-
-func (s *Subscriber) sendVideoDecConf() {
-	s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-	s.Spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
-}
-func (s *Subscriber) sendAudioDecConf() {
-	s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-	s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
 }
 
 type IPusher interface {

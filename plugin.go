@@ -187,9 +187,9 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
 }
 
-func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber) (err error) {
+func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber, t byte) (err error) {
 	if err = opt.Subscribe(streamPath, sub); err == nil {
-		sub.PlayBlock()
+		sub.PlayBlock(t)
 	}
 	return
 }
