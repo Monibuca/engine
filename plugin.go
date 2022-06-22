@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -122,8 +123,18 @@ func (opt *Plugin) assign() {
 func (opt *Plugin) run() {
 	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	opt.RawConfig.Unmarshal(opt.Config)
-	opt.Debug("config", zap.Any("config", opt.Config))
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
+	var buffer bytes.Buffer
+	err := yaml.NewEncoder(&buffer).Encode(opt.Config)
+	if err != nil {
+		panic(err)
+	}
+	err = yaml.NewDecoder(&buffer).Decode(&opt.RawConfig)
+	if err != nil {
+		panic(err)
+	}
+	opt.Debug("config", zap.Any("config", opt.Config))
+	// opt.RawConfig = config.Struct2Config(opt.Config)
 	if conf, ok := opt.Config.(config.HTTPConfig); ok {
 		if httpconf := conf.GetHTTPConfig(); httpconf.ListenAddr != "" && httpconf.ListenAddr != EngineConfig.ListenAddr {
 			go conf.Listen(opt)
