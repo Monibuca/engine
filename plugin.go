@@ -215,7 +215,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	}
 
 	go func() {
-		defer opt.Info("stop pull", zap.String("remoteURL", url))
+		defer opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
 		for puller.Reconnect() {
 			if puller.Pull(); !puller.IsClosed() {
 				if err = puller.Connect(); err != nil {
