@@ -646,7 +646,7 @@ func PESToTs(frame *MpegtsPESFrame, packet MpegTsPESPacket) (tsPkts []byte, err 
 		err = errors.New("packetStartCodePrefix != 0x000001")
 		return
 	}
-
+	bwTsHeader := &bytes.Buffer{}
 	bwPESPkt := &bytes.Buffer{}
 	_, err = WritePESHeader(bwPESPkt, packet.Header)
 	if err != nil {
@@ -659,8 +659,7 @@ func PESToTs(frame *MpegtsPESFrame, packet MpegTsPESPacket) (tsPkts []byte, err 
 
 	var tsHeaderLength int
 	for i := 0; bwPESPkt.Len() > 0; i++ {
-		bwTsHeader := &bytes.Buffer{}
-
+		bwTsHeader.Reset()
 		tsHeader := MpegTsHeader{
 			SyncByte:                   0x47,
 			TransportErrorIndicator:    0,
@@ -739,15 +738,14 @@ func PESToTs(frame *MpegtsPESFrame, packet MpegTsPESPacket) (tsPkts []byte, err 
 		// if tmp == 2 {
 		// 	fmt.Println("fuck you mother.")
 		// }
+		tsPktByteLen := len(tsHeaderByte) + len(tsPayloadByte)
 
-		tsPktByte := append(tsHeaderByte, tsPayloadByte...)
-
-		if len(tsPktByte) != TS_PACKET_SIZE {
-			err = errors.New(fmt.Sprintf("%s, packet size=%d", "TS_PACKET_SIZE != 188,", len(tsPktByte)))
+		if tsPktByteLen != TS_PACKET_SIZE {
+			err = errors.New(fmt.Sprintf("%s, packet size=%d", "TS_PACKET_SIZE != 188,", tsPktByteLen))
 			return
 		}
-
-		tsPkts = append(tsPkts, tsPktByte...)
+		tsPkts = append(tsPkts, tsHeaderByte...)
+		tsPkts = append(tsPkts, tsPayloadByte...)
 	}
 
 	return

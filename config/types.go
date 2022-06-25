@@ -90,7 +90,6 @@ type Engine struct {
 	RTPReorder bool
 	EnableAVCC bool   //启用AVCC格式，rtmp协议使用
 	EnableRTP  bool   //启用RTP格式，rtsp、gb18181等协议使用
-	EnableFLV  bool   //开启FLV格式，hdl协议使用
 	ConsoleURL string //远程控制台地址
 	Secret     string //远程控制台密钥
 }
@@ -172,5 +171,5 @@ var Global = &Engine{
 	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	false, true, true, true, "wss://console.monibuca.com/ws/v1", "",
+	false, true, true, "wss://console.monibuca.com/ws/v1", "",
 }

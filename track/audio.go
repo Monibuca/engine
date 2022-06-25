@@ -68,8 +68,8 @@ func (a *Audio) WriteADTS(adts []byte) {
 
 func (a *Audio) Flush() {
 	// AVCC 格式补完
-	value := a.Media.RingBuffer.Value
-	if len(value.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+	value := &a.Media.RingBuffer.Value
+	if len(value.AVCC) == 0 && (config.Global.EnableAVCC) {
 		value.AppendAVCC(a.AVCCHead)
 		for _, raw := range value.Raw {
 			value.AppendAVCC(raw)

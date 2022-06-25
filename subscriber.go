@@ -285,7 +285,6 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					break
 				}
 			}
-			continue
 		}
 		// 正常模式下或者纯音频模式下，音频开始播放
 		if s.Audio.ring != nil && s.Config.SubAudio {
@@ -311,9 +310,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					break
 				}
 			}
-			continue
 		}
-		time.Sleep(time.Second)
 	}
 }
 

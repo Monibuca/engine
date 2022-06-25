@@ -115,7 +115,7 @@ func (vt *Video) Flush() {
 		return
 	}
 	// AVCC格式补完
-	if len(rv.AVCC) == 0 && (config.Global.EnableAVCC || config.Global.EnableFLV) {
+	if len(rv.AVCC) == 0 && (config.Global.EnableAVCC) {
 		var b util.Buffer
 		if cap(rv.AVCC) > 0 {
 			if avcc := rv.AVCC[:1]; len(avcc[0]) == 5 {
