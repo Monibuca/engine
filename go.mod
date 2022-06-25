@@ -4,13 +4,13 @@ go 1.18
 
 require (
 	github.com/cnotch/ipchub v1.1.0
-	github.com/gobwas/ws v1.1.0
 	github.com/google/uuid v1.3.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/pion/rtp v1.6.2
 	github.com/q191201771/naza v0.19.1
 	github.com/shirou/gopsutil/v3 v3.22.1
 	go.uber.org/zap v1.21.0
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
@@ -25,8 +25,6 @@ require (
 
 require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
-	github.com/gobwas/httphead v0.1.0 // indirect
-	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect

@@ -62,8 +62,6 @@ global:
   enableavcc : true
   # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enablertp : true
-  # 启用flv格式缓存，用于HDL协议，以及flv格式写文件
-  enableflv : true
   # 连接远程控制台的地址
   consoleurl : wss://console.monibuca.com/ws/v1
   # 远程控制台的秘钥
