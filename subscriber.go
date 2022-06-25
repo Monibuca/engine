@@ -27,6 +27,8 @@ type VideoFrame AVFrame[NALUSlice]
 type AudioDeConf DecoderConfiguration[AudioSlice]
 type VideoDeConf DecoderConfiguration[NALUSlice]
 type FLVFrame net.Buffers
+type AudioRTP RTPFrame
+type VideoRTP RTPFrame
 
 func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 	t := (net.Buffers)(f)
@@ -151,6 +153,10 @@ func (s *Subscriber) PlayFLV() {
 	s.PlayBlock(SUBTYPE_FLV)
 }
 
+func (s *Subscriber) PlayRTP() {
+	s.PlayBlock(SUBTYPE_RTP)
+}
+
 //PlayBlock 阻塞式读取数据
 func (s *Subscriber) PlayBlock(subType byte) {
 	spesic := s.Spesic
@@ -186,23 +192,36 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
 			spesic.OnEvent((*AudioFrame)(frame))
 		}
-	// case SUBTYPE_RTP:
-	// 	sendVideoDecConf = func() {
-	// 		s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-	// 		spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
-	// 	}
-	// 	sendAudioDecConf = func() {
-	// 		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-	// 		s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
-	// 	}
-	// 	sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
-	// 		s.Video.Frame = frame
-	// 		spesic.OnEvent((RTPVideoFrame)(frame.RTP))
-	// 	}
-	// 	sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
-	// 		s.Audio.Frame = frame
-	// 		spesic.OnEvent((RTPAudioFrame)(frame.RTP))
-	// 	}
+	case SUBTYPE_RTP:
+		sendVideoDecConf = func() {
+			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
+			spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
+		}
+		sendAudioDecConf = func() {
+			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
+			s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+		}
+		var videoSeq, audioSeq uint16
+		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+			s.Video.Frame = frame
+			for _, p := range frame.RTP {
+				videoSeq++
+				vp := *p
+				vp.Header.Timestamp = vp.Header.Timestamp - s.SkipTS*90
+				vp.Header.SequenceNumber = videoSeq
+				spesic.OnEvent((VideoRTP)(vp))
+			}
+		}
+		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+			s.Audio.Frame = frame
+			for _, p := range frame.RTP {
+				audioSeq++
+				vp := *p
+				vp.Header.SequenceNumber = audioSeq
+				vp.Header.Timestamp = vp.Header.Timestamp - s.SkipTS*90
+				spesic.OnEvent((AudioRTP)(vp))
+			}
+		}
 	case SUBTYPE_FLV:
 		flvHeadCache = make([]byte, 15, 15) //内存复用
 		sendVideoDecConf = func() {
@@ -284,6 +303,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					t = vp.Timestamp
 					break
 				}
+			}
+			if vstate < 3 {
+				continue
 			}
 		}
 		// 正常模式下或者纯音频模式下，音频开始播放

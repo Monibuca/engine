@@ -169,7 +169,7 @@ func (config Config) HasChild(key string) (ok bool) {
 }
 
 func (config Config) GetChild(key string) Config {
-	if v, ok := config[strings.ToLower(key)]; ok {
+	if v, ok := config[strings.ToLower(key)]; ok && v != nil {
 		return v.(Config)
 	}
 	return nil

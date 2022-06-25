@@ -158,7 +158,6 @@ func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
 	frame = &RTPFrame{
 		Packet: *p,
 	}
-	frame.Raw, _ = p.Marshal()
 	return av.recorderRTP(frame)
 }
 func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {

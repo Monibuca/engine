@@ -77,7 +77,6 @@ type AVCCFrame []byte   // 一帧AVCC格式的数据
 type AnnexBFrame []byte // 一帧AnnexB格式数据
 type RTPFrame struct {
 	rtp.Packet
-	Raw []byte // 序列化后的数据，避免反复序列化
 }
 
 func (rtp *RTPFrame) H264Type() (naluType codec.H264NALUType) {
@@ -86,13 +85,8 @@ func (rtp *RTPFrame) H264Type() (naluType codec.H264NALUType) {
 func (rtp *RTPFrame) H265Type() (naluType codec.H265NALUType) {
 	return naluType.Parse(rtp.Payload[0])
 }
-func (rtp *RTPFrame) Marshal() *RTPFrame {
-	rtp.Raw, _ = rtp.Packet.Marshal()
-	return rtp
-}
 
 func (rtp *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
-	rtp.Raw = raw
 	if err := rtp.Packet.Unmarshal(raw); err != nil {
 		log.Error(err)
 		return nil
