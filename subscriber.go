@@ -108,12 +108,6 @@ type Subscriber struct {
 
 func (s *Subscriber) OnEvent(event any) {
 	switch v := event.(type) {
-	case TrackRemoved:
-		if a, ok := v.Track.(*track.Audio); ok && a == s.Audio.Track {
-			s.Audio.ring = nil
-		} else if v, ok := v.Track.(*track.Video); ok && v == s.Video.Track {
-			s.Video.ring = nil
-		}
 	case Track: //默认接受所有track
 		s.AddTrack(v)
 	default:
@@ -232,33 +226,29 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
 			spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
-		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+		sendFlvFrame := func(t byte, abs uint32, avcc net.Buffers) {
+			flvHeadCache[0] = t
 			result := FLVFrame{flvHeadCache[:11]}
-			ts := frame.AbsTime - s.SkipTS
-			flvHeadCache[0] = codec.FLV_TAG_TYPE_VIDEO
-			dataSize := uint32(util.SizeOfBuffers(frame.AVCC))
+			ts := abs - s.SkipTS
+			dataSize := uint32(util.SizeOfBuffers(avcc))
 			util.PutBE(flvHeadCache[1:4], dataSize)
 			util.PutBE(flvHeadCache[4:7], ts)
 			flvHeadCache[7] = byte(ts >> 24)
-			result = append(append(result, frame.AVCC...), util.PutBE(flvHeadCache[11:15], dataSize+11))
+			result = append(append(result, avcc...), util.PutBE(flvHeadCache[11:15], dataSize+11))
 			spesic.OnEvent(result)
 		}
+		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, frame.AVCC)
+		}
 		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
-			result := FLVFrame{flvHeadCache[:11]}
-			ts := frame.AbsTime - s.SkipTS
-			flvHeadCache[0] = codec.FLV_TAG_TYPE_AUDIO
-			dataSize := uint32(util.SizeOfBuffers(frame.AVCC))
-			util.PutBE(flvHeadCache[1:4], dataSize)
-			util.PutBE(flvHeadCache[4:7], ts)
-			flvHeadCache[7] = byte(ts >> 24)
-			result = append(append(result, frame.AVCC...), util.PutBE(flvHeadCache[11:15], dataSize+11))
-			spesic.OnEvent(result)
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime, frame.AVCC)
 		}
 	}
 
 	defer s.Info("stop")
 	for ctx.Err() == nil {
-		if s.Video.ring != nil && s.Config.SubVideo {
+		hasVideo, hasAudio := s.Video.ring != nil && s.Config.SubVideo, s.Audio.ring != nil && s.Config.SubAudio
+		if hasVideo {
 			for {
 				vp := s.Video.ring.Read(ctx)
 				s.Video.Frame = vp
@@ -309,7 +299,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			}
 		}
 		// 正常模式下或者纯音频模式下，音频开始播放
-		if s.Audio.ring != nil && s.Config.SubAudio {
+		if hasAudio {
 			if !audioSent {
 				if s.Audio.Track.IsAAC() {
 					sendAudioDecConf()
@@ -332,6 +322,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					break
 				}
 			}
+		}
+		if !hasVideo && !hasAudio {
+			time.Sleep(time.Second)
 		}
 	}
 }
