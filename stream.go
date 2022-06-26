@@ -346,10 +346,14 @@ func (s *Stream) run() {
 							case *track.Audio:
 								if needAudio {
 									needAudio = false
+								} else {
+									continue
 								}
 							case *track.Video:
 								if needVideo {
 									needVideo = false
+								} else {
+									continue
 								}
 							}
 							suber.OnEvent(t) // 把现有的Track发给订阅者

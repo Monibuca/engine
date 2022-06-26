@@ -169,7 +169,6 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	var sendVideoDecConf, sendAudioDecConf func()
 	var sendVideoFrame func(*AVFrame[NALUSlice])
 	var sendAudioFrame func(*AVFrame[AudioSlice])
-	var flvHeadCache []byte
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoDecConf = func() {
@@ -217,7 +216,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			}
 		}
 	case SUBTYPE_FLV:
-		flvHeadCache = make([]byte, 15, 15) //内存复用
+		flvHeadCache := make([]byte, 15, 15) //内存复用
 		sendVideoDecConf = func() {
 			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
 			spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
@@ -228,19 +227,20 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendFlvFrame := func(t byte, abs uint32, avcc net.Buffers) {
 			flvHeadCache[0] = t
-			result := FLVFrame{flvHeadCache[:11]}
+			result := append(FLVFrame{flvHeadCache[:11]},avcc...)
 			ts := abs - s.SkipTS
 			dataSize := uint32(util.SizeOfBuffers(avcc))
 			util.PutBE(flvHeadCache[1:4], dataSize)
 			util.PutBE(flvHeadCache[4:7], ts)
 			flvHeadCache[7] = byte(ts >> 24)
-			result = append(append(result, avcc...), util.PutBE(flvHeadCache[11:15], dataSize+11))
-			spesic.OnEvent(result)
+			spesic.OnEvent(append(result, util.PutBE(flvHeadCache[11:15], dataSize+11)))
 		}
 		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+			s.Video.Frame = frame
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, frame.AVCC)
 		}
 		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+			s.Audio.Frame = frame
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime, frame.AVCC)
 		}
 	}
