@@ -62,6 +62,7 @@ func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
 			s.Close()
+			w.Write([]byte("ok"))
 		} else {
 			http.Error(w, NO_SUCH_STREAM, http.StatusNotFound)
 		}
@@ -94,6 +95,7 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 			} else {
 				c.Save()
 				c.RawConfig.Assign(c.Modified)
+				w.Write([]byte("ok"))
 			}
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
@@ -101,6 +103,7 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 	} else if err := json.NewDecoder(r.Body).Decode(&Engine.Modified); err == nil {
 		Engine.Save()
 		Engine.RawConfig.Assign(Engine.Modified)
+		w.Write([]byte("ok"))
 	} else {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
@@ -111,10 +114,12 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 	if configName := r.URL.Query().Get("name"); configName != "" {
 		if c, ok := Plugins[configName]; ok {
 			c.Update(c.Modified)
+			w.Write([]byte("ok"))
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
 	} else {
 		Engine.Update(Engine.Modified)
+		w.Write([]byte("ok"))
 	}
 }
