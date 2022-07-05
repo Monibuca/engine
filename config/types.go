@@ -171,5 +171,5 @@ var Global = &Engine{
 	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	false, true, true, "wss://console.monibuca.com/ws/v1", "",
+	false, true, true, "wss://console.monibuca.com:9999/ws/v1", "",
 }
