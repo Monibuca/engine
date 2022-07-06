@@ -143,7 +143,7 @@ type StreamSummay struct {
 	State       StreamState
 	Subscribers int
 	Tracks      []string
-	StartTime   int64
+	StartTime   uint32
 	Type        string
 	BPS         int
 }
@@ -161,7 +161,7 @@ func (s *Stream) Summary() (r StreamSummay) {
 	r.Path = s.Path
 	r.State = s.State
 	r.Subscribers = len(s.Subscribers)
-	r.StartTime = s.StartTime.Unix()
+	r.StartTime = uint32(s.StartTime.Unix())
 	return
 }
 
