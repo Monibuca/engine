@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,13 +27,14 @@ var Version = "3.2.2"
 
 var (
 	config = &struct {
-		EnableAudio    bool
-		EnableVideo    bool
-		PublishTimeout time.Duration
-		MaxRingSize    int
-		AutoCloseAfter int
-		RTPReorder     bool
-	}{true, true, 60, 256, -1, false}
+		EnableAudio            bool
+		EnableVideo            bool
+		PublishTimeout         time.Duration
+		MaxRingSize            int
+		AutoCloseDelay         int
+		RTPReorder             bool
+		OnDemandPublishTimeout time.Duration
+	}{true, true, 60, 256, -1, false, 10}
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw     []byte
 	StartTime     time.Time                        //启动时间
@@ -95,6 +97,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 				log.Println(err)
 			}
 			config.PublishTimeout *= time.Second
+			config.OnDemandPublishTimeout *= time.Second
 		}
 		for name, config := range Plugins {
 			if cfg, ok := cg[name]; ok {
@@ -116,13 +119,17 @@ func Run(ctx context.Context, configFile string) (err error) {
 	}
 	UUID := uuid.NewString()
 	reportTimer := time.NewTimer(time.Minute)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://monibuca.com:2022/report/engine", nil)
-	req.Header.Set("os", runtime.GOOS)
-	req.Header.Set("version", Version)
-	req.Header.Set("uuid", UUID)
+	contentBuf := bytes.NewBuffer(nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"`, UUID, Version, runtime.GOOS, runtime.GOARCH)
 	var c http.Client
 	for {
-		req.Header.Set("streams", fmt.Sprintf("%d", len(Streams.m)))
+		contentBuf.Reset()
+		postJson := fmt.Sprintf(`%s,"streams":%d}`, content, len(Streams.m))
+		contentBuf.WriteString(postJson)
+		req.Body = ioutil.NopCloser(contentBuf)
 		c.Do(req)
 		select {
 		case <-ctx.Done():

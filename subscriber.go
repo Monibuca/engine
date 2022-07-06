@@ -51,12 +51,23 @@ func (s *Subscriber) Subscribe(streamPath string) error {
 	} else {
 		streamPath = u.Path
 	}
-	if stream := FindStream(streamPath); stream == nil {
-		return errors.Errorf("subscribe %s faild :stream not found", streamPath)
-	} else {
+	var stream *Stream = nil
+	if stream = FindStream(streamPath); stream == nil {
+		if config.OnDemandPublishTimeout > 0 {
+			//TriggerHook(HOOK_ONDEMAND_PUBLISH, streamPath)
+			stream = WaitStream(streamPath, config.OnDemandPublishTimeout)
+		} else {
+			return errors.Errorf("subscribe %s faild :stream not found", streamPath)
+		}
+
+	}
+
+	if stream != nil {
 		if stream.Subscribe(s); s.Context == nil {
 			return errors.Errorf("subscribe %s faild :stream closed", streamPath)
 		}
+	} else {
+		return errors.Errorf("subscribe %s faild :stream not found", streamPath)
 	}
 	return nil
 }

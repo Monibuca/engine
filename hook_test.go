@@ -11,13 +11,14 @@ func TestAddHook(t *testing.T) {
 	t.Run(t.Name(), func(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(1)
-		go AddHook("test", func(a, b int) {
-			fmt.Printf("on test,%d,%d", a, b)
+		AddHook("test", func(a, b int) {
+			fmt.Printf("on test1,%d,%d\n", a, b)
 		})
-		go AddHook("done", wg.Done)
+		AddHook("done", wg.Done)
+		<-time.After(time.Millisecond * 100)
 		TriggerHook("test", 2, 10)
-		go AddHook("test", func(a, b int) {
-			fmt.Printf("on test,%d,%d", a, b)
+		AddHook("test", func(a, b int) {
+			fmt.Printf("on test2,%d,%d\n", a, b)
 		})
 		<-time.After(time.Millisecond * 100)
 		TriggerHook("test", 1, 12)
