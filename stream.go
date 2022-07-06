@@ -309,7 +309,7 @@ func (s *Stream) run() {
 						io := v.Value.GetIO()
 						io.Spesic = v.Value
 						io.Stream = s
-						io.StartTime = time.Now().Unix()
+						io.StartTime = uint32(time.Now().Unix())
 						io.Logger = s.With(zap.String("type", io.Type))
 						if io.ID != "" {
 							io.Logger = io.Logger.With(zap.String("ID", io.ID))
@@ -332,7 +332,7 @@ func (s *Stream) run() {
 						s.WaitTimeout = wt
 					}
 					io.Stream = s
-					io.StartTime = time.Now().Unix()
+					io.StartTime = uint32(time.Now().Unix())
 					io.Logger = s.With(zap.String("type", io.Type))
 					if io.ID != "" {
 						io.Logger = io.Logger.With(zap.String("ID", io.ID))

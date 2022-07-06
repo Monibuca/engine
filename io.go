@@ -28,7 +28,7 @@ type IO[C IOConfig, S IIO] struct {
 	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
 	context.CancelFunc `json:"-"` //流关闭是关闭发布者或者订阅者
 	*zap.Logger        `json:"-"`
-	StartTime          int64   //创建时间
+	StartTime          uint32  //创建时间
 	Stream             *Stream `json:"-"`
 	io.Reader          `json:"-"`
 	io.Writer          `json:"-"`
