@@ -32,7 +32,7 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	if 过快毫秒 := 数据时间差 - 实际时间差; 过快毫秒 > time.Millisecond*100 {
 		// println("休息", 过快毫秒/time.Millisecond, 绝对时间戳, p.起始时间戳)
 		if 过快毫秒 > time.Millisecond*500 {
-			time.Sleep(time.Millisecond*500)
+			time.Sleep(time.Millisecond * 500)
 		} else {
 			time.Sleep(过快毫秒)
 		}
@@ -42,7 +42,9 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 // Media 基础媒体Track类
 type Media[T RawSlice] struct {
 	Base
-	AVRing[T]            `json:"-"`
+	AVRing[T]
+	RawPart              []int // 裸数据片段用于UI上显示
+	RawSize              int   //裸数据长度
 	SampleRate           uint32
 	SampleSize           byte
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)

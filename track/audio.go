@@ -1,6 +1,7 @@
 package track
 
 import (
+	"encoding/json"
 	"net"
 
 	"m7s.live/engine/v4/codec"
@@ -24,6 +25,20 @@ type Audio struct {
 	Profile byte
 }
 
+func (a *Audio) MarshalJSON() ([]byte, error) {
+	v := a.PreValue()
+	if a.RawPart != nil {
+		a.RawPart = a.RawPart[:0]
+	}
+	a.RawSize = 0
+	for i := 0; i < len(v.Raw) && i < 10; i++ {
+		a.RawSize += len(v.Raw[i])
+	}
+	for i := 0; i < len(v.Raw[0]) && i < 10; i++ {
+		a.RawPart = append(a.RawPart, int(v.Raw[0][i]))
+	}
+	return json.Marshal(v)
+}
 func (a *Audio) IsAAC() bool {
 	return a.CodecID == codec.CodecID_AAC
 }

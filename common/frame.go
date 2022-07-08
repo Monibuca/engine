@@ -112,9 +112,9 @@ type AVFrame[T RawSlice] struct {
 	IFrame  bool
 	PTS     uint32
 	DTS     uint32
-	AVCC    net.Buffers // 打包好的AVCC格式
-	RTP     []*RTPFrame
-	Raw     []T // 裸数据
+	AVCC    net.Buffers `json:"-"` // 打包好的AVCC格式
+	RTP     []*RTPFrame `json:"-"`
+	Raw     []T         `json:"-"` // 裸数据
 	canRead bool
 }
 

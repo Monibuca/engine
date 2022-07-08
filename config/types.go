@@ -83,22 +83,28 @@ func (p *Push) AddPush(streamPath string, url string) {
 	p.PushList[streamPath] = url
 }
 
+type Console struct {
+	Server        string //远程控制台地址
+	Secret        string //远程控制台密钥
+	PublicAddr    string //公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
+	PublicAddrTLS string
+}
+
 type Engine struct {
 	Publish
 	Subscribe
 	HTTP
 	RTPReorder bool
-	EnableAVCC bool   //启用AVCC格式，rtmp协议使用
-	EnableRTP  bool   //启用RTP格式，rtsp、gb18181等协议使用
-	ConsoleURL string //远程控制台地址
-	Secret     string //远程控制台密钥
+	EnableAVCC bool //启用AVCC格式，rtmp协议使用
+	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
+	Console
 }
 type myResponseWriter struct {
 	*websocket.Conn
 }
 
 func (w *myResponseWriter) Write(b []byte) (int, error) {
-	return len(b), websocket.Message.Send(w.Conn,b)
+	return len(b), websocket.Message.Send(w.Conn, b)
 }
 
 func (w *myResponseWriter) Header() http.Header {
@@ -111,10 +117,10 @@ func (cfg *Engine) OnEvent(event any) {
 	case context.Context:
 		go func() {
 			for {
-				conn, err := websocket.Dial(cfg.ConsoleURL, "", "https://console.monibuca.com")
+				conn, err := websocket.Dial(cfg.Server, "", "https://console.monibuca.com")
 				wr := &myResponseWriter{conn}
 				if err != nil {
-					log.Error("connect to console server ", cfg.ConsoleURL, " ", err)
+					log.Error("connect to console server ", cfg.Server, " ", err)
 					time.Sleep(time.Second * 5)
 					continue
 				}
@@ -125,10 +131,10 @@ func (cfg *Engine) OnEvent(event any) {
 				var rMessage map[string]interface{}
 				if err := websocket.JSON.Receive(conn, &rMessage); err == nil {
 					if rMessage["code"].(float64) != 0 {
-						log.Error("connect to console server ", cfg.ConsoleURL, " ", rMessage["msg"])
+						log.Error("connect to console server ", cfg.Server, " ", rMessage["msg"])
 						return
 					} else {
-						log.Info("connect to console server ", cfg.ConsoleURL, " success")
+						log.Info("connect to console server ", cfg.Server, " success")
 					}
 				}
 				for {
@@ -171,5 +177,7 @@ var Global = &Engine{
 	Publish{true, true, false, 10, 0},
 	Subscribe{true, true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	false, true, true, "wss://console.monibuca.com:9999/ws/v1", "",
+	false, true, true, Console{
+		"wss://console.monibuca.com:9999/ws/v1", "", "", "",
+	},
 }

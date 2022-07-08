@@ -2,6 +2,7 @@ package track
 
 import (
 	"bytes"
+	"encoding/json"
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
@@ -23,6 +24,23 @@ type Video struct {
 	dtsEst      *DTSEstimator
 }
 
+func (vt *Video) MarshalJSON() ([]byte, error) {
+	v := vt.PreValue()
+	if vt.RawPart != nil {
+		vt.RawPart = vt.RawPart[:0]
+	}
+	size := 0
+	for i := 0; i < len(v.Raw); i++ {
+		for j := 0; j < len(v.Raw[i]); j++ {
+			size += len(v.Raw[i][j])
+		}
+	}
+	vt.RawSize = size
+	for i := 0; i < len(v.Raw[0][0]) && i < 10; i++ {
+		vt.RawPart = append(vt.RawPart, int(v.Raw[0][0][i]))
+	}
+	return json.Marshal(v)
+}
 func (vt *Video) GetDecConfSeq() int {
 	return vt.DecoderConfiguration.Seq
 }

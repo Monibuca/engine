@@ -143,7 +143,7 @@ type StreamSummay struct {
 	State       StreamState
 	Subscribers int
 	Tracks      []string
-	StartTime   uint32
+	StartTime   time.Time
 	Type        string
 	BPS         int
 }
@@ -161,7 +161,7 @@ func (s *Stream) Summary() (r StreamSummay) {
 	r.Path = s.Path
 	r.State = s.State
 	r.Subscribers = len(s.Subscribers)
-	r.StartTime = uint32(s.StartTime.Unix())
+	r.StartTime = s.StartTime
 	return
 }
 
@@ -309,7 +309,7 @@ func (s *Stream) run() {
 						io := v.Value.GetIO()
 						io.Spesic = v.Value
 						io.Stream = s
-						io.StartTime = uint32(time.Now().Unix())
+						io.StartTime = time.Now()
 						io.Logger = s.With(zap.String("type", io.Type))
 						if io.ID != "" {
 							io.Logger = io.Logger.With(zap.String("ID", io.ID))
@@ -332,7 +332,7 @@ func (s *Stream) run() {
 						s.WaitTimeout = wt
 					}
 					io.Stream = s
-					io.StartTime = uint32(time.Now().Unix())
+					io.StartTime = time.Now()
 					io.Logger = s.With(zap.String("type", io.Type))
 					if io.ID != "" {
 						io.Logger = io.Logger.With(zap.String("ID", io.ID))
