@@ -35,8 +35,6 @@ func (m *Map[K, V]) Has(k K) (ok bool) {
 }
 
 func (m *Map[K, V]) Len() int {
-	m.RLock()
-	defer m.RUnlock()
 	return len(m.Map)
 }
 
@@ -46,10 +44,16 @@ func (m *Map[K, V]) Get(k K) V {
 	return m.Map[k]
 }
 
-func (m *Map[K, V]) Delete(k K) {
-	m.Lock()
-	delete(m.Map, k)
-	m.Unlock()
+func (m *Map[K, V]) Delete(k K) (v V, ok bool) {
+	m.RLock()
+	v, ok = m.Map[k]
+	m.RUnlock()
+	if ok {
+		m.Lock()
+		delete(m.Map, k)
+		m.Unlock()
+	}
+	return
 }
 
 func (m *Map[K, V]) ToList() (r []V) {
@@ -61,10 +65,28 @@ func (m *Map[K, V]) ToList() (r []V) {
 	return
 }
 
-func (m *Map[K, V]) Range(f func(V)) {
+func MapList[K comparable, V any, R any](m *Map[K, V], f func(K, V) R) (r []R) {
 	m.RLock()
 	defer m.RUnlock()
-	for _, s := range m.Map {
-		f(s)
+	for k, v := range m.Map {
+		r = append(r, f(k, v))
+	}
+	return
+}
+
+func (m *Map[K, V]) Range(f func(K, V)) {
+	m.RLock()
+	defer m.RUnlock()
+	for k, v := range m.Map {
+		f(k, v)
+	}
+}
+
+//遍历时有写入操作
+func (m *Map[K, V]) ModifyRange(f func(K, V)) {
+	m.Lock()
+	defer m.Unlock()
+	for k, v := range m.Map {
+		f(k, v)
 	}
 }

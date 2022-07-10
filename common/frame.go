@@ -136,6 +136,7 @@ func (av *AVFrame[T]) Reset() {
 	}
 	av.RTP = nil
 	av.Raw = nil
+	av.BytesIn = 0
 }
 
 func (avcc AVCCFrame) IsIDR() bool {

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -122,6 +123,16 @@ type StreamTimeoutConfig struct {
 	PublishTimeout   time.Duration
 	WaitCloseTimeout time.Duration
 }
+type Tracks struct {
+	util.Map[string, Track]
+}
+
+func (tracks *Tracks) MarshalJSON() ([]byte, error) {
+	return json.Marshal(util.MapList(&tracks.Map, func(_ string, t Track) Track {
+		t.SnapForJson()
+		return t
+	}))
+}
 
 // Stream 流定义
 type Stream struct {
@@ -134,7 +145,7 @@ type Stream struct {
 	Publisher   IPublisher
 	State       StreamState
 	Subscribers []ISubscriber // 订阅者
-	Tracks      map[string]Track
+	Tracks      Tracks
 	AppName     string
 	StreamName  string
 }
@@ -153,11 +164,11 @@ func (s *Stream) Summary() (r StreamSummay) {
 	if s.Publisher != nil {
 		r.Type = s.Publisher.GetIO().Type
 	}
-	//TODO: Lock
-	for _, t := range s.Tracks {
-		r.BPS += t.GetBase().BPS
-		r.Tracks = append(r.Tracks, t.GetBase().Name)
-	}
+	r.Tracks = util.MapList(&s.Tracks.Map, func(name string, t Track) string {
+		b := t.GetBase()
+		r.BPS += b.BPS
+		return name
+	})
 	r.Path = s.Path
 	r.State = s.State
 	r.Subscribers = len(s.Subscribers)
@@ -191,7 +202,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		Streams.Map[streamPath] = s
 		s.actionChan.Init(1)
 		s.timeout = time.NewTimer(waitTimeout)
-		s.Tracks = make(map[string]Track)
+		s.Tracks.Init()
 		go s.run()
 		return s, true
 	}
@@ -262,14 +273,14 @@ func (s *Stream) run() {
 		select {
 		case <-s.timeout.C:
 			if s.State == STATE_PUBLISHING {
-				for name, t := range s.Tracks {
+				s.Tracks.ModifyRange(func(name string, t Track) {
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
 						s.Warn("track timeout", zap.String("name", name), zap.Time("lastWriteTime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
-						delete(s.Tracks, name)
+						delete(s.Tracks.Map.Map, name)
 						s.broadcast(TrackRemoved{t})
 					}
-				}
+				})
 				for l := len(s.Subscribers) - 1; l >= 0; l-- {
 					if sub := s.Subscribers[l]; sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:l], s.Subscribers[l+1:]...)
@@ -282,7 +293,7 @@ func (s *Stream) run() {
 						}
 					}
 				}
-				if len(s.Tracks) == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
+				if s.Tracks.Len() == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)
 					for p := range waitP {
 						p.Reject(errors.New("publisher lost"))
@@ -341,23 +352,23 @@ func (s *Stream) run() {
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						needAudio, needVideo := sbConfig.SubAudio && s.Publisher.GetConfig().PubAudio, sbConfig.SubVideo && s.Publisher.GetConfig().PubVideo
-						for _, t := range s.Tracks {
+						s.Tracks.Range(func(name string, t Track) {
 							switch t.(type) {
 							case *track.Audio:
 								if needAudio {
 									needAudio = false
 								} else {
-									continue
+									return
 								}
 							case *track.Video:
 								if needVideo {
 									needVideo = false
 								} else {
-									continue
+									return
 								}
 							}
 							suber.OnEvent(t) // 把现有的Track发给订阅者
-						}
+						})
 						// 还需要等一下发布者的音频或者视频Track
 						if needAudio || needVideo {
 							waitP[v] = 0
@@ -378,8 +389,7 @@ func (s *Stream) run() {
 					}
 				case Track:
 					name := v.GetBase().Name
-					if _, ok := s.Tracks[name]; !ok {
-						s.Tracks[name] = v
+					if s.Tracks.Add(name, v) {
 						s.Info("track +1", zap.String("name", name))
 						s.broadcast(v)
 						for w, flag := range waitP {
@@ -399,11 +409,10 @@ func (s *Stream) run() {
 					}
 				case TrackRemoved:
 					name := v.GetBase().Name
-					if t, ok := s.Tracks[name]; ok {
+					if t, ok := s.Tracks.Delete(name); ok {
 						s.Info("track -1", zap.String("name", name))
-						delete(s.Tracks, name)
 						s.broadcast(v)
-						if len(s.Tracks) == 0 {
+						if s.Tracks.Len() == 0 {
 							s.action(ACTION_PUBLISHLOST)
 						}
 						if dt, ok := t.(*track.Data); ok {
@@ -419,11 +428,11 @@ func (s *Stream) run() {
 				for w := range waitP {
 					w.Reject(StreamIsClosedErr)
 				}
-				for _, t := range s.Tracks {
+				s.Tracks.Range(func(_ string, t Track) {
 					if dt, ok := t.(*track.Data); ok {
 						dt.Dispose()
 					}
-				}
+				})
 				return
 			}
 		}

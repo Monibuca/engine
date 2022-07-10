@@ -74,6 +74,7 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 		aac.Audio.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
 		aac.Attach()
 	} else {
+		aac.WriteSlice(AudioSlice(frame[2:]))
 		aac.Audio.WriteAVCC(ts, frame)
 		aac.Flush()
 	}

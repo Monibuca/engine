@@ -8,13 +8,15 @@ import (
 
 // Base 基础Track类
 type Base struct {
-	Name   string
-	Stream IStream `json:"-"`
-	ts     time.Time
-	bytes  int
-	frames int
-	BPS    int
-	FPS    int
+	Name    string
+	Stream  IStream `json:"-"`
+	ts      time.Time
+	bytes   int
+	frames  int
+	BPS     int
+	FPS     int
+	RawPart []int // 裸数据片段用于UI上显示
+	RawSize int   // 裸数据长度
 }
 
 func (bt *Base) ComputeBPS(bytes int) {
@@ -32,7 +34,8 @@ func (bt *Base) ComputeBPS(bytes int) {
 func (bt *Base) GetBase() *Base {
 	return bt
 }
-
+func (bt *Base) SnapForJson() {
+}
 func (bt *Base) Flush(bf *BaseFrame) {
 	bt.ComputeBPS(bf.BytesIn)
 	bf.Timestamp = time.Now()
@@ -41,6 +44,7 @@ func (bt *Base) Flush(bf *BaseFrame) {
 type Track interface {
 	GetBase() *Base
 	LastWriteTime() time.Time
+	SnapForJson()
 }
 
 type AVTrack interface {

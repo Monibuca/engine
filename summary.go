@@ -119,9 +119,8 @@ func (s *Summary) collect() *Summary {
 		s.NetWork = append(s.NetWork, info)
 	}
 	s.lastNetWork = nv
-	s.Streams = nil
-	Streams.Range(func(ss *Stream) {
-		s.Streams = append(s.Streams, ss.Summary())
+	s.Streams = util.MapList(&Streams, func(name string, ss *Stream) StreamSummay {
+		return ss.Summary()
 	})
 	return s
 }

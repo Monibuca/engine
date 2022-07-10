@@ -109,8 +109,8 @@ func (vt *H264) writeRTPFrame(frame *RTPFrame) {
 			}
 			rv.Raw[lastIndex].Append(frame.Payload[naluType.Offset():])
 			if util.Bit1(frame.Payload[1], 1) {
-				complete := rv.Raw[lastIndex]                            //拼接完成
-				rv.Raw = rv.Raw[:lastIndex] // 缩短一个元素，因为后面的方法会加回去
+				complete := rv.Raw[lastIndex] //拼接完成
+				rv.Raw = rv.Raw[:lastIndex]   // 缩短一个元素，因为后面的方法会加回去
 				vt.WriteSlice(complete)
 			}
 		}

@@ -2,27 +2,22 @@ package common
 
 import (
 	"context"
-	"encoding/json"
 	"runtime"
 	"time"
 )
+
 
 type AVRing[T RawSlice] struct {
 	RingBuffer[AVFrame[T]]
 	Poll time.Duration
 }
 
-func (av *AVRing[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(av.PreValue())
-}
-
 func (r *AVRing[T]) Step() *AVFrame[T] {
-	last := &r.RingBuffer.Value
 	current := r.RingBuffer.MoveNext()
 	current.Sequence = r.MoveCount
 	current.canRead = false
 	current.Reset()
-	last.canRead = true
+	r.LastValue.canRead = true
 	return current
 }
 

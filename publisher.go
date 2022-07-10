@@ -186,15 +186,19 @@ func (t *TSPublisher) OnPES(pes mpegts.MpegTsPESPacket) {
 				t.adts = append(t.adts, pes.Payload[:7]...)
 				t.AudioTrack.WriteADTS(t.adts)
 			}
-			t.AudioTrack.CurrentFrame().PTS = uint32(pes.Header.Pts)
-			t.AudioTrack.CurrentFrame().DTS = uint32(pes.Header.Dts)
-			for remainLen := len(pes.Payload); remainLen > 0; {
+			current := t.AudioTrack.CurrentFrame()
+			current.PTS = uint32(pes.Header.Pts)
+			current.DTS = uint32(pes.Header.Dts)
+			remainLen := len(pes.Payload)
+			current.BytesIn += remainLen
+			for remainLen > 0 {
 				// AACFrameLength(13)
 				// xx xxxxxxxx xxx
 				frameLen := (int(pes.Payload[3]&3) << 11) | (int(pes.Payload[4]) << 3) | (int(pes.Payload[5]) >> 5)
 				if frameLen > remainLen {
 					break
 				}
+
 				t.AudioTrack.WriteSlice(pes.Payload[7:frameLen])
 				pes.Payload = pes.Payload[frameLen:remainLen]
 				remainLen -= frameLen

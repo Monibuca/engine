@@ -43,8 +43,6 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 type Media[T RawSlice] struct {
 	Base
 	AVRing[T]
-	RawPart              []int // 裸数据片段用于UI上显示
-	RawSize              int   //裸数据长度
 	SampleRate           uint32
 	SampleSize           byte
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
@@ -57,7 +55,7 @@ type Media[T RawSlice] struct {
 }
 
 func (av *Media[T]) LastWriteTime() time.Time {
-	return av.AVRing.RingBuffer.PreValue().Timestamp
+	return av.AVRing.RingBuffer.LastValue.Timestamp
 }
 
 func (av *Media[T]) Play(ctx context.Context, onMedia func(*AVFrame[T]) error) error {
@@ -83,7 +81,7 @@ func (av *Media[T]) CurrentFrame() *AVFrame[T] {
 	return &av.AVRing.RingBuffer.Value
 }
 func (av *Media[T]) PreFrame() *AVFrame[T] {
-	return av.AVRing.RingBuffer.PreValue()
+	return av.AVRing.RingBuffer.LastValue
 }
 
 // 获取缓存中下一个rtpFrame
@@ -160,9 +158,11 @@ func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
 	frame = &RTPFrame{
 		Packet: *p,
 	}
+	av.Value.BytesIn += len(p.Payload) + 12
 	return av.recorderRTP(frame)
 }
 func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
+	av.Value.BytesIn += len(raw)
 	if frame = new(RTPFrame); frame.Unmarshal(raw) == nil {
 		return
 	}
@@ -176,7 +176,7 @@ func (av *Media[T]) WriteSlice(slice T) {
 func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 	curValue := &av.AVRing.RingBuffer.Value
 	cts := frame.CTS()
-	curValue.BytesIn = len(frame)
+	curValue.BytesIn += len(frame)
 	curValue.AppendAVCC(frame)
 	curValue.DTS = ts * 90
 	curValue.PTS = (ts + cts) * 90
@@ -185,7 +185,7 @@ func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (av *Media[T]) Flush() {
 	curValue := &av.AVRing.RingBuffer.Value
-	preValue := av.AVRing.RingBuffer.PreValue()
+	preValue := av.AVRing.RingBuffer.LastValue
 	if av.起始时间.IsZero() {
 		av.重置(curValue.AbsTime)
 	} else {

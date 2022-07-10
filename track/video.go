@@ -2,7 +2,6 @@ package track
 
 import (
 	"bytes"
-	"encoding/json"
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
@@ -24,22 +23,24 @@ type Video struct {
 	dtsEst      *DTSEstimator
 }
 
-func (vt *Video) MarshalJSON() ([]byte, error) {
-	v := vt.PreValue()
+func (vt *Video) SnapForJson() {
+	v := vt.LastValue
 	if vt.RawPart != nil {
 		vt.RawPart = vt.RawPart[:0]
 	}
 	size := 0
 	for i := 0; i < len(v.Raw); i++ {
 		for j := 0; j < len(v.Raw[i]); j++ {
-			size += len(v.Raw[i][j])
+			l := len(v.Raw[i][j])
+			size += l
+			if sl := len(vt.RawPart); sl < 10 {
+				for k := 0; k < l && k < 10-sl; k++ {
+					vt.RawPart = append(vt.RawPart, int(v.Raw[i][j][k]))
+				}
+			}
 		}
 	}
 	vt.RawSize = size
-	for i := 0; i < len(v.Raw[0][0]) && i < 10; i++ {
-		vt.RawPart = append(vt.RawPart, int(v.Raw[0][0][i]))
-	}
-	return json.Marshal(v)
 }
 func (vt *Video) GetDecConfSeq() int {
 	return vt.DecoderConfiguration.Seq
@@ -48,8 +49,8 @@ func (vt *Video) Attach() {
 	vt.Stream.AddTrack(vt)
 }
 func (vt *Video) Detach() {
-	vt.Stream = nil
 	vt.Stream.RemoveTrack(vt)
+	vt.Stream = nil
 }
 func (vt *Video) GetName() string {
 	if vt.Name == "" {
@@ -93,6 +94,7 @@ func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame, s *[]NALUSlice) {
 
 func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) (s []NALUSlice) {
 	// vt.Stream.Tracef("WriteAnnexB:pts %d,dts %d,len %d", pts, dts, len(frame))
+	vt.Value.BytesIn += len(frame)
 	for len(frame) > 0 {
 		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)
 		if !found {

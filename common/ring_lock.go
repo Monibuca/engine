@@ -47,12 +47,11 @@ func (rb *LockRing[T]) Step() {
 }
 
 func (rb *LockRing[T]) Write(value T) {
-	last := &rb.RingBuffer.Value
-	last.Value = value
+	rb.Value.Value = value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
 		current := rb.RingBuffer.MoveNext()
 		current.Lock()
-		last.Unlock()
+		rb.LastValue.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
 		if !atomic.CompareAndSwapInt32(rb.Flag, 1, 0) {
 			current.Unlock()
