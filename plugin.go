@@ -245,6 +245,9 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 
 	if save {
 		pullConf.AddPull(streamPath, url)
+		if opt.Modified == nil {
+			opt.Modified = make(config.Config)
+		}
 		opt.Modified["pull"] = config.Struct2Config(pullConf)
 		if err = opt.Save(); err != nil {
 			opt.Error("save faild", zap.Error(err))
@@ -301,6 +304,9 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 
 	if save {
 		pushConfig.AddPush(streamPath, url)
+		if opt.Modified == nil {
+			opt.Modified = make(config.Config)
+		}
 		opt.Modified["push"] = config.Struct2Config(pushConfig)
 		if err = opt.Save(); err != nil {
 			opt.Error("save faild", zap.Error(err))

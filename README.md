@@ -15,7 +15,7 @@
 - 引擎提供事件总线机制，可以对所有插件广播事件
 ## 引擎自带HTTP接口
 - 终止某一个流 `/api/closeStream?streamPath=xxx`
-- 获取engine信息 `/api/sysInfo` 返回值{Version:xxx,StartTime:xxx}
+- 获取engine信息 `/api/sysInfo` 返回值{Version:xxx,StartTime:xxx,IP:[xxx.xxx.xxx.xxx]}
 - 获取系统基本情况 `/api/summary` 返回值Summary数据
 - 获取所有插件信息 `/api/plugins` 返回值Plugin数据
 - 获取指定的配置信息 `/api/getconfig?name=xxx` 返回xxx插件的配置信息，如果不带参数或参数为空则返回全局配置
