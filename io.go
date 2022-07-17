@@ -22,7 +22,7 @@ type ClientConfig interface {
 }
 
 // 发布者或者订阅者的共用结构体
-type IO[C IOConfig, S IIO] struct {
+type IO[C IOConfig] struct {
 	ID                 string
 	Type               string
 	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
@@ -35,15 +35,15 @@ type IO[C IOConfig, S IIO] struct {
 	io.Closer          `json:"-"`
 	Args               url.Values
 	Config             *C `json:"-"`
-	Spesic             S  `json:"-"`
+	Spesic             IIO  `json:"-"`
 }
 
-func (io *IO[C, S]) IsClosed() bool {
+func (io *IO[C]) IsClosed() bool {
 	return io.Err() != nil
 }
 
 // SetIO（可选） 设置Writer、Reader、Closer
-func (i *IO[C, S]) SetIO(conn any) {
+func (i *IO[C]) SetIO(conn any) {
 	if v, ok := conn.(io.Closer); ok {
 		i.Closer = v
 	}
@@ -56,11 +56,11 @@ func (i *IO[C, S]) SetIO(conn any) {
 }
 
 // SetParentCtx（可选）
-func (i *IO[C, S]) SetParentCtx(parent context.Context) {
+func (i *IO[C]) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
 
-func (i *IO[C, S]) OnEvent(event any) {
+func (i *IO[C]) OnEvent(event any) {
 	switch event.(type) {
 	case SEclose, SEKick:
 		if i.Closer != nil {
@@ -72,11 +72,11 @@ func (i *IO[C, S]) OnEvent(event any) {
 	}
 }
 
-func (io *IO[C, S]) GetIO() *IO[C, S] {
+func (io *IO[C]) GetIO() *IO[C] {
 	return io
 }
 
-func (io *IO[C, S]) GetConfig() *C {
+func (io *IO[C]) GetConfig() *C {
 	return io.Config
 }
 
@@ -89,7 +89,7 @@ type IIO interface {
 }
 
 //Stop 停止订阅或者发布，由订阅者或者发布者调用
-func (io *IO[C, S]) Stop() {
+func (io *IO[C]) Stop() {
 	if io.CancelFunc != nil {
 		io.CancelFunc()
 	}
@@ -99,7 +99,7 @@ var BadNameErr = errors.New("Bad Name")
 var StreamIsClosedErr = errors.New("Stream Is Closed")
 
 // receive 用于接收发布或者订阅
-func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
+func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
@@ -160,7 +160,7 @@ func (io *IO[C, S]) receive(streamPath string, specific S, conf *C) error {
 			}
 		}()
 	}
-	if promise := util.NewPromise[S, struct{}](specific); s.Receive(promise) {
+	if promise := util.NewPromise[IIO, struct{}](specific); s.Receive(promise) {
 		return promise.Catch()
 	}
 	return StreamIsClosedErr

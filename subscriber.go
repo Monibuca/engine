@@ -59,8 +59,8 @@ func (v VideoDeConf) GetAnnexB() (r net.Buffers) {
 
 type ISubscriber interface {
 	IIO
-	receive(string, ISubscriber, *config.Subscribe) error
-	GetIO() *IO[config.Subscribe, ISubscriber]
+	receive(string, IIO, *config.Subscribe) error
+	GetIO() *IO[config.Subscribe]
 	GetConfig() *config.Subscribe
 	IsPlaying() bool
 	PlayRaw()
@@ -102,7 +102,7 @@ type TrackPlayer struct {
 
 // Subscriber 订阅者实体定义
 type Subscriber struct {
-	IO[config.Subscribe, ISubscriber]
+	IO[config.Subscribe]
 	TrackPlayer `json:"-"`
 }
 

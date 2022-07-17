@@ -14,14 +14,14 @@ import (
 type IPublisher interface {
 	IIO
 	GetConfig() *config.Publish
-	receive(string, IPublisher, *config.Publish) error
-	GetIO() *IO[config.Publish, IPublisher]
+	receive(string, IIO, *config.Publish) error
+	GetIO() *IO[config.Publish]
 	getAudioTrack() common.AudioTrack
 	getVideoTrack() common.VideoTrack
 }
 
 type Publisher struct {
-	IO[config.Publish, IPublisher]
+	IO[config.Publish]
 	common.AudioTrack `json:"-"`
 	common.VideoTrack `json:"-"`
 }
