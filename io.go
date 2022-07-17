@@ -34,8 +34,8 @@ type IO[C IOConfig] struct {
 	io.Writer          `json:"-"`
 	io.Closer          `json:"-"`
 	Args               url.Values
-	Config             *C `json:"-"`
-	Spesic             IIO  `json:"-"`
+	Config             *C  `json:"-"`
+	Spesic             IIO `json:"-"`
 }
 
 func (io *IO[C]) IsClosed() bool {
@@ -148,6 +148,9 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 				}
 			}
 		}()
+		if promise := util.NewPromise[IPublisher, struct{}](specific.(IPublisher)); s.Receive(promise) {
+			return promise.Catch()
+		}
 	} else {
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		if create {
@@ -159,9 +162,9 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 				specific.OnEvent(specific)
 			}
 		}()
-	}
-	if promise := util.NewPromise[IIO, struct{}](specific); s.Receive(promise) {
-		return promise.Catch()
+		if promise := util.NewPromise[ISubscriber, struct{}](specific.(ISubscriber)); s.Receive(promise) {
+			return promise.Catch()
+		}
 	}
 	return StreamIsClosedErr
 }
