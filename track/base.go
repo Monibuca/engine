@@ -44,7 +44,6 @@ type Media[T RawSlice] struct {
 	Base
 	AVRing[T]
 	SampleRate           uint32
-	SampleSize           byte
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	// util.BytesPool                               //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
 	rtpSequence uint16      //用于生成下一个rtp包的序号

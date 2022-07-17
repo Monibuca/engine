@@ -195,6 +195,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 			Path:       streamPath,
 			AppName:    p[0],
 			StreamName: util.LastElement(p),
+			StartTime:  time.Now(),
 		}
 		s.Logger = log.With(zap.String("stream", streamPath))
 		s.Info("created")

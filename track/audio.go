@@ -13,9 +13,10 @@ var adcflv2 = []byte{0, 0, 0, 15}
 
 type Audio struct {
 	Media[AudioSlice]
-	CodecID  codec.AudioCodecID
-	Channels byte
-	AVCCHead []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
+	CodecID    codec.AudioCodecID
+	Channels   byte
+	SampleSize byte
+	AVCCHead   []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
 	// Profile:
 	// 0: Main profile
 	// 1: Low Complexity profile(LC)
