@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 	"time"
 
@@ -51,22 +50,7 @@ func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (conf *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request) {
-	var IP []string
-	if addrs, err := net.InterfaceAddrs(); err == nil {
-		for _, address := range addrs {
-			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					IP = append(IP, ipnet.IP.String())
-				}
-			}
-		}
-	}
-
-	if err := json.NewEncoder(rw).Encode(&struct {
-		Version   string
-		StartTime string
-		IP        []string
-	}{Engine.Version, StartTime.Format("2006-01-02 15:04:05"), IP}); err != nil {
+	if err := json.NewEncoder(rw).Encode(&SysInfo); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 	}
 }

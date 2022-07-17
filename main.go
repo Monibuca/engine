@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,11 +23,15 @@ import (
 )
 
 var (
+	SysInfo struct {
+		StartTime time.Time //启动时间
+		LocalIP   string
+		Version   string
+	}
 	ExecPath = os.Args[0]
 	ExecDir  = filepath.Dir(ExecPath)
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw    []byte
-	StartTime    time.Time                  //启动时间
 	Plugins      = make(map[string]*Plugin) // Plugins 所有的插件配置
 	EngineConfig = &GlobalConfig{
 		Engine: config.Global,
@@ -37,9 +43,16 @@ var (
 	apiList      []string //注册到引擎的API接口列表
 )
 
+func init() {
+	if conn, err := net.Dial("udp", "114.114.114.114:80"); err == nil {
+		SysInfo.LocalIP, _, _ = strings.Cut(conn.LocalAddr().String(), ":")
+	}
+}
+
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
 func Run(ctx context.Context, configFile string) (err error) {
-	StartTime = time.Now()
+	SysInfo.StartTime = time.Now()
+	SysInfo.Version = Engine.Version
 	Engine.Context = ctx
 	if _, err := os.Stat(configFile); err != nil {
 		configFile = filepath.Join(ExecDir, configFile)
