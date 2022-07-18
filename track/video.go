@@ -92,8 +92,7 @@ func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame, s *[]NALUSlice) {
 	}
 }
 
-func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) (s []NALUSlice) {
-	// vt.Stream.Tracef("WriteAnnexB:pts %d,dts %d,len %d", pts, dts, len(frame))
+func (vt *Video) WriteAnnexB(frame AnnexBFrame) (s []NALUSlice) {
 	vt.Value.BytesIn += len(frame)
 	for len(frame) > 0 {
 		before, after, found := bytes.Cut(frame, codec.NALU_Delimiter2)

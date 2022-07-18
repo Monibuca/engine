@@ -32,9 +32,12 @@ func NewH264(stream IStream) (vt *H264) {
 	return
 }
 func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
+	if dts == 0 {
+		dts = pts
+	}
 	vt.Video.Media.RingBuffer.Value.PTS = pts
 	vt.Video.Media.RingBuffer.Value.DTS = dts
-	for _, slice := range vt.Video.WriteAnnexB(pts, dts, frame) {
+	for _, slice := range vt.Video.WriteAnnexB(frame) {
 		vt.WriteSlice(slice)
 	}
 	vt.Flush()
