@@ -428,6 +428,7 @@ func (s *Stream) run() {
 			} else {
 				for w := range waitP {
 					w.Reject(StreamIsClosedErr)
+					delete(waitP, w)
 				}
 				s.Tracks.Range(func(_ string, t Track) {
 					if dt, ok := t.(*track.Data); ok {
