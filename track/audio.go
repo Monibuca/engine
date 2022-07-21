@@ -36,7 +36,7 @@ func (a *Audio) SnapForJson() {
 		l := len(v.Raw[i])
 		a.RawSize += l
 		if sl := len(a.RawPart); sl < 10 {
-			for j := 0; i < l && j < 10-sl; j++ {
+			for j := 0; j < l && j < 10-sl; j++ {
 				a.RawPart = append(a.RawPart, int(v.Raw[i][j]))
 			}
 		}
