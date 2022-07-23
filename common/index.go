@@ -6,6 +6,11 @@ import (
 	"github.com/pion/rtp"
 )
 
+type TimelineData[T any] struct {
+	Timestamp time.Time `json:"timestamp"`
+	Value     T
+}
+
 // Base 基础Track类
 type Base struct {
 	Name    string
@@ -15,8 +20,10 @@ type Base struct {
 	frames  int
 	BPS     int
 	FPS     int
-	RawPart []int // 裸数据片段用于UI上显示
-	RawSize int   // 裸数据长度
+	RawPart []int               // 裸数据片段用于UI上显示
+	RawSize int                 // 裸数据长度
+	BPSs    []TimelineData[int] // 10s码率统计
+	FPSs    []TimelineData[int] // 10s帧率统计
 }
 
 func (bt *Base) ComputeBPS(bytes int) {
@@ -28,6 +35,16 @@ func (bt *Base) ComputeBPS(bytes int) {
 		bt.bytes = 0
 		bt.frames = 0
 		bt.ts = time.Now()
+		bt.BPSs = append(bt.BPSs, TimelineData[int]{Timestamp: bt.ts, Value: bt.BPS})
+		if len(bt.BPSs) > 10 {
+			copy(bt.BPSs, bt.BPSs[1:])
+			bt.BPSs = bt.BPSs[:10]
+		}
+		bt.FPSs = append(bt.FPSs, TimelineData[int]{Timestamp: bt.ts, Value: bt.FPS})
+		if len(bt.FPSs) > 10 {
+			copy(bt.FPSs, bt.FPSs[1:])
+			bt.FPSs = bt.FPSs[:10]
+		}
 	}
 }
 
