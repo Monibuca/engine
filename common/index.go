@@ -7,7 +7,7 @@ import (
 )
 
 type TimelineData[T any] struct {
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp time.Time
 	Value     T
 }
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -99,7 +100,13 @@ func (vt *H264) writeRTPFrame(frame *RTPFrame) {
 		switch naluType {
 		case codec.NALU_STAPA, codec.NALU_STAPB:
 			for buffer := util.Buffer(frame.Payload[naluType.Offset():]); buffer.CanRead(); {
-				vt.WriteSlice(NALUSlice{buffer.ReadN(int(buffer.ReadUint16()))})
+				nextSize := int(buffer.ReadUint16())
+				if buffer.Len() >= nextSize {
+					vt.WriteSlice(NALUSlice{buffer.ReadN(nextSize)})
+				} else {
+					vt.Stream.Error("invalid nalu size", zap.Int("naluType", int(naluType)))
+					return
+				}
 			}
 		case codec.NALU_FUA, codec.NALU_FUB:
 			if util.Bit1(frame.Payload[1], 0) {
