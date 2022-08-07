@@ -34,6 +34,9 @@ func (dt *Data) Push(data any) {
 func (d *Data) Play(ctx context.Context, onData func(any) error) error {
 	for r := d.ReadRing(); ctx.Err() == nil; r.MoveNext() {
 		p := r.Read()
+		if *r.Flag == 2 {
+			break
+		}
 		if err := onData(p); err != nil {
 			return err
 		}

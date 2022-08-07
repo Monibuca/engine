@@ -34,11 +34,10 @@ func (rb *LockRing[T]) Read() *DataFrame[T] {
 }
 
 func (rb *LockRing[T]) Step() {
-	last := &rb.RingBuffer.Value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
 		current := rb.RingBuffer.MoveNext()
 		current.Lock()
-		last.Unlock()
+		rb.RingBuffer.LastValue.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
 		if !atomic.CompareAndSwapInt32(rb.Flag, 1, 0) {
 			current.Unlock()

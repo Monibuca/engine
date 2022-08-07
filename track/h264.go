@@ -34,13 +34,15 @@ func NewH264(stream IStream) (vt *H264) {
 }
 func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	if dts == 0 {
-		dts = pts
+		vt.generateTimestamp(pts)
+	} else {
+		vt.Value.PTS = pts
+		vt.Value.DTS = dts
 	}
-	vt.Video.Media.RingBuffer.Value.PTS = pts
-	vt.Video.Media.RingBuffer.Value.DTS = dts
 	for _, slice := range vt.Video.WriteAnnexB(frame) {
 		vt.WriteSlice(slice)
 	}
+	// println(vt.Value.DTS, vt.Value.PTS, len(frame))
 	vt.Flush()
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
