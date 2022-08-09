@@ -89,7 +89,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		plugin.assign()
 	}
 	UUID := uuid.NewString()
-	reportTimer := time.NewTimer(time.Minute)
+	reportTimer := time.NewTicker(time.Minute)
 	contentBuf := bytes.NewBuffer(nil)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
 	req.Header.Set("Content-Type", "application/json")
