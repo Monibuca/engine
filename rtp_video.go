@@ -228,7 +228,7 @@ func (v *RTPVideo) demuxH265(payload []byte) (result *RTPNalu) {
 			copy(v.fuaPayload, payload[:2])
 		}
 		if v.fuaPayload != nil {
-			if v.fuaPayload = append(v.fuaPayload, payload[offset:]...); payload[1]&fuaEndBitmask != 0 {
+			if v.fuaPayload = append(v.fuaPayload, payload[offset:]...); fuheader&fuaEndBitmask != 0 {
 				result = &RTPNalu{Payload: v.fuaPayload, PTS: v.PTS}
 				v.fuaPayload = nil
 			}
