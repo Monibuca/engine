@@ -119,9 +119,9 @@ func FilterStreams[T IPublisher]() (ss []*Stream) {
 }
 
 type StreamTimeoutConfig struct {
-	WaitTimeout      time.Duration
-	PublishTimeout   time.Duration
-	WaitCloseTimeout time.Duration
+	WaitTimeout       time.Duration //等待发布者上线
+	PublishTimeout    time.Duration //发布者无数据后超时
+	DelayCloseTimeout time.Duration //发布者丢失后等待
 }
 type Tracks struct {
 	util.Map[string, Track]
@@ -231,7 +231,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
-			r.timeout.Reset(r.WaitCloseTimeout)
+			r.timeout.Reset(r.DelayCloseTimeout)
 		case STATE_CLOSED:
 			for !r.actionChan.Close() {
 				// 等待channel发送完毕
@@ -289,7 +289,7 @@ func (s *Stream) run() {
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
-						if l == 0 && s.WaitCloseTimeout > 0 {
+						if l == 0 && s.DelayCloseTimeout > 0 {
 							s.action(ACTION_LASTLEAVE)
 						}
 					}

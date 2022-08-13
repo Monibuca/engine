@@ -14,6 +14,7 @@
 - 引擎包了zap日志框架
 - 引擎提供事件总线机制，可以对所有插件广播事件
 ## 引擎自带HTTP接口
+- 获取某一个流的详情 `/api/stream?streamPath=xxx`
 - 终止某一个流 `/api/closeStream?streamPath=xxx`
 - 获取engine信息 `/api/sysInfo` 返回值{Version:xxx,StartTime:xxx,IP:[xxx.xxx.xxx.xxx]}
 - 获取系统基本情况 `/api/summary` 返回值Summary数据
@@ -24,6 +25,7 @@
 # 引擎默认配置
 ```yaml
 global:
+  loglevel: info # 日志级别，可选值：debug,info,warn,error,panic,fatal
   http:
     # 网关地址，用于访问API
     listenaddr: :8080
@@ -45,7 +47,9 @@ global:
       kickexist: false
       # 发布流默认过期时间单位秒，超过该时间发布者没有恢复流将被删除
       publishtimeout: 10
-      # 自动关闭触发后延迟的秒数(期间内如果有新的订阅则取消触发关闭)
+      # 自动关闭触发后延迟的秒数(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
+      delayclosetimeout: 0
+      # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
       waitclosetimeout: 0
   subscribe:
       # 是否订阅音频流
@@ -62,10 +66,15 @@ global:
   enableavcc : true
   # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enablertp : true
-  # 连接远程控制台的地址
-  consoleurl : wss://console.monibuca.com/ws/v1
-  # 远程控制台的秘钥
-  secret: ""
+  console: 
+    # 连接远程控制台的地址
+    server : wss://console.monibuca.com/ws/v1
+    # 远程控制台的秘钥
+    secret: ""
+    # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
+    publicaddr: ""
+    # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址（https）
+    publicaddrtls: ""
 ```
 
 # 配置覆盖机制

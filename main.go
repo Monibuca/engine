@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
@@ -78,6 +79,12 @@ func Run(ctx context.Context, configFile string) (err error) {
 			log.Error("parsing yml error:", err)
 		}
 	}
+	loglevel, err := zapcore.ParseLevel(EngineConfig.LogLevel)
+	if err != nil {
+		log.Error("parse log level error:", err)
+		loglevel = zapcore.InfoLevel
+	}
+	log.Init(loglevel)
 	Engine.Logger = log.With(zap.Bool("engine", true))
 	Engine.registerHandler()
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中

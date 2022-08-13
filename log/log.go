@@ -53,19 +53,21 @@ func DeleteWriter(writer io.Writer) {
 	multipleWriter.Delete(writer)
 }
 func init() {
+	// std.SetOutput(colorableStdout)
+	// std.SetFormatter(LogWriter(defaultFormatter))
+}
+func Init(level zapcore.Level) {
 	config := zap.NewDevelopmentConfig()
 	config.EncoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
 		return yaml.NewEncoder(w)
 	}
 	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
-
+	config.Level.SetLevel(level)
 	logger = zap.New(
 		zapcore.NewCore(zapcore.NewConsoleEncoder(config.EncoderConfig), zapcore.AddSync(multipleWriter), config.Level),
 	)
 	sugaredLogger = logger.Sugar()
-	// std.SetOutput(colorableStdout)
-	// std.SetFormatter(LogWriter(defaultFormatter))
 }
 
 type Zap interface {

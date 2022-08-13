@@ -26,11 +26,12 @@ type PushConfig interface {
 }
 
 type Publish struct {
-	PubAudio         bool
-	PubVideo         bool
-	KickExist        bool // 是否踢掉已经存在的发布者
-	PublishTimeout   int  // 发布无数据超时
-	WaitCloseTimeout int  // 延迟自动关闭（无订阅时）
+	PubAudio          bool
+	PubVideo          bool
+	KickExist         bool // 是否踢掉已经存在的发布者
+	PublishTimeout    int  // 发布无数据超时
+	WaitCloseTimeout  int  // 延迟自动关闭（等待重连）
+	DelayCloseTimeout int  // 延迟自动关闭（无订阅时）
 }
 
 func (c *Publish) GetPublishConfig() *Publish {
@@ -98,6 +99,7 @@ type Engine struct {
 	EnableAVCC bool //启用AVCC格式，rtmp协议使用
 	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
 	Console
+	LogLevel string
 }
 type myResponseWriter struct {
 	*websocket.Conn
@@ -174,10 +176,10 @@ func (cfg *Engine) OnEvent(event any) {
 }
 
 var Global = &Engine{
-	Publish{true, true, false, 10, 0},
+	Publish{true, true, false, 10, 0, 0},
 	Subscribe{true, true, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, Console{
 		"wss://console.monibuca.com:9999/ws/v1", "", "", "",
-	},
+	}, "info",
 }

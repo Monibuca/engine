@@ -128,6 +128,9 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 	if v, ok := c.(*config.Publish); ok {
 		io.Type = strings.TrimSuffix(io.Type, "Publisher")
 		oldPublisher := s.Publisher
+		if !create && v.WaitCloseTimeout != 0 {
+			s.WaitTimeout = util.Second2Duration(v.WaitCloseTimeout)
+		}
 		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
@@ -138,7 +141,7 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 			}
 		}
 		s.PublishTimeout = util.Second2Duration(v.PublishTimeout)
-		s.WaitCloseTimeout = util.Second2Duration(v.WaitCloseTimeout)
+		s.DelayCloseTimeout = util.Second2Duration(v.DelayCloseTimeout)
 		defer func() {
 			if err == nil {
 				if oldPublisher == nil {
