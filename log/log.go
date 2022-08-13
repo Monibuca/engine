@@ -45,7 +45,7 @@ func (m *MultipleWriter) Add(writer io.Writer) {
 }
 
 var multipleWriter = &MultipleWriter{os.Stdout}
-
+var Config = zap.NewDevelopmentConfig()
 func AddWriter(writer io.Writer) {
 	multipleWriter.Add(writer)
 }
@@ -55,17 +55,13 @@ func DeleteWriter(writer io.Writer) {
 func init() {
 	// std.SetOutput(colorableStdout)
 	// std.SetFormatter(LogWriter(defaultFormatter))
-}
-func Init(level zapcore.Level) {
-	config := zap.NewDevelopmentConfig()
-	config.EncoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
+	Config.EncoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
 		return yaml.NewEncoder(w)
 	}
-	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
-	config.Level.SetLevel(level)
+	Config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	Config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout("15:04:05")
 	logger = zap.New(
-		zapcore.NewCore(zapcore.NewConsoleEncoder(config.EncoderConfig), zapcore.AddSync(multipleWriter), config.Level),
+		zapcore.NewCore(zapcore.NewConsoleEncoder(Config.EncoderConfig), zapcore.AddSync(multipleWriter), Config.Level),
 	)
 	sugaredLogger = logger.Sugar()
 }

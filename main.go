@@ -84,7 +84,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		log.Error("parse log level error:", err)
 		loglevel = zapcore.InfoLevel
 	}
-	log.Init(loglevel)
+	log.Config.Level.SetLevel(loglevel)
 	Engine.Logger = log.With(zap.Bool("engine", true))
 	Engine.registerHandler()
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
@@ -101,9 +101,10 @@ func Run(ctx context.Context, configFile string) (err error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
 	req.Header.Set("Content-Type", "application/json")
 	version := Engine.Version
-	if ver, ok := ctx.Value("version").(string); ok {
+	if ver, ok := ctx.Value("version").(string); ok && ver != "" && ver != "dev" {
 		version = ver
 	}
+	log.Info(Blink("m7s@"+version), " start success")
 	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"`, UUID, version, runtime.GOOS, runtime.GOARCH)
 	if EngineConfig.Secret != "" {
 		EngineConfig.OnEvent(ctx)
