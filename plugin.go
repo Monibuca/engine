@@ -30,6 +30,8 @@ func InstallPlugin(config config.Plugin) *Plugin {
 	configDir := filepath.Dir(pluginFilePath)
 	if parts := strings.Split(configDir, "@"); len(parts) > 1 {
 		plugin.Version = util.LastElement(parts)
+	} else {
+		plugin.Version = pluginFilePath
 	}
 	if _, ok := Plugins[name]; ok {
 		return nil

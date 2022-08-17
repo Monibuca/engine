@@ -227,7 +227,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendFlvFrame := func(t byte, abs uint32, avcc net.Buffers) {
 			flvHeadCache[0] = t
-			result := append(FLVFrame{flvHeadCache[:11]},avcc...)
+			result := append(FLVFrame{flvHeadCache[:11]}, avcc...)
 			ts := abs - s.SkipTS
 			dataSize := uint32(util.SizeOfBuffers(avcc))
 			util.PutBE(flvHeadCache[1:4], dataSize)
@@ -271,7 +271,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					}
 				case 1:
 					// 防止过快消费
-					if fast := time.Duration(vp.AbsTime-s.FirstAbsTS)*time.Millisecond - time.Since(startTime); fast > 0 {
+					if fast := time.Duration(vp.AbsTime-s.FirstAbsTS)*time.Millisecond - time.Since(startTime); fast > 0 && fast < time.Second {
 						time.Sleep(fast)
 					}
 					if s.Video.Track.IDRing.Value.Sequence != firstSeq {
