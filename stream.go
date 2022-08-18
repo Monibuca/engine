@@ -119,7 +119,6 @@ func FilterStreams[T IPublisher]() (ss []*Stream) {
 }
 
 type StreamTimeoutConfig struct {
-	WaitTimeout       time.Duration //等待发布者上线
 	PublishTimeout    time.Duration //发布者无数据后超时
 	DelayCloseTimeout time.Duration //发布者丢失后等待
 }
@@ -199,7 +198,6 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		}
 		s.Logger = log.With(zap.String("stream", streamPath))
 		s.Info("created")
-		s.WaitTimeout = waitTimeout
 		Streams.Map[streamPath] = s
 		s.actionChan.Init(1)
 		s.timeout = time.NewTimer(waitTimeout)
@@ -224,7 +222,16 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
-			r.timeout.Reset(r.WaitTimeout)
+			waitTime := r.Publisher.GetConfig().WaitCloseTimeout
+			if l := len(r.Subscribers); l > 0 {
+				r.broadcast(stateEvent)
+				if waitTime == 0 {
+					waitTime = r.Subscribers[l-1].GetConfig().WaitTimeout
+				}
+			} else if waitTime == 0 {
+				waitTime = 1 //没有订阅者也没有配置发布者等待重连时间，默认1秒后关闭流
+			}
+			r.timeout.Reset(util.Second2Duration(waitTime))
 		case STATE_PUBLISHING:
 			stateEvent = SEpublish{event}
 			r.broadcast(stateEvent)
@@ -340,9 +347,6 @@ func (s *Stream) run() {
 					io.Spesic = suber
 					s.Subscribers = append(s.Subscribers, suber)
 					sbConfig := io.Config
-					if wt := util.Second2Duration(sbConfig.WaitTimeout); wt > s.WaitTimeout {
-						s.WaitTimeout = wt
-					}
 					io.Stream = s
 					io.StartTime = time.Now()
 					io.Logger = s.With(zap.String("type", io.Type))
