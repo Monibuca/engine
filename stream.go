@@ -218,7 +218,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		r.State = next
 		// 给Publisher状态变更的回调，方便进行远程拉流等操作
 		var stateEvent any
-		r.Debug(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[next]), zap.String("action", ActionNames[action]))
+		r.Info(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[next]), zap.String("action", ActionNames[action]))
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
