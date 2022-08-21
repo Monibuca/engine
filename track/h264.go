@@ -68,9 +68,10 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 		vt.Video.DecoderConfiguration.Seq++
 	case codec.NALU_IDR_Picture:
 		vt.Video.Media.RingBuffer.Value.IFrame = true
-		fallthrough
+		vt.Video.WriteSlice(slice)
 	case codec.NALU_Non_IDR_Picture,
 		codec.NALU_SEI:
+		vt.Video.Media.RingBuffer.Value.IFrame = false
 		vt.Video.WriteSlice(slice)
 	}
 }

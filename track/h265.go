@@ -68,8 +68,9 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 		codec.NAL_UNIT_CODED_SLICE_CRA:
 		vt.Video.Media.RingBuffer.Value.IFrame = true
-		fallthrough
+		vt.Video.Media.WriteSlice(slice)
 	case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, codec.NAL_UNIT_SEI:
+		vt.Video.Media.RingBuffer.Value.IFrame = false
 		vt.Video.Media.WriteSlice(slice)
 	default:
 		vt.Video.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(slice.H265Type())))
