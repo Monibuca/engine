@@ -131,7 +131,7 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 		if s.Publisher != nil && !s.Publisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
-				s.Warn("kick", zap.Any("publisher", s.Publisher))
+				s.Warn("kick", zap.String("type", s.Publisher.GetIO().Type))
 				s.Publisher.OnEvent(SEKick{})
 			} else {
 				return BadNameErr
