@@ -120,3 +120,25 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 		w.Write([]byte("ok"))
 	}
 }
+
+func (conf *GlobalConfig) API_list_pull(w http.ResponseWriter, r *http.Request) {
+	var result []any
+	Pullers.Range(func(key, value any) bool {
+		result = append(result, key)
+		return true
+	})	
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (conf *GlobalConfig) API_list_push(w http.ResponseWriter, r *http.Request) {
+	var result []any
+	Pushers.Range(func(key, value any) bool {
+		result = append(result, key)
+		return true
+	})
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}

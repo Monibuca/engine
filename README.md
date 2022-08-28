@@ -22,6 +22,8 @@
 - 获取指定的配置信息 `/api/getconfig?name=xxx` 返回xxx插件的配置信息，如果不带参数或参数为空则返回全局配置
 - 修改并保存配置信息 `/api/modifyconfig?name=xxx` 修改xxx插件的配置信息,在请求的body中传入修改后的配置json字符串
 - 热更新配置信息 `/api/updateconfig?name=xxx` 热更新xxx插件的配置信息，如果不带参数或参数为空则热更新全局配置
+- 获取所有远端拉流信息 `/api/list/pull` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
+- 获取所有向远端推流信息 `/api/list/push` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
 # 引擎默认配置
 ```yaml
 global:

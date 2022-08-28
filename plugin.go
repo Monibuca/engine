@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -208,6 +209,7 @@ func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber, t byte) (e
 }
 
 var NoPullConfigErr = errors.New("no pull config")
+var Pullers sync.Map
 
 func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
 	opt.Info("pull", zap.String("path", streamPath), zap.String("url", url))
@@ -226,9 +228,10 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	if err = opt.Publish(streamPath, puller); err != nil {
 		return
 	}
-
+	Pullers.Store(puller, url)
 	go func() {
 		defer opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
+		defer Pullers.Delete(puller)
 		for puller.Reconnect() {
 			if puller.Pull(); !puller.IsClosed() {
 				if err = puller.Connect(); err != nil {
@@ -259,6 +262,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 }
 
 var NoPushConfigErr = errors.New("no push config")
+var Pushers sync.Map
 
 func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
 	zp, zu := zap.String("path", streamPath), zap.String("url", url)
@@ -283,9 +287,10 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 	if err = opt.Subscribe(streamPath, pusher); err != nil {
 		return
 	}
-
+	Pushers.Store(pusher, url)
 	go func() {
 		defer opt.Info("push finished", zp, zu)
+		defer Pushers.Delete(pusher)
 		for pusher.Reconnect() {
 			opt.Info("start push", zp, zu)
 			if err = pusher.Push(); !pusher.IsClosed() {
