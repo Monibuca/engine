@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -57,6 +58,7 @@ type Plugin struct {
 	RawConfig          config.Config //配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
 	*zap.Logger        `json:"-"`
+	saveTimer          *time.Timer //用于保存的时候的延迟，防抖
 }
 
 func (opt *Plugin) logHandler(pattern string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
@@ -172,15 +174,24 @@ func (opt *Plugin) settingPath() string {
 }
 
 func (opt *Plugin) Save() error {
-	file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY, 0644)
-	if err == nil {
-		defer file.Close()
-		err = yaml.NewEncoder(file).Encode(opt.Modified)
+	if opt.saveTimer == nil {
+		var lock sync.Mutex
+		opt.saveTimer = time.AfterFunc(time.Second, func() {
+			lock.Lock()
+			defer lock.Unlock()
+			file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY, 0644)
+			if err == nil {
+				defer file.Close()
+				err = yaml.NewEncoder(file).Encode(opt.Modified)
+			}
+			if err == nil {
+				opt.Info("config saved")
+			}
+		})
+	} else {
+		opt.saveTimer.Reset(time.Second)
 	}
-	if err == nil {
-		opt.Info("config saved")
-	}
-	return err
+	return nil
 }
 
 func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
@@ -233,7 +244,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 		defer opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
 		defer Pullers.Delete(puller)
 		for puller.Reconnect() {
-			if puller.Pull(); !puller.IsClosed() {
+			if puller.Pull(); puller.GetStream().IsShutdown() {
 				if err = puller.Connect(); err != nil {
 					return
 				}

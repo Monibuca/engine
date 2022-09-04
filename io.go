@@ -71,7 +71,9 @@ func (i *IO[C]) OnEvent(event any) {
 		}
 	}
 }
-
+func (io *IO[C]) GetStream() *Stream {
+	return io.Stream
+}
 func (io *IO[C]) GetIO() *IO[C] {
 	return io
 }
@@ -86,6 +88,7 @@ type IIO interface {
 	Stop()
 	SetIO(any)
 	SetParentCtx(context.Context)
+	GetStream() *Stream
 }
 
 //Stop 停止订阅或者发布，由订阅者或者发布者调用

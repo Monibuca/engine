@@ -147,6 +147,7 @@ type Stream struct {
 	Tracks      Tracks
 	AppName     string
 	StreamName  string
+	CloseReason StreamAction //流关闭原因
 }
 type StreamSummay struct {
 	Path        string
@@ -240,6 +241,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEwaitClose{event}
 			r.timeout.Reset(r.DelayCloseTimeout)
 		case STATE_CLOSED:
+			r.CloseReason = action
 			for !r.actionChan.Close() {
 				// 等待channel发送完毕
 				time.Sleep(time.Millisecond * 100)
@@ -259,6 +261,11 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 	}
 	return
 }
+
+func (r *Stream) IsShutdown() bool {
+	return r.CloseReason == ACTION_CLOSE
+}
+
 func (r *Stream) IsClosed() bool {
 	if r == nil {
 		return true
