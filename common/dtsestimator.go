@@ -54,14 +54,14 @@ func (d *DTSEstimator) Feed(pts uint32) uint32 {
 	d.prevDTS = dts
 	if d.prevPTS > d.prevPrevPTS {
 		delta := d.prevPTS - d.prevPrevPTS
-		if delta < d.delta {
+		// if delta < d.delta {
 			d.delta = delta
-		}
+		// }
 	} else {
 		delta := d.prevPrevPTS - d.prevPTS
-		if delta < d.delta {
+		// if delta < d.delta {
 			d.delta = delta
-		}
+		// }
 	}
 	return dts
 }

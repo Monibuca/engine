@@ -42,10 +42,11 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	for _, slice := range vt.Video.WriteAnnexB(frame) {
 		vt.WriteSlice(slice)
 	}
-	// println(vt.Value.DTS, vt.Value.PTS, len(frame))
+	// println(vt.Value.DTS, vt.Value.PTS, vt.Value.PTS-vt.Value.DTS, len(frame))
 	vt.Flush()
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
+	// println( slice.H264Type())
 	switch slice.H264Type() {
 	case codec.NALU_SPS:
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])
@@ -69,8 +70,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 	case codec.NALU_IDR_Picture:
 		vt.Video.Media.RingBuffer.Value.IFrame = true
 		vt.Video.WriteSlice(slice)
-	case codec.NALU_Non_IDR_Picture,
-		codec.NALU_SEI:
+	case codec.NALU_Non_IDR_Picture,codec.NALU_SEI:
 		vt.Video.Media.RingBuffer.Value.IFrame = false
 		vt.Video.WriteSlice(slice)
 	}
