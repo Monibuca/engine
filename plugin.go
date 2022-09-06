@@ -224,6 +224,11 @@ var Pullers sync.Map
 
 func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
 	opt.Info("pull", zap.String("path", streamPath), zap.String("url", url))
+	defer func() {
+		if err != nil {
+			opt.Error("pull failed", zap.String("remoteURL", url), zap.Error(err))
+		}
+	}()
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
 		return NoPullConfigErr
@@ -241,10 +246,12 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	}
 	Pullers.Store(puller, url)
 	go func() {
-		defer opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
-		defer Pullers.Delete(puller)
+		defer func() {
+			Pullers.Delete(puller)
+			opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
+		}()
 		for puller.Reconnect() {
-			if puller.Pull(); puller.GetStream().IsShutdown() {
+			if puller.Pull(); !puller.GetStream().IsShutdown() {
 				if err = puller.Connect(); err != nil {
 					return
 				}
