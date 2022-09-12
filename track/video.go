@@ -149,6 +149,7 @@ func (vt *Video) Flush() {
 		} else {
 			b[0] = 0x20 | byte(vt.CodecID)
 		}
+		// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
 		// 写入CTS
 		util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
 		lengths := b.Malloc(len(rv.Raw) * 4) //每个slice的长度内存复用
