@@ -3,7 +3,7 @@ package track
 import (
 	"bytes"
 
-	. "github.com/logrusorgru/aurora"
+	// . "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
@@ -65,7 +65,7 @@ func (vt *Video) ComputeGOP() {
 		vt.GOP = int(vt.AVRing.RingBuffer.Value.Sequence - vt.IDRing.Value.Sequence)
 		if l := vt.AVRing.RingBuffer.Size - vt.GOP - 5; l > 5 {
 			vt.AVRing.RingBuffer.Size -= l
-			vt.Stream.Debug(Sprintf("resize(%d%s%d)", vt.AVRing.RingBuffer.Size+l, Blink("→"), vt.AVRing.RingBuffer.Size), zap.String("name", vt.Name))
+			vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.RingBuffer.Size+l), zap.Int("after", vt.AVRing.RingBuffer.Size), zap.String("name", vt.Name))
 			//缩小缓冲环节省内存
 			vt.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
 				if v.IFrame {
