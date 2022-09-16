@@ -30,6 +30,7 @@ func NewAAC(stream IStream) (aac *AAC) {
 
 type AAC struct {
 	Audio
+	buffer []byte
 }
 
 // WriteRTPPack 写入已反序列化的RTP包
@@ -47,13 +48,25 @@ func (aac *AAC) WriteRTP(raw []byte) {
 }
 
 func (aac *AAC) writeRTPFrame(frame *RTPFrame) {
-	for _, payload := range codec.ParseRTPAAC(frame.Payload) {
-		aac.WriteSlice(payload)
-	}
 	aac.Audio.Media.AVRing.RingBuffer.Value.AppendRTP(frame)
-	if frame.Marker {
+	auHeaderLen := util.ReadBE[int](frame.Payload[:2]) >> 3
+	startOffset := 2 + auHeaderLen
+	if !frame.Marker {
+		aac.buffer = append(aac.buffer, frame.Payload[startOffset:]...)
+	} else {
+		if aac.buffer != nil {
+			aac.buffer = append(append([]byte{}, frame.Payload...), aac.buffer...)
+		} else {
+			aac.buffer = frame.Payload
+		}
+		for iIndex := 2; iIndex <= auHeaderLen; iIndex += 2 {
+			auLen := util.ReadBE[int](aac.buffer[iIndex:iIndex+2]) >> 3
+			aac.WriteSlice(aac.buffer[startOffset : startOffset+auLen])
+			startOffset += auLen
+		}
 		aac.generateTimestamp()
 		aac.Flush()
+		aac.buffer = nil
 	}
 }
 

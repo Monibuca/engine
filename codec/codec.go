@@ -2,6 +2,8 @@ package codec
 
 import (
 	"errors"
+
+	"m7s.live/engine/v4/util"
 )
 
 type AudioCodecID byte
@@ -219,16 +221,13 @@ func AudioSpecificConfigToADTS(asc AudioSpecificConfig, rawDataLength int) (adts
 	return
 }
 func ParseRTPAAC(payload []byte) (result [][]byte) {
-	auHeaderLen := (int16(payload[0]) << 8) + int16(payload[1])
-	auHeaderLen = auHeaderLen >> 3
-	auHeaderCount := int(auHeaderLen / 2)
+	auHeaderLen := util.ReadBE[int](payload[:2]) >> 3
 	var auLenArray []int
-	for iIndex := 0; iIndex < int(auHeaderCount); iIndex++ {
-		auHeaderInfo := (int16(payload[2+2*iIndex]) << 8) + int16(payload[2+2*iIndex+1])
-		auLen := auHeaderInfo >> 3
-		auLenArray = append(auLenArray, int(auLen))
+	for iIndex := 2; iIndex <= auHeaderLen; iIndex += 2 {
+		auLen := util.ReadBE[int](payload[iIndex:iIndex+2]) >> 3
+		auLenArray = append(auLenArray, auLen)
 	}
-	startOffset := 2 + 2*auHeaderCount
+	startOffset := 2 + auHeaderLen
 	for _, auLen := range auLenArray {
 		endOffset := startOffset + auLen
 		result = append(result, payload[startOffset:endOffset])
