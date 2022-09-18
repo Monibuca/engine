@@ -48,7 +48,20 @@ func (config Config) Unmarshal(s any) {
 	t := el.Type()
 	if t.Kind() == reflect.Map {
 		for k, v := range config {
-			el.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v).Convert(t.Elem()))
+			tt := t.Elem()
+			if child, ok := v.(Config); ok {
+				if tt.Kind() == reflect.Pointer {
+					newv := reflect.New(tt.Elem())
+					child.Unmarshal(newv)
+					el.SetMapIndex(reflect.ValueOf(k), newv)
+				} else {
+					newv := reflect.New(tt)
+					child.Unmarshal(newv)
+					el.SetMapIndex(reflect.ValueOf(k), newv.Elem())
+				}
+			} else {
+				el.SetMapIndex(reflect.ValueOf(k), reflect.ValueOf(v).Convert(tt))
+			}
 		}
 		return
 	}
