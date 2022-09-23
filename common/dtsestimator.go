@@ -2,57 +2,54 @@ package common
 
 // DTSEstimator is a DTS estimator.
 type DTSEstimator struct {
-	initializing int
-	prevDTS      uint32
-	prevPTS      uint32
-	prevPrevPTS  uint32
+	hasB    bool
+	prevPTS uint32
+	prevDTS uint32
+	cache   []uint32
 }
 
 // NewDTSEstimator allocates a DTSEstimator.
 func NewDTSEstimator() *DTSEstimator {
-	return &DTSEstimator{
-		initializing: 2,
+	result := &DTSEstimator{}
+	return result
+}
+
+func (d *DTSEstimator) add(pts uint32) {
+	i := 0
+	if len(d.cache) >= 4 {
+		i = len(d.cache) - 3
 	}
+
+	var new_cache []uint32
+	for ; i < len(d.cache); i = i + 1 {
+		if d.cache[i] > pts {
+			break
+		}
+		new_cache = append(new_cache, d.cache[i])
+	}
+	new_cache = append(new_cache, pts)
+	new_cache = append(new_cache, d.cache[i:]...)
+	d.cache = new_cache
 }
 
 // Feed provides PTS to the estimator, and returns the estimated DTS.
-func (d *DTSEstimator) Feed(pts uint32) (dts uint32) {
-	dts = pts
-	switch d.initializing {
-	case 2:
-		if d.prevPrevPTS > 0 {
-			d.initializing--
-		}
-	case 1:
+func (d *DTSEstimator) Feed(pts uint32) uint32 {
+	d.add(pts)
+	dts := pts
+	if !d.hasB {
 		if pts < d.prevPTS {
-			dts = d.prevDTS + 1
-			d.initializing--
-		} 
-	default:
-		dts = func() uint32 {
-			// P or I frame
-			if pts > d.prevPTS {
-				// previous frame was B
-				// use the DTS of the previous frame
-				if d.prevPTS < d.prevPrevPTS {
-					return d.prevPTS
-				}
-
-				// previous frame was P or I
-				// use two frames ago plus a small quantity
-				// to avoid non-monotonous DTS with B-frames
-				return d.prevPrevPTS + 1
-			}
-
-			// B Frame
-			// do not increase
-			return d.prevDTS + 1
-		}()
+			d.hasB = true
+			dts = d.cache[0]
+		}
+	} else {
+		dts = d.cache[0]
 	}
 
-	d.prevPrevPTS = d.prevPTS
+	if d.prevDTS > dts {
+		dts = d.prevDTS
+	}
+
 	d.prevPTS = pts
 	d.prevDTS = dts
-
-	return
+	return dts
 }
