@@ -50,14 +50,19 @@ type Promise[S any, R any] struct {
 	Value S
 	err   error
 	c     chan R
+	state int32 // 0 pendding  1 fullfilled -1 rejected
 }
 
 func (r *Promise[S, R]) Resolve(result R) {
-	r.c <- result
+	if atomic.CompareAndSwapInt32(&r.state, 0, 1) {
+		r.c <- result
+	}
 }
 func (r *Promise[S, R]) Reject(err error) {
-	r.err = err
-	close(r.c)
+	if atomic.CompareAndSwapInt32(&r.state, 0, -1) {
+		r.err = err
+		close(r.c)
+	}
 }
 func (p *Promise[S, R]) AWait() (R, error) {
 	return <-p.c, p.err

@@ -39,11 +39,13 @@ func (c *Publish) GetPublishConfig() *Publish {
 }
 
 type Subscribe struct {
-	SubAudio    bool
-	SubVideo    bool
-	LiveMode    bool // 实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后调到该帧。
-	IFrameOnly  bool // 只要关键帧
-	WaitTimeout int  // 等待流超时
+	SubAudio       bool
+	SubVideo       bool
+	SubAudioTracks []string // 指定订阅的音频轨道
+	SubVideoTracks []string // 指定订阅的视频轨道
+	LiveMode       bool     // 实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后调到该帧。
+	IFrameOnly     bool     // 只要关键帧
+	WaitTimeout    int      // 等待流超时
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {
@@ -177,7 +179,7 @@ func (cfg *Engine) OnEvent(event any) {
 
 var Global = &Engine{
 	Publish{true, true, false, 10, 0, 0},
-	Subscribe{true, true, true, false, 10},
+	Subscribe{true, true, nil, nil, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, Console{
 		"wss://console.monibuca.com:9999/ws/v1", "", "", "",

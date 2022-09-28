@@ -2,6 +2,8 @@ package track
 
 import (
 	"bytes"
+	"context"
+	"net"
 
 	// . "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
@@ -58,7 +60,30 @@ func (vt *Video) GetName() string {
 	}
 	return vt.Name
 }
-
+// PlayFullAnnexB 订阅annex-b格式的流数据，每一个I帧增加sps、pps头
+func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) error) error {
+	for vr := vt.ReadRing(); ctx.Err() == nil; vr.MoveNext() {
+		vp := vr.Read(ctx)
+		var data net.Buffers
+		if vp.IFrame {
+			for _, nalu := range vt.DecoderConfiguration.Raw {
+				data = append(data, codec.NALU_Delimiter2, nalu)
+			}
+		}
+		data = append(data, codec.NALU_Delimiter2)
+		for i, nalu := range vp.Raw {
+			if i > 0 {
+				data = append(data, codec.NALU_Delimiter1)
+			}
+			data = append(data, nalu...)
+		}
+		if err := onMedia(data); err != nil {
+			// TODO: log err
+			return err
+		}
+	}
+	return ctx.Err()
+}
 func (vt *Video) ComputeGOP() {
 	vt.idrCount++
 	if vt.IDRing != nil {

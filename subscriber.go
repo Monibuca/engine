@@ -76,6 +76,7 @@ type ISubscriber interface {
 type PlayContext[T interface {
 	GetDecConfSeq() int
 	ReadRing() *AVRing[R]
+	GetDecoderConfiguration() DecoderConfiguration[R]
 }, R RawSlice] struct {
 	Track   T
 	ring    *AVRing[R]
@@ -183,19 +184,18 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	var firstSeq, beforeJump uint32 //第一个关键帧的seq
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
-	var sendVideoDecConf, sendAudioDecConf func()
+	sendVideoDecConf := func() {
+		s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
+		spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
+	}
+	sendAudioDecConf := func() {
+		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
+		s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+	}
 	var sendVideoFrame func(*AVFrame[NALUSlice])
 	var sendAudioFrame func(*AVFrame[AudioSlice])
 	switch subType {
 	case SUBTYPE_RAW:
-		sendVideoDecConf = func() {
-			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-			spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
-		}
-		sendAudioDecConf = func() {
-			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-			s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
-		}
 		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
 			// println(frame.Sequence, frame.AbsTime, frame.PTS, frame.DTS, frame.IFrame)
 			spesic.OnEvent((*VideoFrame)(frame))
@@ -204,14 +204,6 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			spesic.OnEvent((*AudioFrame)(frame))
 		}
 	case SUBTYPE_RTP:
-		sendVideoDecConf = func() {
-			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-			spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
-		}
-		sendAudioDecConf = func() {
-			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-			s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
-		}
 		var videoSeq, audioSeq uint16
 		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
 			for _, p := range frame.RTP {
