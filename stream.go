@@ -295,7 +295,11 @@ func (w waitTrackNames) Waitany() bool {
 
 // Wait 设置需要等待的名称，空数组为等待任意的
 func (w *waitTrackNames) Wait(names ...string) {
-	*w = names
+	if names == nil {
+		*w = make([]string, 0)
+	} else {
+		*w = names
+	}
 }
 
 // StopWait 不再需要等待了

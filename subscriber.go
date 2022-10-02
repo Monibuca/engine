@@ -34,6 +34,9 @@ type VideoDeConf DecoderConfiguration[NALUSlice]
 type FLVFrame net.Buffers
 type AudioRTP RTPFrame
 type VideoRTP RTPFrame
+type HasAnnexB interface {
+	GetAnnexB() (r net.Buffers)
+}
 
 func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 	t := (net.Buffers)(f)
