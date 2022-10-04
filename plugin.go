@@ -76,12 +76,12 @@ func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, 
 		pattern = "/" + pattern
 	}
 	if ok {
-		opt.Info("http handle added:" + pattern)
+		opt.Debug("http handle added:" + pattern)
 		conf.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
-		opt.Info("http handle added to engine:" + pattern)
+		opt.Debug("http handle added to engine:" + pattern)
 		apiList = append(apiList, pattern)
 		EngineConfig.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
@@ -100,7 +100,9 @@ func (opt *Plugin) assign() {
 			}
 		}
 	}
-	if opt.RawConfig["enable"] == false {
+	if opt.RawConfig == nil {
+		opt.RawConfig = config.Config{}
+	} else if opt.RawConfig["enable"] == false {
 		opt.Warn("disabled")
 		return
 	}

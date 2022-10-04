@@ -104,11 +104,6 @@ type Engine struct {
 	LogLevel string
 }
 type myResponseWriter struct {
-	*websocket.Conn
-}
-
-func (w *myResponseWriter) Write(b []byte) (int, error) {
-	return len(b), websocket.Message.Send(w.Conn, b)
 }
 
 func (w *myResponseWriter) Header() http.Header {
@@ -116,64 +111,79 @@ func (w *myResponseWriter) Header() http.Header {
 }
 func (w *myResponseWriter) WriteHeader(statusCode int) {
 }
-func (cfg *Engine) OnEvent(event any) {
-	switch event.(type) {
-	case context.Context:
-		go func() {
-			for {
-				conn, err := websocket.Dial(cfg.Server, "", "https://console.monibuca.com")
-				wr := &myResponseWriter{conn}
-				if err != nil {
-					log.Error("connect to console server ", cfg.Server, " ", err)
-					time.Sleep(time.Second * 5)
-					continue
-				}
-				if err = websocket.Message.Send(conn, cfg.Secret); err != nil {
-					time.Sleep(time.Second * 5)
-					continue
-				}
-				var rMessage map[string]interface{}
-				if err := websocket.JSON.Receive(conn, &rMessage); err == nil {
-					if rMessage["code"].(float64) != 0 {
-						log.Error("connect to console server ", cfg.Server, " ", rMessage["msg"])
-						return
-					} else {
-						log.Info("connect to console server ", cfg.Server, " success")
-					}
-				}
-				for {
-					var msg string
-					err := websocket.Message.Receive(conn, &msg)
-					if err != nil {
-						log.Error("read console server error:", err)
-						break
-					} else {
-						b, a, f := strings.Cut(msg, "\n")
-						if f {
-							if len(a) > 0 {
-								req, err := http.NewRequest("POST", b, strings.NewReader(a))
-								if err != nil {
-									log.Error("read console server error:", err)
-									break
-								}
-								h, _ := cfg.mux.Handler(req)
-								h.ServeHTTP(wr, req)
-							} else {
-								req, err := http.NewRequest("GET", b, nil)
-								if err != nil {
-									log.Error("read console server error:", err)
-									break
-								}
-								h, _ := cfg.mux.Handler(req)
-								h.ServeHTTP(wr, req)
-							}
-						} else {
 
+type myWsWriter struct {
+	myResponseWriter
+	*websocket.Conn
+}
+
+func (w *myWsWriter) Write(b []byte) (int, error) {
+	return len(b), websocket.Message.Send(w.Conn, b)
+}
+func (cfg *Engine) WsRemote() {
+	for {
+		conn, err := websocket.Dial(cfg.Server, "", "https://console.monibuca.com")
+		wr := &myWsWriter{Conn: conn}
+		if err != nil {
+			log.Error("connect to console server ", cfg.Server, " ", err)
+			time.Sleep(time.Second * 5)
+			continue
+		}
+		if err = websocket.Message.Send(conn, cfg.Secret); err != nil {
+			time.Sleep(time.Second * 5)
+			continue
+		}
+		var rMessage map[string]interface{}
+		if err := websocket.JSON.Receive(conn, &rMessage); err == nil {
+			if rMessage["code"].(float64) != 0 {
+				log.Error("connect to console server ", cfg.Server, " ", rMessage["msg"])
+				return
+			} else {
+				log.Info("connect to console server ", cfg.Server, " success")
+			}
+		}
+		for {
+			var msg string
+			err := websocket.Message.Receive(conn, &msg)
+			if err != nil {
+				log.Error("read console server error:", err)
+				break
+			} else {
+				b, a, f := strings.Cut(msg, "\n")
+				if f {
+					if len(a) > 0 {
+						req, err := http.NewRequest("POST", b, strings.NewReader(a))
+						if err != nil {
+							log.Error("read console server error:", err)
+							break
 						}
+						h, _ := cfg.mux.Handler(req)
+						h.ServeHTTP(wr, req)
+					} else {
+						req, err := http.NewRequest("GET", b, nil)
+						if err != nil {
+							log.Error("read console server error:", err)
+							break
+						}
+						h, _ := cfg.mux.Handler(req)
+						h.ServeHTTP(wr, req)
 					}
+				} else {
+
 				}
 			}
-		}()
+		}
+	}
+}
+
+func (cfg *Engine) OnEvent(event any) {
+	switch v := event.(type) {
+	case context.Context:
+		if strings.HasPrefix(cfg.Console.Server, "wss") {
+			go cfg.WsRemote()
+		} else {
+			go cfg.Remote(v)
+		}
 	}
 }
 
@@ -182,6 +192,6 @@ var Global = &Engine{
 	Subscribe{true, true, nil, nil, true, false, 10},
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, Console{
-		"wss://console.monibuca.com:9999/ws/v1", "", "", "",
+		"console.monibuca.com:4242", "", "", "",
 	}, "info",
 }

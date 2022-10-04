@@ -64,7 +64,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
 		log.Warn("read config file error:", err.Error())
 	}
-	if err = os.MkdirAll(settingDir, 0755); err != nil {
+	if err = os.MkdirAll(settingDir, 0766); err != nil {
 		log.Error("create dir .m7s error:", err)
 		return
 	}
