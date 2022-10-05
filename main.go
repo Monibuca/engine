@@ -93,6 +93,11 @@ func Run(ctx context.Context, configFile string) (err error) {
 	go EngineConfig.Listen(Engine)
 	for name, plugin := range Plugins {
 		plugin.RawConfig = cg.GetChild(name)
+		if plugin.RawConfig != nil {
+			if b, err := yaml.Marshal(plugin.RawConfig); err == nil {
+				plugin.Yaml = string(b)
+			}
+		}
 		plugin.assign()
 	}
 	UUID := uuid.NewString()

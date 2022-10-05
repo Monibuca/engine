@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -65,12 +64,11 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 
 func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
 	defer s.Close()
-	r := bufio.NewReader(s)
 	wr := &myResponseWriter2{Stream: s}
-	str, err := r.ReadString('\n')
+	reqStr, err := io.ReadAll(s)
 	var req *http.Request
 	if err == nil {
-		if b, a, f := strings.Cut(strings.TrimSuffix(str, "\n"), "\r"); f {
+		if b, a, f := strings.Cut(string(reqStr), "\n"); f {
 			if len(a) > 0 {
 				req, err = http.NewRequest("POST", b, strings.NewReader(a))
 			} else {
@@ -84,6 +82,8 @@ func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
 			err = errors.New("theres no \\r")
 		}
 	}
-	log.Error("read console server error:", err)
+	if err != nil {
+		log.Error("read console server error:", err)
+	}
 	return err
 }

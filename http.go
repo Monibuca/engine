@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
@@ -70,55 +71,77 @@ func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request
 
 // API_getConfig 获取指定的配置信息
 func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) {
-	if configName := r.URL.Query().Get("name"); configName != "" {
+	var p *Plugin
+	var q = r.URL.Query()
+	if configName := q.Get("name"); configName != "" {
 		if c, ok := Plugins[configName]; ok {
-			if err := json.NewEncoder(w).Encode(c.RawConfig); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
+			p = c
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
-	} else if err := json.NewEncoder(w).Encode(Engine.RawConfig); err != nil {
+	} else {
+		p = Engine
+	}
+	if q.Has("yaml") {
+		mm, err := yaml.Marshal(p.RawConfig)
+		if err != nil {
+			mm = []byte("")
+		}
+		json.NewEncoder(w).Encode(struct {
+			File     string
+			Modified string
+			Merged   string
+		}{
+			p.Yaml, p.modifiedYaml, string(mm),
+		})
+	} else if err := json.NewEncoder(w).Encode(p.RawConfig); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
 // API_modifyConfig 修改并保存配置
 func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Request) {
-	if configName := r.URL.Query().Get("name"); configName != "" {
+	var p *Plugin
+	var q = r.URL.Query()
+	var err error
+	if configName := q.Get("name"); configName != "" {
 		if c, ok := Plugins[configName]; ok {
-			if err := json.NewDecoder(r.Body).Decode(&c.Modified); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-			} else {
-				c.Save()
-				c.RawConfig.Assign(c.Modified)
-				w.Write([]byte("ok"))
-			}
+			p = c
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
-	} else if err := json.NewDecoder(r.Body).Decode(&Engine.Modified); err == nil {
-		Engine.Save()
-		Engine.RawConfig.Assign(Engine.Modified)
-		w.Write([]byte("ok"))
 	} else {
+		p = Engine
+	}
+	if q.Has("yaml") {
+		err = yaml.NewDecoder(r.Body).Decode(&p.Modified)
+	} else {
+		err = json.NewDecoder(r.Body).Decode(&p.Modified)
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+	} else {
+		p.Save()
+		p.RawConfig.Assign(p.Modified)
+		w.Write([]byte("ok"))
 	}
 }
 
 // API_updateConfig 热更新配置
 func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Request) {
-	if configName := r.URL.Query().Get("name"); configName != "" {
+	var p *Plugin
+	var q = r.URL.Query()
+	if configName := q.Get("name"); configName != "" {
 		if c, ok := Plugins[configName]; ok {
-			c.Update(c.Modified)
-			w.Write([]byte("ok"))
+			p = c
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
 		}
 	} else {
-		Engine.Update(Engine.Modified)
-		w.Write([]byte("ok"))
+		p = Engine
 	}
+	p.Update(p.Modified)
+	w.Write([]byte("ok"))
 }
 
 func (conf *GlobalConfig) API_list_pull(w http.ResponseWriter, r *http.Request) {
