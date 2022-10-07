@@ -79,11 +79,11 @@ func (p *Push) GetPushConfig() *Push {
 	return p
 }
 
-func (p *Push) AddPush(streamPath string, url string) {
+func (p *Push) AddPush(url string, streamPath string) {
 	if p.PushList == nil {
 		p.PushList = make(map[string]string)
 	}
-	p.PushList[streamPath] = url
+	p.PushList[url] = streamPath
 }
 
 type Console struct {
@@ -106,10 +106,10 @@ type Engine struct {
 type myResponseWriter struct {
 }
 
-func (w *myResponseWriter) Header() http.Header {
+func (*myResponseWriter) Header() http.Header {
 	return make(http.Header)
 }
-func (w *myResponseWriter) WriteHeader(statusCode int) {
+func (*myResponseWriter) WriteHeader(statusCode int) {
 }
 
 type myWsWriter struct {

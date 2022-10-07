@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"os/exec"
 )
@@ -22,24 +23,23 @@ func (sse *SSE) Write(data []byte) (n int, err error) {
 	if err = sse.Err(); err != nil {
 		return
 	}
-	_, err = sse.ResponseWriter.Write(sseBegin)
-	n, err = sse.ResponseWriter.Write(data)
-	_, err = sse.ResponseWriter.Write(sseEnd)
-	if err != nil {
-		return
+	buffers := net.Buffers{sseBegin, data, sseEnd}
+	nn, err := buffers.WriteTo(sse.ResponseWriter)
+	if err == nil {
+		sse.ResponseWriter.(http.Flusher).Flush()
 	}
-	sse.ResponseWriter.(http.Flusher).Flush()
-	return
+	return int(nn), err
 }
 
 func (sse *SSE) WriteEvent(event string, data []byte) (err error) {
 	if err = sse.Err(); err != nil {
 		return
 	}
-	_, err = sse.ResponseWriter.Write(sseEent)
-	_, err = sse.ResponseWriter.Write([]byte(event))
-	_, err = sse.ResponseWriter.Write([]byte("\n"))
-	_, err = sse.Write(data)
+	buffers := net.Buffers{sseEent, []byte(event + "\n"), sseBegin, data, sseEnd}
+	_, err = buffers.WriteTo(sse.ResponseWriter)
+	if err == nil {
+		sse.ResponseWriter.(http.Flusher).Flush()
+	}
 	return
 }
 
@@ -51,8 +51,8 @@ func NewSSE(w http.ResponseWriter, ctx context.Context) *SSE {
 	header.Set("X-Accel-Buffering", "no")
 	header.Set("Access-Control-Allow-Origin", "*")
 	return &SSE{
-		w,
-		ctx,
+		ResponseWriter: w,
+		Context:        ctx,
 	}
 }
 

@@ -1,10 +1,10 @@
 package config
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -16,6 +16,10 @@ import (
 type myResponseWriter2 struct {
 	quic.Stream
 	myResponseWriter
+}
+
+func (w *myResponseWriter2) Flush() {
+	
 }
 
 func (cfg *Engine) Remote(ctx context.Context) error {
@@ -65,21 +69,33 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
 	defer s.Close()
 	wr := &myResponseWriter2{Stream: s}
-	reqStr, err := io.ReadAll(s)
+	reader := bufio.NewReader(s)
 	var req *http.Request
+	url, _, err := reader.ReadLine()
 	if err == nil {
-		if b, a, f := strings.Cut(string(reqStr), "\n"); f {
-			if len(a) > 0 {
-				req, err = http.NewRequest("POST", b, strings.NewReader(a))
+		ctx, cancel := context.WithCancel(s.Context())
+		defer cancel()
+		req, err = http.NewRequestWithContext(ctx, "GET", string(url), s)
+		for err == nil {
+			var h []byte
+			h, _, err = reader.ReadLine()
+			if len(h) > 0 {
+				b, a, f := strings.Cut(string(h), ": ")
+				if f {
+					req.Header.Set(b, a)
+				}
 			} else {
-				req, err = http.NewRequest("GET", b, nil)
+				break
 			}
-			if err == nil {
-				h, _ := cfg.mux.Handler(req)
+		}
+		if err == nil {
+			h, _ := cfg.mux.Handler(req)
+			if req.Header.Get("Accept") == "text/event-stream" {
+				go h.ServeHTTP(wr, req)
+			} else {
 				h.ServeHTTP(wr, req)
 			}
-		} else {
-			err = errors.New("theres no \\r")
+			io.ReadAll(s)
 		}
 	}
 	if err != nil {

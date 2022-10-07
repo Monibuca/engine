@@ -70,16 +70,20 @@ func (s *Summary) Running() bool {
 
 // Add 增加订阅者
 func (s *Summary) Add() {
-	if atomic.AddInt32(&s.ref, 1) == 1 {
+	if count := atomic.AddInt32(&s.ref, 1); count == 1 {
 		log.Info("start report summary")
+	} else {
+		log.Info("summary count", count)
 	}
 }
 
 // Done 删除订阅者
 func (s *Summary) Done() {
-	if atomic.AddInt32(&s.ref, -1) == 0 {
+	if count := atomic.AddInt32(&s.ref, -1); count == 0 {
 		log.Info("stop report summary")
 		s.lastNetWork = nil
+	} else {
+		log.Info("summary count", count)
 	}
 }
 

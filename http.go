@@ -27,7 +27,20 @@ func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
-	util.ReturnJson(summary.collect, time.Second, rw, r)
+	if r.Header.Get("Accept") == "text/event-stream" {
+		summary.Add()
+		defer summary.Done()
+		util.ReturnJson(func() *Summary {
+			return &summary
+		}, time.Second, rw, r)
+	} else {
+		if !summary.Running() {
+			summary.collect()
+		}
+		if err := json.NewEncoder(rw).Encode(&summary); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
+	}
 }
 
 func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
@@ -39,9 +52,7 @@ func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
 func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
-			if err := json.NewEncoder(rw).Encode(s); err != nil {
-				http.Error(rw, err.Error(), http.StatusInternalServerError)
-			}
+			util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
 		} else {
 			http.Error(rw, NO_SUCH_STREAM, http.StatusNotFound)
 		}
@@ -145,23 +156,32 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 }
 
 func (conf *GlobalConfig) API_list_pull(w http.ResponseWriter, r *http.Request) {
-	result := []any{}
-	Pullers.Range(func(key, value any) bool {
-		result = append(result, key)
-		return true
-	})
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	util.ReturnJson(func() (result []any) {
+		Pullers.Range(func(key, value any) bool {
+			result = append(result, key)
+			return true
+		})
+		return
+	}, time.Second, w, r)
 }
 
 func (conf *GlobalConfig) API_list_push(w http.ResponseWriter, r *http.Request) {
-	result := []any{}
-	Pushers.Range(func(key, value any) bool {
-		result = append(result, key)
-		return true
-	})
-	if err := json.NewEncoder(w).Encode(result); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	util.ReturnJson(func() (result []any) {
+		Pushers.Range(func(key, value any) bool {
+			result = append(result, value)
+			return true
+		})
+		return
+	}, time.Second, w, r)
+}
+
+func (conf *GlobalConfig) API_stopPush(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	pusher, ok := Pushers.Load(q.Get("url"))
+	if ok {
+		pusher.(IPusher).Stop()
+		w.Write([]byte("ok"))
+	} else {
+		http.Error(w, "no such pusher", http.StatusNotFound)
 	}
 }

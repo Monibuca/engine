@@ -314,10 +314,10 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 	if err = opt.Subscribe(streamPath, pusher); err != nil {
 		return
 	}
-	Pushers.Store(pusher, url)
+	Pushers.Store(url, pusher)
 	go func() {
 		defer opt.Info("push finished", zp, zu)
-		defer Pushers.Delete(pusher)
+		defer Pushers.Delete(url)
 		for pusher.Reconnect() {
 			opt.Info("start push", zp, zu)
 			if err = pusher.Push(); !pusher.IsClosed() {
@@ -337,7 +337,7 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 	}()
 
 	if save {
-		pushConfig.AddPush(streamPath, url)
+		pushConfig.AddPush(url, streamPath)
 		if opt.Modified == nil {
 			opt.Modified = make(config.Config)
 		}
