@@ -85,6 +85,14 @@ func (a *Audio) WriteADTS(adts []byte) {
 	a.Attach()
 }
 
+func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
+	curValue := &av.AVRing.RingBuffer.Value
+	curValue.BytesIn += len(frame)
+	curValue.AppendAVCC(frame)
+	curValue.DTS = ts * 90
+	curValue.PTS = curValue.DTS
+}
+
 func (a *Audio) Flush() {
 	// AVCC 格式补完
 	value := &a.Media.RingBuffer.Value
