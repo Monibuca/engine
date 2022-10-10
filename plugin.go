@@ -188,7 +188,7 @@ func (opt *Plugin) Save() error {
 		opt.saveTimer = time.AfterFunc(time.Second, func() {
 			lock.Lock()
 			defer lock.Unlock()
-			file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY, 0644)
+			file, err := os.OpenFile(opt.settingPath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 			if err == nil {
 				defer file.Close()
 				err = yaml.NewEncoder(file).Encode(opt.Modified)
