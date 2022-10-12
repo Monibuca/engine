@@ -126,10 +126,6 @@ func (opt *Plugin) assign() {
 			}
 		}
 	}
-	if conf, ok := opt.Config.(config.HTTPConfig); ok {
-		httpConf := conf.GetHTTPConfig()
-		httpConf.InitMux()
-	}
 	opt.registerHandler()
 	opt.run()
 }
@@ -150,9 +146,7 @@ func (opt *Plugin) run() {
 	opt.Debug("config", zap.Any("config", opt.Config))
 	// opt.RawConfig = config.Struct2Config(opt.Config)
 	if conf, ok := opt.Config.(config.HTTPConfig); ok {
-		if httpconf := conf.GetHTTPConfig(); httpconf.ListenAddr != "" && httpconf.ListenAddr != EngineConfig.ListenAddr {
-			go conf.Listen(opt)
-		}
+		go conf.Listen(opt)
 	}
 }
 

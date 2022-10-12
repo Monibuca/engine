@@ -23,30 +23,22 @@ type HTTP struct {
 	mux           *http.ServeMux
 }
 type HTTPConfig interface {
-	InitMux()
 	GetHTTPConfig() *HTTP
 	Listen(ctx context.Context) error
 	HandleFunc(string, func(http.ResponseWriter, *http.Request))
 }
 
-func (config *HTTP) InitMux() {
-	hasOwnTLS := config.ListenAddrTLS != "" && config.ListenAddrTLS != Global.ListenAddrTLS
-	hasOwnHTTP := config.ListenAddr != "" && config.ListenAddr != Global.ListenAddr
-	if hasOwnTLS || hasOwnHTTP {
+func (config *HTTP) HandleFunc(path string, f func(http.ResponseWriter, *http.Request)) {
+	if config.mux == nil {
 		config.mux = http.NewServeMux()
 	}
-}
-
-func (config *HTTP) HandleFunc(path string, f func(http.ResponseWriter, *http.Request)) {
-	if config.mux != nil {
-		if config.CORS {
-			f = util.CORS(f)
-		}
-		if config.UserName != "" && config.Password != "" {
-			f = util.BasicAuth(config.UserName, config.Password, f)
-		}
-		config.mux.HandleFunc(path, f)
+	if config.CORS {
+		f = util.CORS(f)
 	}
+	if config.UserName != "" && config.Password != "" {
+		f = util.BasicAuth(config.UserName, config.Password, f)
+	}
+	config.mux.HandleFunc(path, f)
 }
 
 func (config *HTTP) GetHTTPConfig() *HTTP {
@@ -55,6 +47,9 @@ func (config *HTTP) GetHTTPConfig() *HTTP {
 
 // ListenAddrs Listen http and https
 func (config *HTTP) Listen(ctx context.Context) error {
+	if config.mux == nil {
+		return nil
+	}
 	var g errgroup.Group
 	if config.ListenAddrTLS != "" && (config == &Global.HTTP || config.ListenAddrTLS != Global.ListenAddrTLS) {
 		g.Go(func() error {
