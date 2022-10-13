@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lucas-clemente/quic-go"
 	"m7s.live/engine/v4/log"
@@ -19,7 +20,7 @@ type myResponseWriter2 struct {
 }
 
 func (w *myResponseWriter2) Flush() {
-	
+
 }
 
 func (cfg *Engine) Remote(ctx context.Context) error {
@@ -29,7 +30,7 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 	}
 
 	conn, err := quic.DialAddr(cfg.Server, tlsConf, &quic.Config{
-		KeepAlive: true,
+		KeepAlivePeriod: time.Second * 10,
 	})
 
 	if stream := quic.Stream(nil); err == nil {

@@ -112,6 +112,9 @@ func (opt *Plugin) assign() {
 	} else if opt.RawConfig["enable"] == false {
 		opt.Warn("disabled")
 		return
+	} else if opt.RawConfig["enable"] == true {
+		//移除这个属性防止反序列化报错
+		delete(opt.RawConfig, "enable")
 	}
 	t := reflect.TypeOf(opt.Config).Elem()
 	// 用全局配置覆盖没有设置的配置

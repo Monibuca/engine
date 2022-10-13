@@ -103,18 +103,19 @@ func Run(ctx context.Context, configFile string) (err error) {
 	UUID := uuid.NewString()
 	reportTimer := time.NewTicker(time.Minute)
 	contentBuf := bytes.NewBuffer(nil)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://logs-01.loggly.com/inputs/758a662d-f630-40cb-95ed-2502a5e9c872/tag/monibuca/", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://console.monibuca.com/report", nil)
 	req.Header.Set("Content-Type", "application/json")
 	version := Engine.Version
 	if ver, ok := ctx.Value("version").(string); ok && ver != "" && ver != "dev" {
 		version = ver
 	}
 	log.Info(Blink("m7s@"+version), " start success")
-	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"`, UUID, version, runtime.GOOS, runtime.GOARCH)
+	content := fmt.Sprintf(`{"uuid":"%s","version":"%s","os":"%s","arch":"%s"}`, UUID, version, runtime.GOOS, runtime.GOARCH)
 	if EngineConfig.Secret != "" {
 		EngineConfig.OnEvent(ctx)
 	}
 	var c http.Client
+	var firstReport = false
 	for {
 		select {
 		case event := <-EventBus:
@@ -127,10 +128,16 @@ func Run(ctx context.Context, configFile string) (err error) {
 			return
 		case <-reportTimer.C:
 			contentBuf.Reset()
-			postJson := fmt.Sprintf(`%s,"streams":%d}`, content, len(Streams.Map))
-			contentBuf.WriteString(postJson)
+			if firstReport {
+				contentBuf.WriteString(fmt.Sprintf(`{"uuid":"`+UUID+`","streams":%d}`, len(Streams.Map)))
+			} else {
+				contentBuf.WriteString(content)
+			}
 			req.Body = ioutil.NopCloser(contentBuf)
-			c.Do(req)
+			_, err := c.Do(req)
+			if err == nil && !firstReport {
+				firstReport = true
+			}
 		}
 	}
 }

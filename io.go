@@ -131,11 +131,11 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 	if v, ok := c.(*config.Publish); ok {
 		io.Type = strings.TrimSuffix(io.Type, "Publisher")
 		oldPublisher := s.Publisher
-		if s.Publisher != nil && !s.Publisher.IsClosed() {
+		if oldPublisher != nil && !oldPublisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
 			if v.KickExist {
-				s.Warn("kick", zap.String("type", s.Publisher.GetIO().Type))
-				s.Publisher.OnEvent(SEKick{})
+				s.Warn("kick", zap.String("type", oldPublisher.GetIO().Type))
+				oldPublisher.OnEvent(SEKick{})
 			} else {
 				return BadNameErr
 			}
