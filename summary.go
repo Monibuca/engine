@@ -51,7 +51,7 @@ type NetWorkInfo struct {
 	SentSpeed    uint64
 }
 
-//StartSummary 开始定时采集数据，每秒一次
+// StartSummary 开始定时采集数据，每秒一次
 func (s *Summary) Start() {
 	for range time.Tick(time.Second) {
 		if s.ref > 0 {
@@ -109,7 +109,7 @@ func (s *Summary) collect() *Summary {
 	s.HardDisk.Total = d.Total >> 30
 	s.HardDisk.Used = d.Used >> 30
 	s.HardDisk.Usage = d.UsedPercent
-	s.NetWork = []NetWorkInfo{}
+	netWorks := []NetWorkInfo{}
 	for i, n := range nv {
 		info := NetWorkInfo{
 			Name:    n.Name,
@@ -120,8 +120,9 @@ func (s *Summary) collect() *Summary {
 			info.ReceiveSpeed = n.BytesRecv - s.lastNetWork[i].BytesRecv
 			info.SentSpeed = n.BytesSent - s.lastNetWork[i].BytesSent
 		}
-		s.NetWork = append(s.NetWork, info)
+		netWorks = append(netWorks, info)
 	}
+	s.NetWork = netWorks
 	s.lastNetWork = nv
 	s.Streams = util.MapList(&Streams, func(name string, ss *Stream) StreamSummay {
 		return ss.Summary()
