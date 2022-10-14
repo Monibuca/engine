@@ -73,6 +73,9 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if ConfigRaw != nil {
 		if err = yaml.Unmarshal(ConfigRaw, &cg); err == nil {
 			Engine.RawConfig = cg.GetChild("global")
+			if b, err := yaml.Marshal(Engine.RawConfig); err == nil {
+				Engine.Yaml = string(b)
+			}
 			//将配置信息同步到结构体
 			Engine.RawConfig.Unmarshal(config.Global)
 		} else {
@@ -86,9 +89,9 @@ func Run(ctx context.Context, configFile string) (err error) {
 	}
 	log.Config.Level.SetLevel(loglevel)
 	Engine.Logger = log.With(zap.Bool("engine", true))
-	Engine.registerHandler()
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
 	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
+	Engine.assign()
 	log.With(zap.String("config", "global")).Debug("", zap.Any("config", EngineConfig))
 	go EngineConfig.Listen(Engine)
 	for name, plugin := range Plugins {

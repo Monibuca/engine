@@ -76,19 +76,18 @@ func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
 	if err == nil {
 		ctx, cancel := context.WithCancel(s.Context())
 		defer cancel()
-		req, err = http.NewRequestWithContext(ctx, "GET", string(url), s)
+		req, err = http.NewRequestWithContext(ctx, "GET", string(url), reader)
 		for err == nil {
 			var h []byte
-			h, _, err = reader.ReadLine()
-			if len(h) > 0 {
-				b, a, f := strings.Cut(string(h), ": ")
-				if f {
+			if h, _, err = reader.ReadLine(); len(h) > 0 {
+				if b, a, f := strings.Cut(string(h), ": "); f {
 					req.Header.Set(b, a)
 				}
 			} else {
 				break
 			}
 		}
+
 		if err == nil {
 			h, _ := cfg.mux.Handler(req)
 			if req.Header.Get("Accept") == "text/event-stream" {
@@ -96,8 +95,8 @@ func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
 			} else {
 				h.ServeHTTP(wr, req)
 			}
-			io.ReadAll(s)
 		}
+		io.ReadAll(s)
 	}
 	if err != nil {
 		log.Error("read console server error:", err)
