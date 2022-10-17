@@ -111,7 +111,8 @@ func (*myResponseWriter) Header() http.Header {
 }
 func (*myResponseWriter) WriteHeader(statusCode int) {
 }
-
+func (w *myResponseWriter) Flush() {
+}
 type myWsWriter struct {
 	myResponseWriter
 	*websocket.Conn

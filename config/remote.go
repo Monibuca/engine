@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -19,8 +20,23 @@ type myResponseWriter2 struct {
 	myResponseWriter
 }
 
-func (w *myResponseWriter2) Flush() {
+type myResponseWriter3 struct {
+	handshake bool
+	myResponseWriter2
+	quic.Connection
+}
 
+func (w *myResponseWriter3) Write(b []byte) (int, error) {
+	if !w.handshake {
+		w.handshake = true
+		return len(b), nil
+	}
+	println(string(b))
+	return w.Stream.Write(b)
+}
+
+func (w *myResponseWriter3) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return net.Conn(w), bufio.NewReadWriter(bufio.NewReader(w), bufio.NewWriter(w)), nil
 }
 
 func (cfg *Engine) Remote(ctx context.Context) error {
@@ -55,19 +71,21 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 	for err == nil {
 		var s quic.Stream
 		if s, err = conn.AcceptStream(ctx); err == nil {
-			go cfg.ReceiveRequest(s)
-		} else if ctx.Err() == nil {
-			go cfg.Remote(ctx)
+			go cfg.ReceiveRequest(s, conn)
 		}
 	}
 
 	if err != nil {
 		log.Error("connect to console server ", cfg.Server, err)
+		if ctx.Err() == nil {
+			go cfg.Remote(ctx)
+		}
 	}
+
 	return err
 }
 
-func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
+func (cfg *Engine) ReceiveRequest(s quic.Stream, conn quic.Connection) error {
 	defer s.Close()
 	wr := &myResponseWriter2{Stream: s}
 	reader := bufio.NewReader(s)
@@ -92,6 +110,18 @@ func (cfg *Engine) ReceiveRequest(s quic.Stream) error {
 			h, _ := cfg.mux.Handler(req)
 			if req.Header.Get("Accept") == "text/event-stream" {
 				go h.ServeHTTP(wr, req)
+			} else if req.Header.Get("Upgrade") == "websocket" {
+				var writer myResponseWriter3
+				writer.Stream = s
+				writer.Connection = conn
+				req.Host = req.Header.Get("Host")
+				if req.Host == "" {
+					req.Host = req.URL.Host
+				}
+				if req.Host == "" {
+					req.Host = "m7s.live"
+				}
+				h.ServeHTTP(&writer, req) //建立websocket连接,握手
 			} else {
 				h.ServeHTTP(wr, req)
 			}

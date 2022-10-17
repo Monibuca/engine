@@ -89,11 +89,12 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 			p = c
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
+			return
 		}
 	} else {
 		p = Engine
 	}
-	if q.Has("yaml") {
+	if q.Get("yaml") != "" {
 		mm, err := yaml.Marshal(p.RawConfig)
 		if err != nil {
 			mm = []byte("")
@@ -153,6 +154,7 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 			p = c
 		} else {
 			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
+			return
 		}
 	} else {
 		p = Engine
