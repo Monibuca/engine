@@ -27,9 +27,9 @@ type RawSlice interface {
 	~[][]byte | ~[]byte
 }
 
-// func (nalu *H264NALU) Append(slice ...NALUSlice) {
-// 	*nalu = append(*nalu, slice...)
-// }
+//	func (nalu *H264NALU) Append(slice ...NALUSlice) {
+//		*nalu = append(*nalu, slice...)
+//	}
 func (nalu NALUSlice) H264Type() (naluType codec.H264NALUType) {
 	return naluType.Parse(nalu[0][0])
 }
@@ -77,6 +77,10 @@ type AVCCFrame []byte   // 一帧AVCC格式的数据
 type AnnexBFrame []byte // 一帧AnnexB格式数据
 type RTPFrame struct {
 	rtp.Packet
+}
+
+func (rtp *RTPFrame) Clone() *RTPFrame {
+	return &RTPFrame{*rtp.Packet.Clone()}
 }
 
 func (rtp *RTPFrame) H264Type() (naluType codec.H264NALUType) {
@@ -156,32 +160,33 @@ func (avcc AVCCFrame) AudioCodecID() codec.AudioCodecID {
 	return codec.AudioCodecID(avcc[0] >> 4)
 }
 
-// func (annexb AnnexBFrame) ToSlices() (ret []NALUSlice) {
-// 	for len(annexb) > 0 {
-// 		before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
-// 		if !found {
-// 			return append(ret, NALUSlice{annexb})
-// 		}
-// 		if len(before) > 0 {
-// 			ret = append(ret, NALUSlice{before})
-// 		}
-// 		annexb = after
-// 	}
-// 	return
-// }
-// func (annexb AnnexBFrame) ToNALUs() (ret [][]NALUSlice) {
-// 	for len(annexb) > 0 {
-// 		before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
-// 		if !found {
-// 			return append(ret, annexb.ToSlices())
-// 		}
-// 		if len(before) > 0 {
-// 			ret = append(ret, AnnexBFrame(before).ToSlices())
-// 		}
-// 		annexb = after
-// 	}
-// 	return
-// }
+//	func (annexb AnnexBFrame) ToSlices() (ret []NALUSlice) {
+//		for len(annexb) > 0 {
+//			before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
+//			if !found {
+//				return append(ret, NALUSlice{annexb})
+//			}
+//			if len(before) > 0 {
+//				ret = append(ret, NALUSlice{before})
+//			}
+//			annexb = after
+//		}
+//		return
+//	}
+//
+//	func (annexb AnnexBFrame) ToNALUs() (ret [][]NALUSlice) {
+//		for len(annexb) > 0 {
+//			before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
+//			if !found {
+//				return append(ret, annexb.ToSlices())
+//			}
+//			if len(before) > 0 {
+//				ret = append(ret, AnnexBFrame(before).ToSlices())
+//			}
+//			annexb = after
+//		}
+//		return
+//	}
 type DecoderConfiguration[T RawSlice] struct {
 	PayloadType byte
 	AVCC        net.Buffers

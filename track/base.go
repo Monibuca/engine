@@ -50,7 +50,7 @@ type Media[T RawSlice] struct {
 	rtpSequence uint16 //用于生成下一个rtp包的序号
 	lastSeq     uint16 //上一个收到的序号，用于乱序重排
 	lastSeq2    uint16 //记录上上一个收到的序列号
-	乱序重排        util.RTPReorder[RTPFrame]
+	乱序重排        util.RTPReorder[*RTPFrame]
 	流速控制
 }
 
