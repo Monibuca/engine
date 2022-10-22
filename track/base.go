@@ -47,10 +47,10 @@ type Media[T RawSlice] struct {
 	SampleRate           uint32
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	// util.BytesPool                               //无锁内存池，用于发布者（在同一个协程中）复用小块的内存，通常是解包时需要临时使用
-	rtpSequence uint16      //用于生成下一个rtp包的序号
-	orderQueue  []*RTPFrame //rtp包的缓存队列，用于乱序重排
-	lastSeq     uint16      //上一个收到的序号，用于乱序重排
-	lastSeq2    uint16      //记录上上一个收到的序列号
+	rtpSequence uint16 //用于生成下一个rtp包的序号
+	lastSeq     uint16 //上一个收到的序号，用于乱序重排
+	lastSeq2    uint16 //记录上上一个收到的序列号
+	乱序重排        util.RTPReorder[RTPFrame]
 	流速控制
 }
 
@@ -87,9 +87,7 @@ func (av *Media[T]) PreFrame() *AVFrame[T] {
 // 获取缓存中下一个rtpFrame
 func (av *Media[T]) nextRTPFrame() (frame *RTPFrame) {
 	if config.Global.RTPReorder {
-		frame = av.orderQueue[0]
-		av.lastSeq++
-		copy(av.orderQueue, av.orderQueue[1:])
+		return av.乱序重排.Pop()
 	}
 	return
 }
@@ -103,41 +101,7 @@ func (av *Media[T]) generateTimestamp() {
 // 对RTP包乱序重排
 func (av *Media[T]) recorderRTP(frame *RTPFrame) *RTPFrame {
 	if config.Global.RTPReorder {
-		if frame.SequenceNumber < av.lastSeq && av.lastSeq-frame.SequenceNumber < 0x8000 {
-			// 出现旧的包直接丢弃
-			return nil
-		} else if av.lastSeq == 0 {
-			// 初始化
-			av.lastSeq = frame.SequenceNumber
-			return frame
-		} else if av.lastSeq+1 == frame.SequenceNumber {
-			// 正常顺序
-			av.lastSeq = frame.SequenceNumber
-			copy(av.orderQueue, av.orderQueue[1:])
-			return frame
-		} else if frame.SequenceNumber > av.lastSeq {
-			delta := int(frame.SequenceNumber - av.lastSeq)
-			queueLen := len(av.orderQueue)
-			// 超过缓存队列长度,TODO: 可能会丢弃正确的包
-			if queueLen < delta {
-				for {
-					av.lastSeq++
-					delta = int(frame.SequenceNumber - av.lastSeq)
-					copy(av.orderQueue, av.orderQueue[1:])
-					// 可以放得进去了
-					if delta == queueLen-1 {
-						av.orderQueue[queueLen-1] = frame
-						frame, av.orderQueue[0] = av.orderQueue[0], nil
-						return frame
-					}
-				}
-			}
-			// 出现后面的包先到达，缓存起来
-			av.orderQueue[delta-1] = frame
-			return nil
-		} else {
-			return nil
-		}
+		return av.乱序重排.Push(frame.SequenceNumber, frame)
 	} else {
 		if av.lastSeq == 0 {
 			av.lastSeq = frame.SequenceNumber

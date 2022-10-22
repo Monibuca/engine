@@ -26,9 +26,6 @@ func NewH265(stream IStream) (vt *H265) {
 	vt.Video.Media.Poll = time.Millisecond * 10 //适配高帧率
 	vt.Video.DecoderConfiguration.PayloadType = 96
 	vt.Video.DecoderConfiguration.Raw = make(NALUSlice, 3)
-	if config.Global.RTPReorder {
-		vt.Video.orderQueue = make([]*RTPFrame, 20)
-	}
 	vt.dtsEst = NewDTSEstimator()
 	return
 }

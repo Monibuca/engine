@@ -48,7 +48,7 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 	conn, err := quic.DialAddr(cfg.Server, tlsConf, &quic.Config{
 		KeepAlivePeriod: time.Second * 10,
 	})
-
+	wasConnected := err == nil
 	if stream := quic.Stream(nil); err == nil {
 		if stream, err = conn.OpenStreamSync(ctx); err == nil {
 			_, err = stream.Write([]byte(cfg.Secret + "\n"))
@@ -76,7 +76,9 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 	}
 
 	if err != nil {
-		log.Error("connect to console server ", cfg.Server, err)
+		if wasConnected {
+			log.Error("connect to console server ", cfg.Server, " ", err)
+		}
 		if ctx.Err() == nil {
 			go cfg.Remote(ctx)
 		}

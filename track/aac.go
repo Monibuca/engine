@@ -22,9 +22,6 @@ func NewAAC(stream IStream) (aac *AAC) {
 	aac.AVCCHead = []byte{0xAF, 1}
 	aac.Audio.SampleSize = 16
 	aac.Audio.DecoderConfiguration.PayloadType = 97
-	if config.Global.RTPReorder {
-		aac.Audio.orderQueue = make([]*RTPFrame, 20)
-	}
 	return
 }
 

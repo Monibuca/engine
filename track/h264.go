@@ -26,9 +26,6 @@ func NewH264(stream IStream) (vt *H264) {
 	vt.Video.Media.Poll = time.Millisecond * 10 //适配高帧率
 	vt.Video.DecoderConfiguration.PayloadType = 96
 	vt.Video.DecoderConfiguration.Raw = make(NALUSlice, 2)
-	if config.Global.RTPReorder {
-		vt.Video.orderQueue = make([]*RTPFrame, 20)
-	}
 	vt.dtsEst = NewDTSEstimator()
 	return
 }
@@ -44,9 +41,10 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	}
 	// println(vt.Value.DTS, vt.Value.PTS, vt.Value.PTS-vt.Value.DTS, len(frame))
 	vt.Flush()
+	// println(vt.FPS)
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
-	// println( slice.H264Type())
+	// println(slice.H264Type())
 	switch slice.H264Type() {
 	case codec.NALU_SPS:
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])

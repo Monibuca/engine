@@ -6,7 +6,6 @@ import (
 	"github.com/pion/rtp"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
-	"m7s.live/engine/v4/config"
 )
 
 func NewG711(stream IStream, alaw bool) (g711 *G711) {
@@ -25,9 +24,6 @@ func NewG711(stream IStream, alaw bool) (g711 *G711) {
 	g711.Audio.Init(32)
 	g711.Audio.Media.Poll = time.Millisecond * 10
 	g711.Audio.DecoderConfiguration.PayloadType = 97
-	if config.Global.RTPReorder {
-		g711.Audio.orderQueue = make([]*RTPFrame, 20)
-	}
 	g711.Audio.SampleSize = 8
 	g711.Audio.SampleRate = 8000
 	g711.Audio.Attach()
