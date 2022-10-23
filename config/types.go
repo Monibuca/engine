@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/net/websocket"
 	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
 type PublishConfig interface {
@@ -101,7 +102,8 @@ type Engine struct {
 	EnableAVCC bool //启用AVCC格式，rtmp协议使用
 	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
 	Console
-	LogLevel string
+	LogLevel            string
+	RTPReorderBufferLen int //RTP重排序缓冲长度
 }
 type myResponseWriter struct {
 }
@@ -113,6 +115,7 @@ func (*myResponseWriter) WriteHeader(statusCode int) {
 }
 func (w *myResponseWriter) Flush() {
 }
+
 type myWsWriter struct {
 	myResponseWriter
 	*websocket.Conn
@@ -180,6 +183,7 @@ func (cfg *Engine) WsRemote() {
 func (cfg *Engine) OnEvent(event any) {
 	switch v := event.(type) {
 	case context.Context:
+		util.RTPReorderBufferLen = uint16(cfg.RTPReorderBufferLen)
 		if strings.HasPrefix(cfg.Console.Server, "wss") {
 			go cfg.WsRemote()
 		} else {
@@ -194,5 +198,5 @@ var Global = &Engine{
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, Console{
 		"console.monibuca.com:4242", "", "", "",
-	}, "info",
+	}, "info", 50,
 }
