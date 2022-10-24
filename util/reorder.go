@@ -31,29 +31,25 @@ func (p *RTPReorder[T]) Push(seq uint16, v T) (result T) {
 		p.pop()
 		return v
 	}
-	if seq > p.lastSeq {
-		//delta必然大于1
-		if RTPReorderBufferLen < delta {
-			//超过缓存最大范围,无法挽回,只能造成丢包（序号断裂）
-			for {
-				p.lastSeq++
-				delta--
-				p.pop()
-				// 可以放得进去了
-				if delta == RTPReorderBufferLen {
-					p.queue[RTPReorderBufferLen-1] = v.Clone()
-					v = p.queue[0]
-					p.queue[0] = result
-					return v
-				}
+	if RTPReorderBufferLen < delta {
+		//超过缓存最大范围,无法挽回,只能造成丢包（序号断裂）
+		for {
+			p.lastSeq++
+			delta--
+			p.pop()
+			// 可以放得进去了
+			if delta == RTPReorderBufferLen {
+				p.queue[RTPReorderBufferLen-1] = v.Clone()
+				v = p.queue[0]
+				p.queue[0] = result
+				return v
 			}
-		} else {
-			// 出现后面的包先到达，缓存起来
-			p.queue[delta-1] = v.Clone()
-			return
 		}
+	} else {
+		// 出现后面的包先到达，缓存起来
+		p.queue[delta-1] = v.Clone()
+		return
 	}
-	return
 }
 
 func (p *RTPReorder[T]) pop() (result T) {

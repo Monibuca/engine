@@ -236,7 +236,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		case STATE_PUBLISHING:
 			stateEvent = SEpublish{event}
 			r.broadcast(stateEvent)
-			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
+			r.timeout.Reset(time.Second * 10) // 5秒心跳，检测track的存活度
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
 			r.timeout.Reset(r.DelayCloseTimeout)

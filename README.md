@@ -68,6 +68,8 @@ global:
   enableavcc : true
   # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enablertp : true
+  # rtp乱序重排缓存长度
+  rtpreroderbufferlen: 50 
   console: 
     # 连接远程控制台的地址
     server : wss://console.monibuca.com/ws/v1
