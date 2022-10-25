@@ -25,6 +25,10 @@ func (p *RTPReorder[T]) Push(seq uint16, v T) (result T) {
 		return
 	}
 	delta := seq - p.lastSeq
+	if delta == 0 {
+		// 重复包
+		return
+	}
 	if delta == 1 {
 		// 正常顺序,无需缓存
 		p.lastSeq = seq
