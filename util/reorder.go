@@ -11,9 +11,12 @@ var RTPReorderBufferLen uint16 = 50
 type RTPReorder[T CloneType[T]] struct {
 	lastSeq uint16 //最新收到的rtp包序号
 	queue   []T    // 缓存队列,0号元素位置代表lastReq+1，永远保持为空
+	Total	 uint32 // 总共收到的包数量
+	Drop	 uint32 // 丢弃的包数量
 }
 
 func (p *RTPReorder[T]) Push(seq uint16, v T) (result T) {
+	p.Total++
 	// 初始化
 	if len(p.queue) == 0 {
 		p.lastSeq = seq
@@ -22,11 +25,13 @@ func (p *RTPReorder[T]) Push(seq uint16, v T) (result T) {
 	}
 	if seq < p.lastSeq && p.lastSeq-seq < 0x8000 {
 		// 旧的包直接丢弃
+		p.Drop++
 		return
 	}
 	delta := seq - p.lastSeq
 	if delta == 0 {
 		// 重复包
+		p.Drop++
 		return
 	}
 	if delta == 1 {
@@ -40,13 +45,14 @@ func (p *RTPReorder[T]) Push(seq uint16, v T) (result T) {
 		for {
 			p.lastSeq++
 			delta--
-			p.pop()
+			head := p.pop()
 			// 可以放得进去了
 			if delta == RTPReorderBufferLen {
 				p.queue[RTPReorderBufferLen-1] = v.Clone()
-				v = p.queue[0]
 				p.queue[0] = result
-				return v
+				return head
+			} else if head != result {
+				p.Drop++
 			}
 		}
 	} else {

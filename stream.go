@@ -223,7 +223,10 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
-			waitTime := r.Publisher.GetConfig().WaitCloseTimeout
+			waitTime := 0
+			if r.Publisher != nil {
+				waitTime = r.Publisher.GetConfig().WaitCloseTimeout
+			}
 			if l := len(r.Subscribers); l > 0 {
 				r.broadcast(stateEvent)
 				if waitTime == 0 {
@@ -424,7 +427,9 @@ func (s *Stream) run() {
 						}
 						v.Resolve(util.Null)
 					} else {
-						s.Publisher = nil
+						if s.Publisher == v.Value {
+							s.Publisher = nil
+						}
 						v.Reject(BadNameErr)
 					}
 				case *util.Promise[ISubscriber, struct{}]:

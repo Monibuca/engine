@@ -104,6 +104,7 @@ type Engine struct {
 	Console
 	LogLevel            string
 	RTPReorderBufferLen int //RTP重排序缓冲长度
+	SpeedLimit          int //速度限制最大等待时间
 }
 type myResponseWriter struct {
 }
@@ -198,5 +199,5 @@ var Global = &Engine{
 	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
 	false, true, true, Console{
 		"console.monibuca.com:4242", "", "", "",
-	}, "info", 50,
+	}, "info", 50, 0,
 }

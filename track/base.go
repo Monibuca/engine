@@ -24,6 +24,9 @@ func (p *流速控制) 时间戳差(绝对时间戳 uint32) time.Duration {
 	return time.Duration(绝对时间戳-p.起始时间戳) * time.Millisecond
 }
 func (p *流速控制) 控制流速(绝对时间戳 uint32) {
+	if config.Global.SpeedLimit == 0 {
+		return
+	}
 	数据时间差, 实际时间差 := p.时间戳差(绝对时间戳), time.Since(p.起始时间)
 	// println(绝对时间戳, 实际时间差)
 	// if 实际时间差 > 数据时间差 {
@@ -32,8 +35,8 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// }
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
 	if 过快毫秒 := (数据时间差 - 实际时间差) / time.Millisecond; 过快毫秒 > 300 {
-		if 过快毫秒 > 500 {
-			time.Sleep(time.Millisecond * 500)
+		if 过快毫秒 > time.Duration(config.Global.SpeedLimit) {
+			time.Sleep(time.Millisecond * time.Duration(config.Global.SpeedLimit))
 		} else {
 			time.Sleep(过快毫秒 * time.Millisecond)
 		}
