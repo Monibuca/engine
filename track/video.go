@@ -49,10 +49,11 @@ func (vt *Video) GetDecConfSeq() int {
 }
 func (vt *Video) Attach() {
 	vt.Stream.AddTrack(vt)
+	vt.Attached = 1
 }
 func (vt *Video) Detach() {
 	vt.Stream.RemoveTrack(vt)
-	vt.Stream = nil
+	vt.Attached = 2
 }
 func (vt *Video) GetName() string {
 	if vt.Name == "" {

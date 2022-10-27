@@ -44,7 +44,6 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	// println(vt.FPS)
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
-	// println(slice.H264Type())
 	switch slice.H264Type() {
 	case codec.NALU_SPS:
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])
@@ -68,7 +67,7 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 	case codec.NALU_IDR_Picture:
 		vt.Video.Media.RingBuffer.Value.IFrame = true
 		vt.Video.WriteSlice(slice)
-	case codec.NALU_Non_IDR_Picture,codec.NALU_SEI:
+	case codec.NALU_Non_IDR_Picture, codec.NALU_SEI:
 		vt.Video.Media.RingBuffer.Value.IFrame = false
 		vt.Video.WriteSlice(slice)
 	}
@@ -149,10 +148,10 @@ func (vt *H264) WriteRTP(raw []byte) {
 
 func (vt *H264) Flush() {
 	if vt.Video.Media.RingBuffer.Value.IFrame {
-		if vt.IDRing == nil {
-			defer vt.Attach()
-		}
 		vt.Video.ComputeGOP()
+	}
+	if vt.Attached == 0 && vt.IDRing != nil && vt.DecoderConfiguration.Seq > 0 {
+		defer vt.Attach()
 	}
 	// RTP格式补完
 	if vt.Video.Media.RingBuffer.Value.RTP == nil && config.Global.EnableRTP {

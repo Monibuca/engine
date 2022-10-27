@@ -13,17 +13,18 @@ type TimelineData[T any] struct {
 
 // Base 基础Track类
 type Base struct {
-	Name    string
-	Stream  IStream `json:"-"`
-	ts      time.Time
-	bytes   int
-	frames  int
-	BPS     int
-	FPS     int
-	RawPart []int               // 裸数据片段用于UI上显示
-	RawSize int                 // 裸数据长度
-	BPSs    []TimelineData[int] // 10s码率统计
-	FPSs    []TimelineData[int] // 10s帧率统计
+	Name     string
+	Stream   IStream `json:"-"`
+	Attached byte // 0代表准备好后自动attach，1代表已经attach，2代表已经detach
+	ts       time.Time
+	bytes    int
+	frames   int
+	BPS      int
+	FPS      int
+	RawPart  []int               // 裸数据片段用于UI上显示
+	RawSize  int                 // 裸数据长度
+	BPSs     []TimelineData[int] // 10s码率统计
+	FPSs     []TimelineData[int] // 10s帧率统计
 }
 
 func (bt *Base) ComputeBPS(bytes int) {

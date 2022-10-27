@@ -51,10 +51,11 @@ func (a *Audio) GetDecConfSeq() int {
 }
 func (a *Audio) Attach() {
 	a.Stream.AddTrack(a)
+	a.Attached = 1
 }
 func (a *Audio) Detach() {
 	a.Stream.RemoveTrack(a)
-	a.Stream = nil
+	a.Attached = 2
 }
 func (a *Audio) GetName() string {
 	if a.Name == "" {

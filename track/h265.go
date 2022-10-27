@@ -154,10 +154,10 @@ func (vt *H265) writeRTPFrame(frame *RTPFrame) {
 }
 func (vt *H265) Flush() {
 	if vt.Video.Media.RingBuffer.Value.IFrame {
-		if vt.Video.IDRing == nil {
-			defer vt.Video.Attach()
-		}
 		vt.Video.ComputeGOP()
+	}
+	if vt.Attached == 0 && vt.IDRing != nil && vt.DecoderConfiguration.Seq > 0 {
+		defer vt.Attach()
 	}
 	// RTP格式补完
 	// H265打包： https://blog.csdn.net/fanyun_01/article/details/114234290
