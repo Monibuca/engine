@@ -39,7 +39,9 @@ func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	for _, slice := range vt.Video.WriteAnnexB(frame) {
 		vt.WriteSlice(slice)
 	}
-	vt.Flush()
+	if len(vt.Value.Raw) > 0 {
+		vt.Flush()
+	}
 }
 func (vt *H265) WriteSlice(slice NALUSlice) {
 	switch slice.H265Type() {
