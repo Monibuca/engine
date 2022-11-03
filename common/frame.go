@@ -134,12 +134,25 @@ func (av *AVFrame[T]) AppendRTP(rtp ...*RTPFrame) {
 	av.RTP = append(av.RTP, rtp...)
 }
 
+// Clear 清空数据 gc
+func (av *AVFrame[T]) Clear() {
+	av.AVCC = nil
+	av.RTP = nil
+	av.Raw = nil
+	av.BytesIn = 0
+}
+
+// Reset 重置数据,复用内存
 func (av *AVFrame[T]) Reset() {
 	if av.AVCC != nil {
 		av.AVCC = av.AVCC[:0]
 	}
-	av.RTP = nil
-	av.Raw = nil
+	if av.RTP != nil {
+		av.RTP = av.RTP[:0]
+	}
+	if av.Raw != nil {
+		av.Raw = av.Raw[:0]
+	}
 	av.BytesIn = 0
 }
 

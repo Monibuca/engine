@@ -5,7 +5,6 @@ import (
 
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
-	"m7s.live/engine/v4/config"
 )
 
 var adcflv1 = []byte{codec.FLV_TAG_TYPE_AUDIO, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0}
@@ -97,13 +96,13 @@ func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 func (a *Audio) Flush() {
 	// AVCC 格式补完
 	value := &a.Media.RingBuffer.Value
-	if len(value.AVCC) == 0 && (config.Global.EnableAVCC) {
+	if a.ComplementAVCC() {
 		value.AppendAVCC(a.AVCCHead)
 		for _, raw := range value.Raw {
 			value.AppendAVCC(raw)
 		}
 	}
-	if value.RTP == nil && config.Global.EnableRTP {
+	if a.ComplementRTP() {
 		var o []byte
 		for _, raw := range value.Raw {
 			o = append(o, raw...)

@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
-	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
 
@@ -169,7 +168,7 @@ func (vt *H265) Flush() {
 	}
 	// RTP格式补完
 	// H265打包： https://blog.csdn.net/fanyun_01/article/details/114234290
-	if vt.Video.Media.RingBuffer.Value.RTP == nil && config.Global.EnableRTP {
+	if vt.ComplementRTP() {
 		var out [][]byte
 		for _, nalu := range vt.Video.Media.RingBuffer.Value.Raw {
 			buffers := util.SplitBuffers(nalu, 1200)
