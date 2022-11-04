@@ -24,7 +24,7 @@ type Audio struct {
 	Profile byte
 }
 
-//为json序列化而计算的数据
+// 为json序列化而计算的数据
 func (a *Audio) SnapForJson() {
 	v := a.LastValue
 	if a.RawPart != nil {
@@ -95,7 +95,7 @@ func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (a *Audio) Flush() {
 	// AVCC 格式补完
-	value := &a.Media.RingBuffer.Value
+	value := &a.Value
 	if a.ComplementAVCC() {
 		value.AppendAVCC(a.AVCCHead)
 		for _, raw := range value.Raw {
@@ -103,11 +103,11 @@ func (a *Audio) Flush() {
 		}
 	}
 	if a.ComplementRTP() {
-		var o []byte
-		for _, raw := range value.Raw {
-			o = append(o, raw...)
+		var packet = make(net.Buffers, len(value.Raw))
+		for i, raw := range value.Raw {
+			packet[i] = raw
 		}
-		a.PacketizeRTP(o)
+		a.PacketizeRTP(packet)
 	}
 	a.Media.Flush()
 }

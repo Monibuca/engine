@@ -2,9 +2,9 @@ package track
 
 import (
 	"context"
+	"net"
 	"time"
 
-	"github.com/pion/rtp"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
@@ -126,24 +126,32 @@ func (av *Media[T]) ComplementRTP() bool {
 	return config.Global.EnableRTP && len(av.Value.RTP) == 0
 }
 
+// https://www.cnblogs.com/moonwalk/p/15903760.html
 // Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
-func (av *Media[T]) PacketizeRTP(payloads ...[]byte) {
+func (av *Media[T]) PacketizeRTP(payloads ...net.Buffers) {
+	packetCount := len(payloads)
+	if cap(av.Value.RTP) < packetCount {
+		av.Value.RTP = make([]*RTPFrame, packetCount)
+	} else {
+		av.Value.RTP = av.Value.RTP[:packetCount]
+	}
 	for i, pp := range payloads {
 		av.rtpSequence++
-		var frame = &RTPFrame{Packet: rtp.Packet{
-			Header: rtp.Header{
-				Version:        2,
-				Padding:        false,
-				Extension:      false,
-				Marker:         i == len(payloads)-1,
-				PayloadType:    av.DecoderConfiguration.PayloadType,
-				SequenceNumber: av.rtpSequence,
-				Timestamp:      av.AVRing.RingBuffer.Value.PTS, // Figure out how to do timestamps
-				SSRC:           av.Stream.SSRC(),
-			},
-			Payload: pp,
-		}}
-		frame.Marshal()
-		av.AVRing.RingBuffer.Value.AppendRTP(frame)
+		packet := av.Value.RTP[i]
+		if packet == nil {
+			packet = &RTPFrame{}
+			av.Value.RTP[i] = packet
+			packet.Version = 2
+			packet.PayloadType = av.DecoderConfiguration.PayloadType
+			packet.Payload = make([]byte, 0, 1200)
+			packet.SSRC = av.Stream.SSRC()
+		}
+		packet.Payload = packet.Payload[:0]
+		packet.SequenceNumber = av.rtpSequence
+		packet.Timestamp = av.Value.PTS
+		packet.Marker = i == packetCount-1
+		for _, p := range pp {
+			packet.Payload = append(packet.Payload, p...)
+		}
 	}
 }

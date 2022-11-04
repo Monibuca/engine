@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -107,6 +108,30 @@ var StreamFSM = [len(StateNames)]map[StreamAction]StreamState{
 // Streams 所有的流集合
 var Streams = util.Map[string, *Stream]{Map: make(map[string]*Stream)}
 
+type StreamList []*Stream
+
+func (l StreamList) Len() int {
+	return len(l)
+}
+
+func (l StreamList) Less(i, j int) bool {
+	return l[i].Path < l[j].Path
+}
+
+func (l StreamList) Swap(i, j int) {
+	l[i], l[j] = l[j], l[i]
+}
+
+func (l StreamList) Sort() {
+	sort.Sort(l)
+}
+
+func GetSortedStreamList() StreamList {
+	result := StreamList(Streams.ToList())
+	result.Sort()
+	return result
+}
+
 func FilterStreams[T IPublisher]() (ss []*Stream) {
 	Streams.RLock()
 	defer Streams.RUnlock()
@@ -200,6 +225,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s.Logger = log.With(zap.String("stream", streamPath))
 		s.Info("created")
 		Streams.Map[streamPath] = s
+
 		s.actionChan.Init(1)
 		s.timeout = time.NewTimer(waitTimeout)
 		s.Tracks.Init()

@@ -166,38 +166,41 @@ func (vt *H265) Flush() {
 	if vt.Attached == 0 && vt.IDRing != nil && vt.DecoderConfiguration.Seq > 0 {
 		defer vt.Attach()
 	}
+
 	// RTP格式补完
 	// H265打包： https://blog.csdn.net/fanyun_01/article/details/114234290
 	if vt.ComplementRTP() {
-		var out [][]byte
+		var out []net.Buffers
+		if vt.Value.IFrame {
+			out = append(out, net.Buffers(vt.DecoderConfiguration.Raw))
+		}
 		for _, nalu := range vt.Video.Media.RingBuffer.Value.Raw {
 			buffers := util.SplitBuffers(nalu, 1200)
 			firstBuffer := NALUSlice(buffers[0])
 			if l := len(buffers); l == 1 {
-				out = append(out, firstBuffer.Bytes())
+				out = append(out, net.Buffers(firstBuffer))
 			} else {
 				naluType := firstBuffer.H265Type()
 				firstByte := (byte(codec.NAL_UNIT_RTP_FU) << 1) | (firstBuffer[0][0] & 0b10000001)
-				buf := []byte{firstByte, firstBuffer[0][1], (1 << 7) | byte(naluType)}
+				buf := net.Buffers{[]byte{firstByte, firstBuffer[0][1], (1 << 7) | byte(naluType)}}
 				for i, sp := range firstBuffer {
 					if i == 0 {
 						sp = sp[2:]
 					}
-					buf = append(buf, sp...)
+					buf = append(buf, sp)
 				}
 				out = append(out, buf)
 				for _, bufs := range buffers[1:] {
-					buf := []byte{firstByte, firstBuffer[0][1], byte(naluType)}
+					buf = net.Buffers{[]byte{firstByte, firstBuffer[0][1], byte(naluType)}}
 					for _, sp := range bufs {
-						buf = append(buf, sp...)
+						buf = append(buf, sp)
 					}
 					out = append(out, buf)
 				}
-				lastBuf := out[len(out)-1]
-				lastBuf[2] |= 1 << 6 // set end bit
+				buf[0][2] |= 1 << 6 // set end bit
 			}
 		}
-		vt.Video.PacketizeRTP(out...)
+		vt.PacketizeRTP(out...)
 	}
 	vt.Video.Flush()
 }

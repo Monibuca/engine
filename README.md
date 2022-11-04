@@ -70,9 +70,11 @@ global:
   enablertp : true
   # rtp乱序重排缓存长度
   rtpreroderbufferlen: 50 
+  # 限速超时时间（毫秒）0为不限速，对于读取文件这类流需要限速，否则读取过快
+  speedlimit: 0
   console: 
     # 连接远程控制台的地址
-    server : wss://console.monibuca.com/ws/v1
+    server : console.monibuca.com:4242
     # 远程控制台的秘钥
     secret: ""
     # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址

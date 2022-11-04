@@ -199,13 +199,7 @@ func (vt *Video) Flush() {
 	}
 	vt.Media.Flush()
 }
-func (vt *Video) PacketizeRTP(payloads ...[]byte) {
-	if vt.AVRing.RingBuffer.Value.IFrame && vt.dcChanged {
-		vt.dcChanged = false
-		payloads = append(append([][]byte{}, vt.DecoderConfiguration.Raw...), payloads...)
-	}
-	vt.Media.PacketizeRTP(payloads...)
-}
+
 func (vt *Video) ReadRing() *AVRing[NALUSlice] {
 	vr := vt.Media.ReadRing()
 	vr.Ring = vt.IDRing

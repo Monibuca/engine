@@ -92,7 +92,7 @@ const (
 var AudNalu = []byte{0x00, 0x00, 0x00, 0x01, 0x46, 0x01, 0x10}
 var ErrHevc = errors.New("hevc parse config error")
 
-//HVCC
+// HVCC
 type HVCDecoderConfigurationRecord struct {
 	PicWidthInLumaSamples  uint32 // sps
 	PicHeightInLumaSamples uint32 // sps
@@ -108,12 +108,13 @@ type HVCDecoderConfigurationRecord struct {
 
 	lengthSizeMinusOne uint8
 
-	numTemporalLayers uint8
-	temporalIdNested  uint8
-
+	numTemporalLayers    uint8
+	temporalIdNested     uint8
+	parallelismType      uint8
 	chromaFormat         uint8
 	bitDepthLumaMinus8   uint8
 	bitDepthChromaMinus8 uint8
+	avgFrameRate         uint16
 }
 
 func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []byte, err error) {
@@ -225,7 +226,7 @@ func BuildH265SeqHeaderFromVpsSpsPps(vps, sps, pps []byte) ([]byte, error) {
 	// unsigned int(2) parallelismType;
 	// TODO chef: 这两个字段没有解析
 	util.PutBE(sh[18:20], 0xf000)
-	sh[20] = 0xfc
+	sh[20] = ctx.parallelismType | 0xfc
 
 	// bit(6) reserved = ‘111111’b;
 	// unsigned int(2) chromaFormat;
@@ -240,7 +241,7 @@ func BuildH265SeqHeaderFromVpsSpsPps(vps, sps, pps []byte) ([]byte, error) {
 	sh[23] = ctx.bitDepthChromaMinus8 | 0xf8
 
 	// bit(16) avgFrameRate;
-	util.PutBE(sh[24:26], 0)
+	util.PutBE(sh[24:26], ctx.avgFrameRate)
 
 	// bit(2) constantFrameRate;
 	// bit(3) numTemporalLayers;
