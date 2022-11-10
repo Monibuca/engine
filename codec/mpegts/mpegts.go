@@ -36,6 +36,9 @@ const (
 	PID_MEASURE    = 0x001D
 	PID_DIT        = 0x001E
 	PID_SIT        = 0x001F
+	PID_PMT        = 0x0100
+	PID_VIDEO      = 0x0101
+	PID_AUDIO      = 0x0102
 	// 0x0003 - 0x000F Reserved
 	// 0x0010 - 0x1FFE May be assigned as network_PID, Program_map_PID, elementary_PID, or for other purposes
 	// 0x1FFF Null Packet
