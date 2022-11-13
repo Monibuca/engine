@@ -162,7 +162,7 @@ type ADTSVariableHeader struct {
 
 // 所以说number_of_raw_data_blocks_in_frame == 0 表示说ADTS帧中有一个AAC数据块并不是说没有。(一个AAC原始帧包含一段时间内1024个采样及相关数据)
 
-func AudioSpecificConfigToADTS(asc AudioSpecificConfig, rawDataLength int) (adts ADTS, adtsByte []byte, err error) {
+func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int) (adts ADTS, adtsByte []byte, err error) {
 	if asc.ChannelConfiguration > 8 || asc.FrameLengthFlag > 13 {
 		err = errors.New("Reserved field.")
 		return

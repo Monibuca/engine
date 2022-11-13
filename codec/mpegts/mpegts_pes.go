@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/ioutil"
 
-	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/util"
 )
 
@@ -470,126 +469,126 @@ func WritePESPacket(w io.Writer, frame *MpegtsPESFrame, packet MpegTsPESPacket) 
 	return
 }
 
-func IowWritePESPacket(w io.Writer, tsHeader MpegTsHeader, packet MpegTsPESPacket) (err error) {
-	if packet.Header.PacketStartCodePrefix != 0x000001 {
-		return errors.New("packetStartCodePrefix != 0x000001")
-	}
+// func IowWritePESPacket(w io.Writer, tsHeader MpegTsHeader, packet MpegTsPESPacket) (err error) {
+// 	if packet.Header.PacketStartCodePrefix != 0x000001 {
+// 		return errors.New("packetStartCodePrefix != 0x000001")
+// 	}
 
-	bw := &bytes.Buffer{}
+// 	bw := &bytes.Buffer{}
 
-	// TODO:如果头长度大于65536,字段会为0,是否要改？
-	_, err = WritePESHeader(bw, packet.Header)
-	if err != nil {
-		return
-	}
+// 	// TODO:如果头长度大于65536,字段会为0,是否要改？
+// 	_, err = WritePESHeader(bw, packet.Header)
+// 	if err != nil {
+// 		return
+// 	}
 
-	PESPacket := &util.IOVec{}
-	PESPacket.Append(bw.Bytes())     // header
-	PESPacket.Append(packet.Payload) // packet
+// 	PESPacket := &util.IOVec{}
+// 	PESPacket.Append(bw.Bytes())     // header
+// 	PESPacket.Append(packet.Payload) // packet
 
-	// 用IOVecWriter来写PES包,IOVecWriter实现了Write方法.
-	// 因为通常在将一帧PES封装成TS包(188字节)的时候,一般情况下一帧PES字节数会大于188,并且分多次封装.
-	// 例如这一帧PES字节数为189,那么在封装第二个TS包的时候就只会封装1字节,会导致多次写操作,降低性能.
-	// 因此将所有的字节数,都写进缓冲中去,然后用系统调用syscall来写入.
-	iow := util.NewIOVecWriter(w)
+// 	// 用IOVecWriter来写PES包,IOVecWriter实现了Write方法.
+// 	// 因为通常在将一帧PES封装成TS包(188字节)的时候,一般情况下一帧PES字节数会大于188,并且分多次封装.
+// 	// 例如这一帧PES字节数为189,那么在封装第二个TS包的时候就只会封装1字节,会导致多次写操作,降低性能.
+// 	// 因此将所有的字节数,都写进缓冲中去,然后用系统调用syscall来写入.
+// 	iow := util.NewIOVecWriter(w)
 
-	var isKeyFrame bool
-	var headerLength int
+// 	var isKeyFrame bool
+// 	var headerLength int
 
-	isKeyFrame = CheckPESPacketIsKeyFrame(packet)
+// 	isKeyFrame = CheckPESPacketIsKeyFrame(packet)
 
-	// 写一帧PES
-	// 如果是I帧,会有pcr,所以会有调整字段AF.
-	// 如果当前包字节不满188字节,会需要填充0xff,所以会有调整字段AF.
-	for i := 0; PESPacket.Length > 0; i++ {
+// 	// 写一帧PES
+// 	// 如果是I帧,会有pcr,所以会有调整字段AF.
+// 	// 如果当前包字节不满188字节,会需要填充0xff,所以会有调整字段AF.
+// 	for i := 0; PESPacket.Length > 0; i++ {
 
-		header := MpegTsHeader{
-			SyncByte:             0x47,
-			Pid:                  tsHeader.Pid,
-			AdaptionFieldControl: 1,
-			ContinuityCounter:    byte(i % 15),
-		}
+// 		header := MpegTsHeader{
+// 			SyncByte:             0x47,
+// 			Pid:                  tsHeader.Pid,
+// 			AdaptionFieldControl: 1,
+// 			ContinuityCounter:    byte(i % 15),
+// 		}
 
-		// 每一帧开头
-		if i == 0 {
-			header.PayloadUnitStartIndicator = 1
-		}
+// 		// 每一帧开头
+// 		if i == 0 {
+// 			header.PayloadUnitStartIndicator = 1
+// 		}
 
-		// I帧
-		if isKeyFrame {
-			header.AdaptionFieldControl = 0x03
-			header.AdaptationFieldLength = 7
-			header.PCRFlag = 1
-			header.RandomAccessIndicator = tsHeader.RandomAccessIndicator
-			header.ProgramClockReferenceBase = tsHeader.ProgramClockReferenceBase
-			header.ProgramClockReferenceExtension = tsHeader.ProgramClockReferenceExtension
+// 		// I帧
+// 		if isKeyFrame {
+// 			header.AdaptionFieldControl = 0x03
+// 			header.AdaptationFieldLength = 7
+// 			header.PCRFlag = 1
+// 			header.RandomAccessIndicator = tsHeader.RandomAccessIndicator
+// 			header.ProgramClockReferenceBase = tsHeader.ProgramClockReferenceBase
+// 			header.ProgramClockReferenceExtension = tsHeader.ProgramClockReferenceExtension
 
-			isKeyFrame = false
-		}
+// 			isKeyFrame = false
+// 		}
 
-		// 这个包大小,会在每一次PESPacket.WriteTo中慢慢减少.
-		packetLength := PESPacket.Length
+// 		// 这个包大小,会在每一次PESPacket.WriteTo中慢慢减少.
+// 		packetLength := PESPacket.Length
 
-		// 包不满188字节
-		if packetLength < TS_PACKET_SIZE-4 {
+// 		// 包不满188字节
+// 		if packetLength < TS_PACKET_SIZE-4 {
 
-			if header.AdaptionFieldControl >= 2 {
-				header.AdaptationFieldLength = uint8(TS_PACKET_SIZE - 4 - 1 - packetLength - 7)
-			} else {
-				header.AdaptionFieldControl = 0x03
-				header.AdaptationFieldLength = uint8(TS_PACKET_SIZE - 4 - 1 - packetLength)
-			}
+// 			if header.AdaptionFieldControl >= 2 {
+// 				header.AdaptationFieldLength = uint8(TS_PACKET_SIZE - 4 - 1 - packetLength - 7)
+// 			} else {
+// 				header.AdaptionFieldControl = 0x03
+// 				header.AdaptationFieldLength = uint8(TS_PACKET_SIZE - 4 - 1 - packetLength)
+// 			}
 
-			headerLength, err = WriteTsHeader(iow, header)
-			if err != nil {
-				return
-			}
+// 			headerLength, err = WriteTsHeader(iow, header)
+// 			if err != nil {
+// 				return
+// 			}
 
-			stuffingLength := int(header.AdaptationFieldLength - 1)
-			if _, err = iow.Write(util.GetFillBytes(0xff, stuffingLength)); err != nil {
-				return
-			}
+// 			stuffingLength := int(header.AdaptationFieldLength - 1)
+// 			if _, err = iow.Write(util.GetFillBytes(0xff, stuffingLength)); err != nil {
+// 				return
+// 			}
 
-			headerLength += stuffingLength
+// 			headerLength += stuffingLength
 
-		} else {
-			headerLength, err = WriteTsHeader(iow, header)
-			if err != nil {
-				return
-			}
-		}
+// 		} else {
+// 			headerLength, err = WriteTsHeader(iow, header)
+// 			if err != nil {
+// 				return
+// 			}
+// 		}
 
-		/*
-			if headerLength, err = writeTsHeader(iow, header, packetLength); err != nil {
-				return
-			}
-		*/
+// 		/*
+// 			if headerLength, err = writeTsHeader(iow, header, packetLength); err != nil {
+// 				return
+// 			}
+// 		*/
 
-		payloadLength := 188 - headerLength
+// 		payloadLength := 188 - headerLength
 
-		// 写PES负载
-		if _, err = PESPacket.WriteTo(iow, payloadLength); err != nil {
-			return
-		}
-	}
+// 		// 写PES负载
+// 		if _, err = PESPacket.WriteTo(iow, payloadLength); err != nil {
+// 			return
+// 		}
+// 	}
 
-	iow.Flush()
+// 	iow.Flush()
 
-	return
-}
+// 	return
+// }
 
-func CheckPESPacketIsKeyFrame(packet MpegTsPESPacket) bool {
+// func CheckPESPacketIsKeyFrame(packet MpegTsPESPacket) bool {
 
-	nalus := bytes.SplitN(packet.Payload, codec.NALU_Delimiter1, -1)
+// 	nalus := bytes.SplitN(packet.Payload, codec.NALU_Delimiter1, -1)
 
-	for _, v := range nalus {
-		if codec.H264NALUType.ParseBytes(codec.NALU_IDR_Picture, v) == codec.NALU_IDR_Picture {
-			return true
-		}
-	}
+// 	for _, v := range nalus {
+// 		if codec.H264NALUType.ParseBytes(codec.NALU_IDR_Picture, v) == codec.NALU_IDR_Picture {
+// 			return true
+// 		}
+// 	}
 
-	return false
-}
+// 	return false
+// }
 
 func TsToPES(tsPkts []MpegTsPacket) (pesPkt MpegTsPESPacket, err error) {
 	var index int
@@ -712,7 +711,7 @@ func PESToTs(frame *MpegtsPESFrame, packet MpegTsPESPacket) (tsPkts []byte, err 
 			}
 
 			if tsStuffingLength > 0 {
-				if _, err = bwTsHeader.Write(util.GetFillBytes(0xff, int(tsStuffingLength))); err != nil {
+				if _, err = bwTsHeader.Write(stuffing[:tsStuffingLength]); err != nil {
 					return
 				}
 			}

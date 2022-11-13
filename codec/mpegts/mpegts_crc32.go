@@ -1,5 +1,7 @@
 package mpegts
 
+import "net"
+
 // http://www.stmc.edu.hk/~vincent/ffmpeg_0.4.9-pre1/libavformat/mpegtsenc.c
 
 var Crc32_Table = []uint32{
@@ -56,5 +58,15 @@ func GetCRC32(data []byte) (crc uint32) {
 
 	}
 
+	return
+}
+
+func GetCRC32_2(data net.Buffers) (crc uint32) {
+	crc = 0xffffffff
+	for _, v := range data {
+		for _, v2 := range v {
+			crc = (crc << 8) ^ Crc32_Table[((crc>>24)^uint32(v2))&0xff]
+		}
+	}
 	return
 }

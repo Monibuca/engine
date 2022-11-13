@@ -2,74 +2,31 @@ package mpegts
 
 import (
 	"bytes"
-	"errors"
-	"fmt"
 	"io"
+	"net"
 
+	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/util"
 )
-
-// Stuffing 157 bytes
-var stuffing = []byte{
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-}
 
 // ios13818-1-CN.pdf 46(60)-153(167)/page
 //
 // PMT
 
-var H264PMTPacket = []byte{
-	// TS Header
-	0x47, 0x41, 0x00, 0x10,
-	// Pointer Field
-	0x00,
-	// PSI
-	0x02, 0xb0, 0x17, 0x00, 0x01, 0xc1, 0x00, 0x00,
-	// PMT
-	0xe1, 0x00,
-	0xf0, 0x00,
-	// H264
-	STREAM_TYPE_H264, 0xe1, 0x01, 0xf0, 0x00,
-	STREAM_TYPE_AAC, 0xe1, 0x02, 0xf0, 0x00,
-}
-
-var H265PMTPacket = []byte{
-	/* TS */
-	0x47, 0x41, 0x00, 0x10,
-	0x00,
-	/* PSI */
-	0x02, 0xb0, 0x17, 0x00, 0x01, 0xc1, 0x00, 0x00,
-	/* PMT */
-	0xe1, 0x00,
-	0xf0, 0x00,
-	STREAM_TYPE_H265, 0xe1, 0x01, 0xf0, 0x00,
-	STREAM_TYPE_AAC, 0xe1, 0x02, 0xf0, 0x00,
-}
-
+var (
+	TSHeader = []byte{0x47, 0x40, 0x00, 0x10, 0x00}
+	PSI      = []byte{0x02, 0xb0, 0x17, 0x00, 0x01, 0xc1, 0x00, 0x00}
+	PMT      = []byte{0xe1, 0x01, 0xf0, 0x00} //PID:0x100
+	h264     = []byte{STREAM_TYPE_H264, 0xe1, 0x01, 0xf0, 0x00}
+	h265     = []byte{STREAM_TYPE_H265, 0xe1, 0x01, 0xf0, 0x00}
+	aac      = []byte{STREAM_TYPE_AAC, 0xe1, 0x02, 0xf0, 0x00}
+	pcma     = []byte{STREAM_TYPE_G711A, 0xe1, 0x02, 0xf0, 0x00}
+	pcmu     = []byte{STREAM_TYPE_G711U, 0xe1, 0x02, 0xf0, 0x00}
+	stuffing []byte
+)
 
 func init() {
-	crc := make([]byte, 4)
-	util.PutBE(crc, GetCRC32(H264PMTPacket[5:]))
-	H264PMTPacket = append(H264PMTPacket, crc...)
-	H264PMTPacket = append(H264PMTPacket, stuffing...)
-	util.PutBE(crc, GetCRC32(H265PMTPacket[5:]))
-	H265PMTPacket = append(H265PMTPacket, crc...)
-	H265PMTPacket = append(H265PMTPacket, stuffing...)
+	stuffing = util.GetFillBytes(0xff, TS_PACKET_SIZE)
 }
 
 // TS Header :
@@ -349,35 +306,64 @@ func WritePMT(w io.Writer, pmt MpegTsPMT) (err error) {
 	return
 }
 
-func WritePMTPacket(w io.Writer, tsHeader []byte, pmt MpegTsPMT) (err error) {
-	if pmt.TableID != TABLE_TSPMS {
-		err = errors.New("PMT table ID error")
-		return
+// func WritePMTPacket(w io.Writer, tsHeader []byte, pmt MpegTsPMT) (err error) {
+// 	if pmt.TableID != TABLE_TSPMS {
+// 		err = errors.New("PMT table ID error")
+// 		return
+// 	}
+
+// 	// 将所有要写的数据(PMT),全部放入到buffer中去.
+// 	// 	buffer 里面已经写好了整个PMT表(PointerField+PSI+PMT+CRC)
+// 	bw := &bytes.Buffer{}
+// 	if err = WritePMT(bw, pmt); err != nil {
+// 		return
+// 	}
+
+// 	// TODO:如果Pmt.Stream里面包含的信息很大,大于188?
+// 	stuffingBytes := util.GetFillBytes(0xff, TS_PACKET_SIZE-4-bw.Len())
+
+// 	var PMTPacket []byte
+// 	PMTPacket = append(PMTPacket, tsHeader...)
+// 	PMTPacket = append(PMTPacket, bw.Bytes()...)
+// 	PMTPacket = append(PMTPacket, stuffingBytes...)
+
+// 	fmt.Println("-------------------------")
+// 	fmt.Println("Write PMT :", PMTPacket)
+// 	fmt.Println("-------------------------")
+
+// 	// 写PMT负载
+// 	if _, err = w.Write(PMTPacket); err != nil {
+// 		return
+// 	}
+
+// 	return
+// }
+
+func WritePMTPacket(w io.Writer, videoCodec codec.VideoCodecID, audioCodec codec.AudioCodecID) {
+	w.Write(TSHeader)
+	pmt := net.Buffers{PSI, PMT}
+	pmtlen := len(PSI) + len(PMT)
+	switch videoCodec {
+	case codec.CodecID_H264:
+		pmt = append(pmt, h264)
+		pmtlen += 5
+	case codec.CodecID_H265:
+		pmt = append(pmt, h265)
+		pmtlen += 5
 	}
-
-	// 将所有要写的数据(PMT),全部放入到buffer中去.
-	// 	buffer 里面已经写好了整个PMT表(PointerField+PSI+PMT+CRC)
-	bw := &bytes.Buffer{}
-	if err = WritePMT(bw, pmt); err != nil {
-		return
+	switch audioCodec {
+	case codec.CodecID_AAC:
+		pmt = append(pmt, aac)
+		pmtlen += 5
+	case codec.CodecID_PCMA:
+		pmt = append(pmt, pcma)
+		pmtlen += 5
+	case codec.CodecID_PCMU:
+		pmt = append(pmt, pcmu)
+		pmtlen += 5
 	}
-
-	// TODO:如果Pmt.Stream里面包含的信息很大,大于188?
-	stuffingBytes := util.GetFillBytes(0xff, TS_PACKET_SIZE-4-bw.Len())
-
-	var PMTPacket []byte
-	PMTPacket = append(PMTPacket, tsHeader...)
-	PMTPacket = append(PMTPacket, bw.Bytes()...)
-	PMTPacket = append(PMTPacket, stuffingBytes...)
-
-	fmt.Println("-------------------------")
-	fmt.Println("Write PMT :", PMTPacket)
-	fmt.Println("-------------------------")
-
-	// 写PMT负载
-	if _, err = w.Write(PMTPacket); err != nil {
-		return
-	}
-
-	return
+	crc := make([]byte, 4)
+	util.PutBE(crc, GetCRC32_2(pmt))
+	pmt = append(pmt, crc, stuffing[:TS_PACKET_SIZE-pmtlen-5-4])
+	pmt.WriteTo(w)
 }

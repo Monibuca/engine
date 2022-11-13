@@ -170,6 +170,14 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 		if t.AudioTrack == nil {
 			t.AudioTrack = track.NewAAC(t.Publisher.Stream)
 		}
+	case mpegts.STREAM_TYPE_G711A:
+		if t.AudioTrack == nil {
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, true)
+		}
+	case mpegts.STREAM_TYPE_G711U:
+		if t.AudioTrack == nil {
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
+		}
 	default:
 		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))
 	}
@@ -182,28 +190,34 @@ func (t *TSPublisher) OnPES(pes mpegts.MpegTsPESPacket) {
 	switch pes.Header.StreamID & 0xF0 {
 	case mpegts.STREAM_ID_AUDIO:
 		if t.AudioTrack != nil {
-			if t.adts == nil {
-				t.adts = append(t.adts, pes.Payload[:7]...)
-				t.AudioTrack.WriteADTS(t.adts)
-			}
-			current := t.AudioTrack.CurrentFrame()
-			current.PTS = uint32(pes.Header.Pts)
-			current.DTS = uint32(pes.Header.Dts)
-			remainLen := len(pes.Payload)
-			current.BytesIn += remainLen
-			for remainLen > 0 {
-				// AACFrameLength(13)
-				// xx xxxxxxxx xxx
-				frameLen := (int(pes.Payload[3]&3) << 11) | (int(pes.Payload[4]) << 3) | (int(pes.Payload[5]) >> 5)
-				if frameLen > remainLen {
-					break
+			switch t.AudioTrack.(type) {
+			case *track.AAC:
+				if t.adts == nil {
+					t.adts = append(t.adts, pes.Payload[:7]...)
+					t.AudioTrack.WriteADTS(t.adts)
 				}
+				current := t.AudioTrack.CurrentFrame()
+				current.PTS = uint32(pes.Header.Pts)
+				current.DTS = uint32(pes.Header.Dts)
+				remainLen := len(pes.Payload)
+				current.BytesIn += remainLen
+				for remainLen > 0 {
+					// AACFrameLength(13)
+					// xx xxxxxxxx xxx
+					frameLen := (int(pes.Payload[3]&3) << 11) | (int(pes.Payload[4]) << 3) | (int(pes.Payload[5]) >> 5)
+					if frameLen > remainLen {
+						break
+					}
 
-				t.AudioTrack.WriteSlice(pes.Payload[7:frameLen])
-				pes.Payload = pes.Payload[frameLen:remainLen]
-				remainLen -= frameLen
-				t.AudioTrack.Flush()
+					t.AudioTrack.WriteSlice(pes.Payload[7:frameLen])
+					pes.Payload = pes.Payload[frameLen:remainLen]
+					remainLen -= frameLen
+					t.AudioTrack.Flush()
+				}
+			case *track.G711:
+				t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload)
 			}
+
 		}
 	case mpegts.STREAM_ID_VIDEO:
 		if t.VideoTrack != nil {

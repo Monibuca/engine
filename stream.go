@@ -482,7 +482,7 @@ func (s *Stream) run() {
 					if dts := io.Args.Get("dts"); dts != "" {
 						waits.data.Wait(strings.Split(dts, ",")...)
 					} else {
-						waits.data.Wait()
+						// waits.data.Wait()
 					}
 					io.Stream = s
 					io.StartTime = time.Now()

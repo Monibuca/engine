@@ -15,7 +15,7 @@ type TimelineData[T any] struct {
 type Base struct {
 	Name     string
 	Stream   IStream `json:"-"`
-	Attached byte // 0代表准备好后自动attach，1代表已经attach，2代表已经detach
+	Attached byte    // 0代表准备好后自动attach，1代表已经attach，2代表已经detach
 	ts       time.Time
 	bytes    int
 	frames   int
@@ -90,4 +90,5 @@ type AudioTrack interface {
 	PreFrame() *AVFrame[AudioSlice]
 	WriteSlice(AudioSlice)
 	WriteADTS([]byte)
+	WriteRaw(uint32, AudioSlice)
 }

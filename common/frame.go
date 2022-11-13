@@ -114,6 +114,7 @@ type DataFrame[T any] struct {
 type AVFrame[T RawSlice] struct {
 	BaseFrame
 	IFrame  bool
+	SEI     T
 	PTS     uint32
 	DTS     uint32
 	AVCC    net.Buffers `json:"-"` // 打包好的AVCC格式

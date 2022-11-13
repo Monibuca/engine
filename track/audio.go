@@ -85,6 +85,18 @@ func (a *Audio) WriteADTS(adts []byte) {
 	a.Attach()
 }
 
+func (av *Audio) WriteRaw(pts uint32, raw AudioSlice) {
+	curValue := &av.Value
+	curValue.BytesIn += len(raw)
+	if len(av.AVCCHead) == 2 {
+		raw = raw[7:] //AAC 去掉7个字节的ADTS头
+	}
+	av.WriteSlice(raw)
+	curValue.DTS = pts
+	curValue.PTS = pts
+	av.Flush()
+}
+
 func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 	curValue := &av.AVRing.RingBuffer.Value
 	curValue.BytesIn += len(frame)

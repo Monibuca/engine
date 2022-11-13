@@ -22,7 +22,6 @@ type Video struct {
 	idrCount    int  //缓存中包含的idr数量
 	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
 	dtsEst      *DTSEstimator
-	sei         NALUSlice
 }
 
 func (vt *Video) SnapForJson() {
@@ -71,6 +70,10 @@ func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) e
 			for _, nalu := range vt.DecoderConfiguration.Raw {
 				data = append(data, codec.NALU_Delimiter2, nalu)
 			}
+		}
+		if vp.SEI != nil {
+			data = append(data, codec.NALU_Delimiter2)
+			data = append(data, vp.SEI...)
 		}
 		data = append(data, codec.NALU_Delimiter2)
 		for i, nalu := range vp.Raw {

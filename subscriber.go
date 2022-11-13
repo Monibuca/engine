@@ -46,8 +46,11 @@ func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 func copyBuffers(b net.Buffers) (r net.Buffers) {
 	return append(r, b...)
 }
-
 func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
+	if v.SEI != nil {
+		r = append(r, codec.NALU_Delimiter2)
+		r = append(r, v.SEI...)
+	}
 	r = append(r, codec.NALU_Delimiter2)
 	for i, nalu := range v.Raw {
 		if i > 0 {
@@ -57,7 +60,6 @@ func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
 	}
 	return
 }
-
 func (v VideoDeConf) GetAnnexB() (r net.Buffers) {
 	for _, nalu := range v.Raw {
 		r = append(r, codec.NALU_Delimiter2, nalu)
