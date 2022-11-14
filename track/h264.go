@@ -161,19 +161,19 @@ func (vt *H264) Flush() {
 	}
 	// RTP格式补完
 	if vt.ComplementRTP() {
-		var out []net.Buffers
+		var out [][][]byte
 		if vt.Value.IFrame {
-			out = append(out, net.Buffers{vt.DecoderConfiguration.Raw[0]}, net.Buffers{vt.DecoderConfiguration.Raw[1]})
+			out = append(out, [][]byte{vt.DecoderConfiguration.Raw[0]}, [][]byte{vt.DecoderConfiguration.Raw[1]})
 		}
 		for _, nalu := range vt.Value.Raw {
 			buffers := util.SplitBuffers(nalu, 1200)
 			firstBuffer := NALUSlice(buffers[0])
 			if l := len(buffers); l == 1 {
-				out = append(out, net.Buffers(firstBuffer))
+				out = append(out, firstBuffer)
 			} else {
 				naluType := firstBuffer.H264Type()
 				firstByte := codec.NALU_FUA.Or(firstBuffer.RefIdc())
-				buf := net.Buffers{[]byte{firstByte, naluType.Or(1 << 7)}}
+				buf := [][]byte{{firstByte, naluType.Or(1 << 7)}}
 				for i, sp := range firstBuffer {
 					if i == 0 {
 						sp = sp[1:]
@@ -182,10 +182,7 @@ func (vt *H264) Flush() {
 				}
 				out = append(out, buf)
 				for _, bufs := range buffers[1:] {
-					buf = net.Buffers{[]byte{firstByte, naluType.Byte()}}
-					for _, sp := range bufs {
-						buf = append(buf, sp)
-					}
+					buf = append([][]byte{{firstByte, naluType.Byte()}}, bufs...)
 					out = append(out, buf)
 				}
 				buf[0][1] |= 1 << 6 // set end bit

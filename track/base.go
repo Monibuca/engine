@@ -2,7 +2,6 @@ package track
 
 import (
 	"context"
-	"net"
 	"time"
 	"unsafe"
 
@@ -135,7 +134,7 @@ func (av *Media[T]) ComplementRTP() bool {
 
 // https://www.cnblogs.com/moonwalk/p/15903760.html
 // Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
-func (av *Media[T]) PacketizeRTP(payloads ...net.Buffers) {
+func (av *Media[T]) PacketizeRTP(payloads ...[][]byte) {
 	packetCount := len(payloads)
 	if cap(av.Value.RTP) < packetCount {
 		av.Value.RTP = make([]*RTPFrame, packetCount)

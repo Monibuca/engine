@@ -91,7 +91,6 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (aac *AAC) Flush() {
 	// RTP格式补完
-	// TODO: MTU 分割
 	value := aac.Audio.Media.RingBuffer.Value
 	if aac.ComplementRTP() {
 		l := util.SizeOfBuffers(value.Raw)
@@ -101,7 +100,8 @@ func (aac *AAC) Flush() {
 		for i, raw := range value.Raw {
 			packet[i+1] = raw
 		}
-		aac.PacketizeRTP(packet)
+		packets := util.SplitBuffers(packet, 1200)
+		aac.PacketizeRTP(packets...)
 	}
 	aac.Audio.Flush()
 }

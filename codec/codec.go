@@ -2,8 +2,6 @@ package codec
 
 import (
 	"errors"
-
-	"m7s.live/engine/v4/util"
 )
 
 type AudioCodecID byte
@@ -70,7 +68,7 @@ type GASpecificConfig struct {
 
 // ISO/IEC 13838-7 20(25)/page
 //
-// Advanced Audio Coding
+// # Advanced Audio Coding
 //
 // AudioDataTransportStream
 type ADTS struct {
@@ -109,7 +107,6 @@ type ADTSFixedHeader struct {
 // 1: Low Complexity profile(LC)
 // 2: Scalable Sampling Rate profile(SSR)
 // 3: Reserved
-//
 var SamplingFrequencies = [...]int{96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350, 0, 0, 0}
 
 // Sampling Frequencies[]:
@@ -220,18 +217,19 @@ func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int) (adt
 
 	return
 }
-func ParseRTPAAC(payload []byte) (result [][]byte) {
-	auHeaderLen := util.ReadBE[int](payload[:2]) >> 3
-	var auLenArray []int
-	for iIndex := 2; iIndex <= auHeaderLen; iIndex += 2 {
-		auLen := util.ReadBE[int](payload[iIndex:iIndex+2]) >> 3
-		auLenArray = append(auLenArray, auLen)
-	}
-	startOffset := 2 + auHeaderLen
-	for _, auLen := range auLenArray {
-		endOffset := startOffset + auLen
-		result = append(result, payload[startOffset:endOffset])
-		startOffset = startOffset + auLen
-	}
-	return
-}
+
+// func ParseRTPAAC(payload []byte) (result [][]byte) {
+// 	auHeaderLen := util.ReadBE[int](payload[:2]) >> 3
+// 	var auLenArray []int
+// 	for iIndex := 2; iIndex <= auHeaderLen; iIndex += 2 {
+// 		auLen := util.ReadBE[int](payload[iIndex:iIndex+2]) >> 3
+// 		auLenArray = append(auLenArray, auLen)
+// 	}
+// 	startOffset := 2 + auHeaderLen
+// 	for _, auLen := range auLenArray {
+// 		endOffset := startOffset + auLen
+// 		result = append(result, payload[startOffset:endOffset])
+// 		startOffset = startOffset + auLen
+// 	}
+// 	return
+// }
