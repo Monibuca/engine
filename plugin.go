@@ -85,9 +85,9 @@ func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, 
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
 		opt.Debug("http handle added to engine:" + pattern)
-		apiList = append(apiList, pattern)
 		EngineConfig.HandleFunc(pattern, opt.logHandler(pattern, handler))
 	}
+	apiList = append(apiList, pattern)
 }
 
 // 读取独立配置合并入总配置中
@@ -229,7 +229,7 @@ func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber, t byte) (e
 	return
 }
 
-var NoPullConfigErr = errors.New("no pull config")
+var ErrNoPullConfig = errors.New("no pull config")
 var Pullers sync.Map
 
 func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
@@ -241,7 +241,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	}()
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
-		return NoPullConfigErr
+		return ErrNoPullConfig
 	}
 	pullConf := conf.GetPullConfig()
 
@@ -266,7 +266,9 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 					return
 				}
 				if err = opt.Publish(streamPath, puller); err != nil {
-					if Streams.Get(streamPath).Publisher != puller {
+					if puber := Streams.Get(streamPath).Publisher; puber != puller {
+						io := puber.GetIO()
+						opt.Warn("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
 						return
 					}
 				}
@@ -289,7 +291,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 	return
 }
 
-var NoPushConfigErr = errors.New("no push config")
+var ErrNoPushConfig = errors.New("no push config")
 var Pushers sync.Map
 
 func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
@@ -302,7 +304,7 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 	}()
 	conf, ok := opt.Config.(config.PushConfig)
 	if !ok {
-		return NoPushConfigErr
+		return ErrNoPushConfig
 	}
 	pushConfig := conf.GetPushConfig()
 

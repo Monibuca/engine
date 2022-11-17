@@ -60,6 +60,25 @@ func (i *IO[C]) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
 
+func (i *IO[C]) SetStuff(stuffs ...any) {
+	for _, stuff := range stuffs {
+		switch v := stuff.(type) {
+		case context.Context:
+			i.Context, i.CancelFunc = context.WithCancel(v)
+		default:
+			if v, ok := v.(io.Closer); ok {
+				i.Closer = v
+			}
+			if v, ok := v.(io.Reader); ok {
+				i.Reader = v
+			}
+			if v, ok := v.(io.Writer); ok {
+				i.Writer = v
+			}
+		}
+	}
+}
+
 func (i *IO[C]) OnEvent(event any) {
 	switch event.(type) {
 	case SEclose, SEKick:
@@ -91,15 +110,15 @@ type IIO interface {
 	GetStream() *Stream
 }
 
-//Stop 停止订阅或者发布，由订阅者或者发布者调用
+// Stop 停止订阅或者发布，由订阅者或者发布者调用
 func (io *IO[C]) Stop() {
 	if io.CancelFunc != nil {
 		io.CancelFunc()
 	}
 }
 
-var BadNameErr = errors.New("Bad Name")
-var StreamIsClosedErr = errors.New("Stream Is Closed")
+var ErrBadName = errors.New("Stream Already Exist")
+var ErrStreamIsClosed = errors.New("Stream Is Closed")
 
 // receive 用于接收发布或者订阅
 func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
@@ -122,7 +141,7 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 	s, create := findOrCreateStream(u.Path, wt)
 	Streams.Unlock()
 	if s == nil {
-		return BadNameErr
+		return ErrBadName
 	}
 	io.Config = conf
 	if io.Type == "" {
@@ -137,7 +156,7 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 				s.Warn("kick", zap.String("type", oldPublisher.GetIO().Type))
 				oldPublisher.OnEvent(SEKick{})
 			} else {
-				return BadNameErr
+				return ErrBadName
 			}
 		}
 		s.PublishTimeout = util.Second2Duration(v.PublishTimeout)
@@ -169,7 +188,7 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 			return promise.Catch()
 		}
 	}
-	return StreamIsClosedErr
+	return ErrStreamIsClosed
 }
 
 // ClientIO 作为Client角色(Puller，Pusher)的公共结构体

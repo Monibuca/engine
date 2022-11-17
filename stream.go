@@ -265,7 +265,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		case STATE_PUBLISHING:
 			stateEvent = SEpublish{event}
 			r.broadcast(stateEvent)
-			r.timeout.Reset(time.Second * 10) // 5秒心跳，检测track的存活度
+			r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
 			r.timeout.Reset(r.DelayCloseTimeout)
@@ -456,11 +456,11 @@ func (s *Stream) run() {
 						if s.Publisher == v.Value {
 							s.Publisher = nil
 						}
-						v.Reject(BadNameErr)
+						v.Reject(ErrBadName)
 					}
 				case *util.Promise[ISubscriber, struct{}]:
 					if s.IsClosed() {
-						v.Reject(StreamIsClosedErr)
+						v.Reject(ErrStreamIsClosed)
 					}
 					suber := v.Value
 					io := suber.GetIO()
@@ -512,6 +512,18 @@ func (s *Stream) run() {
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)
 					}
+				case TrackRemoved:
+					name := v.GetBase().Name
+					if t, ok := s.Tracks.Delete(name); ok {
+						s.Info("track -1", zap.String("name", name))
+						s.broadcast(v)
+						if s.Tracks.Len() == 0 {
+							s.action(ACTION_PUBLISHLOST)
+						}
+						if dt, ok := t.(*track.Data); ok {
+							dt.Dispose()
+						}
+					}
 				case Track:
 					name := v.GetBase().Name
 					if s.Tracks.Add(name, v) {
@@ -526,18 +538,6 @@ func (s *Stream) run() {
 							}
 						}
 					}
-				case TrackRemoved:
-					name := v.GetBase().Name
-					if t, ok := s.Tracks.Delete(name); ok {
-						s.Info("track -1", zap.String("name", name))
-						s.broadcast(v)
-						if s.Tracks.Len() == 0 {
-							s.action(ACTION_PUBLISHLOST)
-						}
-						if dt, ok := t.(*track.Data); ok {
-							dt.Dispose()
-						}
-					}
 				case StreamAction:
 					s.action(v)
 				default:
@@ -545,7 +545,7 @@ func (s *Stream) run() {
 				}
 			} else {
 				for sub, w := range waitP {
-					w.Reject(StreamIsClosedErr)
+					w.Reject(ErrStreamIsClosed)
 					delete(waitP, sub)
 				}
 				s.Tracks.Range(func(_ string, t Track) {
