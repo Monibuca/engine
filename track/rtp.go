@@ -2,24 +2,32 @@ package track
 
 import (
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
 
 func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
+	if av.DecoderConfiguration.PayloadType != p.PayloadType {
+		av.Stream.Warn("RTP PayloadType error", zap.Uint8("want", av.DecoderConfiguration.PayloadType), zap.Uint8("got", p.PayloadType))
+		return
+	}
 	frame = &RTPFrame{
 		Packet: *p,
 	}
 	av.Value.BytesIn += len(p.Payload) + 12
 	return av.recorderRTP(frame)
 }
+
 func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
-	av.Value.BytesIn += len(raw)
-	if frame = new(RTPFrame); frame.Unmarshal(raw) == nil {
+	var p rtp.Packet
+	err := p.Unmarshal(raw)
+	if err != nil {
+		av.Stream.Warn("RTP Unmarshal error", zap.Error(err))
 		return
 	}
-	return av.recorderRTP(frame)
+	return av.UnmarshalRTPPacket(&p)
 }
 
 type RTPDemuxer struct {

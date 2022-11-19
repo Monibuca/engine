@@ -13,6 +13,7 @@ import (
 type 流速控制 struct {
 	起始时间戳 uint32
 	起始时间  time.Time
+	等待上限  time.Duration
 }
 
 func (p *流速控制) 重置(绝对时间戳 uint32) {
@@ -32,8 +33,8 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// }
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
 	if 过快毫秒 := (数据时间差 - 实际时间差) / time.Millisecond; 过快毫秒 > 300 {
-		if 过快毫秒 > time.Duration(config.Global.SpeedLimit) {
-			time.Sleep(time.Millisecond * time.Duration(config.Global.SpeedLimit))
+		if 过快毫秒 > p.等待上限 {
+			time.Sleep(time.Millisecond * p.等待上限)
 		} else {
 			time.Sleep(过快毫秒 * time.Millisecond)
 		}
@@ -53,9 +54,14 @@ type Media[T RawSlice] struct {
 	流速控制
 }
 
+func (av *Media[T]) SetSpeedLimit(value int) {
+	av.等待上限 = time.Duration(value)
+}
+
 func (av *Media[T]) Init(n int) {
 	av.AVRing.Init(n)
 	av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
+	av.等待上限 = time.Duration(config.Global.SpeedLimit)
 }
 
 func (av *Media[T]) LastWriteTime() time.Time {
@@ -117,7 +123,7 @@ func (av *Media[T]) Flush() {
 		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
 	}
 	av.Base.Flush(&curValue.BaseFrame)
-	if config.Global.SpeedLimit > 0 {
+	if av.等待上限 > 0 {
 		av.控制流速(curValue.AbsTime)
 	}
 	av.Step()

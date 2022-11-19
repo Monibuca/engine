@@ -73,6 +73,7 @@ type AVTrack interface {
 	WriteRTP([]byte)
 	WriteRTPPack(*rtp.Packet)
 	Flush()
+	SetSpeedLimit(int)
 }
 type VideoTrack interface {
 	AVTrack

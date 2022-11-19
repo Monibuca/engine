@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
@@ -191,5 +192,44 @@ func (conf *GlobalConfig) API_stopPush(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	} else {
 		http.Error(w, "no such pusher", http.StatusNotFound)
+	}
+}
+
+func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	if streamPath == "" {
+		streamPath = "dump/rtsp"
+	}
+	dumpFile := q.Get("dump")
+	if dumpFile == "" {
+		dumpFile = streamPath + ".rtpdump"
+	}
+	cv := q.Get("vcodec")
+	ca := q.Get("acodec")
+	var pub RTPDumpPublisher
+	switch cv {
+	case "h264":
+		pub.VCodec = codec.CodecID_H264
+	case "h265":
+		pub.VCodec = codec.CodecID_H265
+	default:
+		pub.VCodec = codec.CodecID_H264
+	}
+	switch ca {
+	case "aac":
+		pub.ACodec = codec.CodecID_AAC
+	case "pcma":
+		pub.ACodec = codec.CodecID_PCMA
+	case "pcmu":
+		pub.ACodec = codec.CodecID_PCMU
+	default:
+		pub.ACodec = codec.CodecID_AAC
+	}
+	pub.DumpFile = dumpFile
+	if err := Engine.Publish(streamPath, &pub); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		w.Write([]byte("ok"))
 	}
 }
