@@ -22,6 +22,7 @@ type Video struct {
 	idrCount    int  //缓存中包含的idr数量
 	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
 	dtsEst      *DTSEstimator
+	lostFlag    bool // 是否丢帧
 }
 
 func (vt *Video) SnapForJson() {
@@ -156,13 +157,27 @@ func (av *Video) generateTimestamp(ts uint32) {
 	av.AVRing.RingBuffer.Value.DTS = av.dtsEst.Feed(ts)
 }
 
+func (vt *Video) SetLostFlag() {
+	vt.lostFlag = true
+}
+
 func (vt *Video) Flush() {
-	rv := &vt.AVRing.RingBuffer.Value
+	rv := &vt.Value
 	// 没有实际媒体数据
 	if len(rv.Raw) == 0 {
 		rv.Reset()
 		return
 	}
+
+	if vt.lostFlag {
+		if rv.IFrame {
+			vt.lostFlag = false
+		} else {
+			rv.Reset()
+			return
+		}
+	}
+
 	// AVCC格式补完
 	if vt.ComplementAVCC() {
 		var b util.Buffer

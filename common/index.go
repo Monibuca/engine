@@ -82,6 +82,7 @@ type VideoTrack interface {
 	PreFrame() *AVFrame[NALUSlice]
 	WriteSlice(NALUSlice)
 	WriteAnnexB(uint32, uint32, AnnexBFrame)
+	SetLostFlag()
 }
 
 type AudioTrack interface {

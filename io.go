@@ -59,7 +59,7 @@ func (i *IO[C]) SetIO(conn any) {
 func (i *IO[C]) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
-
+// SetStuff（可选） 设置Writer、Reader、Closer、Context和本IO关联
 func (i *IO[C]) SetStuff(stuffs ...any) {
 	for _, stuff := range stuffs {
 		switch v := stuff.(type) {
