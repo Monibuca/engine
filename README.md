@@ -24,6 +24,7 @@
 - 热更新配置信息 `/api/updateconfig?name=xxx` 热更新xxx插件的配置信息，如果不带参数或参数为空则热更新全局配置
 - 获取所有远端拉流信息 `/api/list/pull` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
 - 获取所有向远端推流信息 `/api/list/push` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
+- 停止推流 `/api/stoppush?url=xxx` 停止向xxx推流 ，成功返回ok
 # 引擎默认配置
 ```yaml
 global:
@@ -69,7 +70,7 @@ global:
   # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enablertp : true
   # rtp乱序重排缓存长度
-  rtpreroderbufferlen: 50 
+  rtpreoderbufferlen: 50 
   # 限速超时时间（毫秒）0为不限速，对于读取文件这类流需要限速，否则读取过快
   speedlimit: 0
   console: 

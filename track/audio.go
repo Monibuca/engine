@@ -79,7 +79,6 @@ func (a *Audio) WriteADTS(adts []byte) {
 		97,
 		net.Buffers{avcc},
 		avcc[2:],
-		net.Buffers{adcflv1, avcc, adcflv2},
 		0,
 	}
 	a.Attach()

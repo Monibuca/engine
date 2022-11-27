@@ -205,6 +205,5 @@ type DecoderConfiguration[T RawSlice] struct {
 	PayloadType byte
 	AVCC        net.Buffers
 	Raw         T
-	FLV         net.Buffers
 	Seq         int //收到第几个序列帧，用于变码率时让订阅者发送序列帧
 }

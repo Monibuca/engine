@@ -441,7 +441,13 @@ func (s *Stream) run() {
 			if ok {
 				switch v := action.(type) {
 				case *util.Promise[IPublisher, struct{}]:
-					s.Publisher = v.Value
+					if s.IsClosed() {
+						v.Reject(ErrStreamIsClosed)
+					}
+					republish := s.Publisher == v.Value // 重复发布
+					if !republish {
+						s.Publisher = v.Value
+					}
 					if s.action(ACTION_PUBLISH) {
 						io := v.Value.GetIO()
 						io.Spesic = v.Value
@@ -452,10 +458,9 @@ func (s *Stream) run() {
 							io.Logger = io.Logger.With(zap.String("ID", io.ID))
 						}
 						v.Resolve(util.Null)
+					} else if republish {
+						v.Resolve(util.Null)
 					} else {
-						if s.Publisher == v.Value {
-							s.Publisher = nil
-						}
 						v.Reject(ErrBadName)
 					}
 				case *util.Promise[ISubscriber, struct{}]:

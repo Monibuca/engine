@@ -63,7 +63,6 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 		util.PutBE(tmp[1:3], lenSPS)
 		util.PutBE(tmp[4:6], lenPPS)
 		vt.Video.DecoderConfiguration.AVCC = append(vt.Video.DecoderConfiguration.AVCC, tmp[:3], vt.Video.DecoderConfiguration.Raw[0], tmp[3:], vt.Video.DecoderConfiguration.Raw[1])
-		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(vt.Video.DecoderConfiguration.AVCC, 0)
 		vt.Video.DecoderConfiguration.Seq++
 	case codec.NALU_IDR_Picture:
 		vt.Value.IFrame = true
@@ -91,7 +90,6 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.Video.DecoderConfiguration.Raw[0] = info.SequenceParameterSetNALUnit
 			vt.Video.DecoderConfiguration.Raw[1] = info.PictureParameterSetNALUnit
 		}
-		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.Video.DecoderConfiguration.AVCC), 0)
 	} else {
 		vt.Video.WriteAVCC(ts, frame)
 		vt.Video.Media.RingBuffer.Value.IFrame = frame.IsIDR()

@@ -109,6 +109,17 @@ func ReadFLVTag(r io.Reader) (t byte, timestamp uint32, payload []byte, err erro
 	return
 }
 
+func AudioAVCC2FLV(avcc net.Buffers, ts uint32) (flv net.Buffers) {
+	b := util.Buffer(make([]byte, 0, 15))
+	b.WriteByte(FLV_TAG_TYPE_AUDIO)
+	dataSize := util.SizeOfBuffers(avcc)
+	b.WriteUint24(uint32(dataSize))
+	b.WriteUint24(ts)
+	b.WriteByte(byte(ts >> 24))
+	b.WriteUint24(0)
+	return append(append(append(flv, b), avcc...), util.PutBE(b.Malloc(4), dataSize+11))
+}
+
 func VideoAVCC2FLV(avcc net.Buffers, ts uint32) (flv net.Buffers) {
 	b := util.Buffer(make([]byte, 0, 15))
 	b.WriteByte(FLV_TAG_TYPE_VIDEO)

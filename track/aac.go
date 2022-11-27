@@ -72,15 +72,12 @@ func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
 			aac.Audio.Stream.Error("AVCC sequence header too short", zap.ByteString("data", frame))
 			return
 		}
-		var adcflv1 = []byte{codec.FLV_TAG_TYPE_AUDIO, 0, 0, byte(len(frame)), 0, 0, 0, 0, 0, 0, 0}
-		var adcflv2 = []byte{0, 0, 0, adcflv1[3] + 11}
 		aac.Audio.DecoderConfiguration.AVCC = net.Buffers{frame}
 		config1, config2 := frame[2], frame[3]
 		aac.Profile = (config1 & 0xF8) >> 3
 		aac.Channels = ((config2 >> 3) & 0x0F) //声道
 		aac.Audio.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
 		aac.Audio.DecoderConfiguration.Raw = AudioSlice(frame[2:])
-		aac.Audio.DecoderConfiguration.FLV = net.Buffers{adcflv1, frame, adcflv2}
 		aac.Attach()
 	} else {
 		aac.WriteSlice(AudioSlice(frame[2:]))

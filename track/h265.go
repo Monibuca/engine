@@ -35,6 +35,7 @@ func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 		vt.Video.Media.RingBuffer.Value.PTS = pts
 		vt.Video.Media.RingBuffer.Value.DTS = dts
 	}
+	// println(pts,dts,len(frame))
 	for _, slice := range vt.Video.WriteAnnexB(frame) {
 		vt.WriteSlice(slice)
 	}
@@ -43,6 +44,7 @@ func (vt *H265) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	}
 }
 func (vt *H265) WriteSlice(slice NALUSlice) {
+	// println(slice.H265Type())
 	switch slice.H265Type() {
 	case codec.NAL_UNIT_VPS:
 		vt.Video.DecoderConfiguration.Raw[0] = slice[0]
@@ -56,7 +58,6 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 		if err == nil {
 			vt.Video.DecoderConfiguration.AVCC = net.Buffers{extraData}
 		}
-		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(vt.Video.DecoderConfiguration.AVCC, 0)
 		vt.Video.DecoderConfiguration.Seq++
 	case
 		codec.NAL_UNIT_CODED_SLICE_BLA,
@@ -88,7 +89,6 @@ func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.Video.DecoderConfiguration.Raw[1] = sps
 			vt.Video.DecoderConfiguration.Raw[2] = pps
 		}
-		vt.Video.DecoderConfiguration.FLV = codec.VideoAVCC2FLV(net.Buffers(vt.Video.DecoderConfiguration.AVCC), 0)
 	} else {
 		vt.Video.WriteAVCC(ts, frame)
 		vt.Video.Media.RingBuffer.Value.IFrame = frame.IsIDR()

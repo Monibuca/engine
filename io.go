@@ -59,6 +59,7 @@ func (i *IO[C]) SetIO(conn any) {
 func (i *IO[C]) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
+
 // SetStuff（可选） 设置Writer、Reader、Closer、Context和本IO关联
 func (i *IO[C]) SetStuff(stuffs ...any) {
 	for _, stuff := range stuffs {
@@ -155,6 +156,8 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 			if v.KickExist {
 				s.Warn("kick", zap.String("type", oldPublisher.GetIO().Type))
 				oldPublisher.OnEvent(SEKick{})
+			} else if oldPublisher == specific {
+				//断线重连
 			} else {
 				return ErrBadName
 			}
