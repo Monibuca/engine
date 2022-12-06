@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
 
@@ -129,6 +130,7 @@ func (vt *H264) writeRTPFrame(frame *RTPFrame) {
 			}
 		}
 	}
+	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延
 	rv.AppendRTP(frame)
 	if frame.Marker {
 		vt.generateTimestamp(frame.Timestamp)
@@ -158,36 +160,42 @@ func (vt *H264) Flush() {
 		defer vt.Attach()
 	}
 	// RTP格式补完
-	if vt.ComplementRTP() {
-		var out [][][]byte
-		if vt.Value.IFrame {
-			out = append(out, [][]byte{vt.DecoderConfiguration.Raw[0]}, [][]byte{vt.DecoderConfiguration.Raw[1]})
-		}
-		for _, nalu := range vt.Value.Raw {
-			buffers := util.SplitBuffers(nalu, 1200)
-			firstBuffer := NALUSlice(buffers[0])
-			if l := len(buffers); l == 1 {
-				out = append(out, firstBuffer)
-			} else {
-				naluType := firstBuffer.H264Type()
-				firstByte := codec.NALU_FUA.Or(firstBuffer.RefIdc())
-				buf := [][]byte{{firstByte, naluType.Or(1 << 7)}}
-				for i, sp := range firstBuffer {
-					if i == 0 {
-						sp = sp[1:]
-					}
-					buf = append(buf, sp)
-				}
-				out = append(out, buf)
-				for _, bufs := range buffers[1:] {
-					buf = append([][]byte{{firstByte, naluType.Byte()}}, bufs...)
-					out = append(out, buf)
-				}
-				buf[0][1] |= 1 << 6 // set end bit
+	if config.Global.EnableRTP {
+		if len(vt.Value.RTP) > 0 {
+			if !vt.dcChanged && vt.Value.IFrame {
+				vt.insertDCRtp()
 			}
-		}
+		} else {
+			var out [][][]byte
+			if vt.Value.IFrame {
+				out = append(out, [][]byte{vt.DecoderConfiguration.Raw[0]}, [][]byte{vt.DecoderConfiguration.Raw[1]})
+			}
+			for _, nalu := range vt.Value.Raw {
+				buffers := util.SplitBuffers(nalu, 1200)
+				firstBuffer := NALUSlice(buffers[0])
+				if l := len(buffers); l == 1 {
+					out = append(out, firstBuffer)
+				} else {
+					naluType := firstBuffer.H264Type()
+					firstByte := codec.NALU_FUA.Or(firstBuffer.RefIdc())
+					buf := [][]byte{{firstByte, naluType.Or(1 << 7)}}
+					for i, sp := range firstBuffer {
+						if i == 0 {
+							sp = sp[1:]
+						}
+						buf = append(buf, sp)
+					}
+					out = append(out, buf)
+					for _, bufs := range buffers[1:] {
+						buf = append([][]byte{{firstByte, naluType.Byte()}}, bufs...)
+						out = append(out, buf)
+					}
+					buf[0][1] |= 1 << 6 // set end bit
+				}
+			}
 
-		vt.PacketizeRTP(out...)
+			vt.PacketizeRTP(out...)
+		}
 	}
 	vt.Video.Flush()
 }

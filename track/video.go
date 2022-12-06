@@ -152,6 +152,37 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	}
 }
 
+// 在I帧前面插入sps pps webrtc需要
+func (av *Video) insertDCRtp() {
+	seq := av.Value.RTP[0].SequenceNumber
+	l1, l2 := len(av.DecoderConfiguration.Raw), len(av.Value.RTP)
+	afterLen := l1 + l2
+	if cap(av.Value.RTP) < afterLen {
+		rtps := make([]*RTPFrame, l1, afterLen)
+		av.Value.RTP = append(rtps, av.Value.RTP...)
+	} else {
+		av.Value.RTP = av.Value.RTP[:afterLen]
+		copy(av.Value.RTP[l1:], av.Value.RTP[:l2])
+	}
+	for i, nalu := range av.DecoderConfiguration.Raw {
+		packet := &RTPFrame{}
+		packet.Version = 2
+		packet.PayloadType = av.DecoderConfiguration.PayloadType
+		packet.Payload = nalu
+		packet.SSRC = av.SSRC
+		packet.SequenceNumber = seq
+		packet.Timestamp = av.Value.PTS
+		packet.Marker = false
+		seq++
+		av.rtpSequence++
+		av.Value.RTP[i] = packet
+	}
+	for i := l1; i < afterLen; i++ {
+		av.Value.RTP[i].SequenceNumber = seq
+		seq++
+	}
+}
+
 func (av *Video) generateTimestamp(ts uint32) {
 	av.AVRing.RingBuffer.Value.PTS = ts
 	av.AVRing.RingBuffer.Value.DTS = av.dtsEst.Feed(ts)
@@ -216,6 +247,7 @@ func (vt *Video) Flush() {
 		}
 	}
 	vt.Media.Flush()
+	vt.dcChanged = false
 }
 
 func (vt *Video) ReadRing() *AVRing[NALUSlice] {
