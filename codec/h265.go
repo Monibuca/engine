@@ -136,7 +136,7 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 	}
 	index++
 
-	if payload[index] != byte(NAL_UNIT_VPS)&0x3f {
+	if payload[index]&0x7f != byte(NAL_UNIT_VPS) {
 		return nil, nil, nil, ErrHevc
 	}
 	if numNalus := util.ReadBE[int](payload[index+1 : index+3]); numNalus != 1 {
@@ -154,7 +154,7 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 	if len(payload) < 38+vpsLen {
 		return nil, nil, nil, ErrHevc
 	}
-	if payload[index] != byte(NAL_UNIT_SPS)&0x3f {
+	if payload[index]&0x7f != byte(NAL_UNIT_SPS) {
 		return nil, nil, nil, ErrHevc
 	}
 	if numNalus := util.ReadBE[int](payload[index+1 : index+3]); numNalus != 1 {
@@ -170,7 +170,7 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 	if len(payload) < 43+vpsLen+spsLen {
 		return nil, nil, nil, ErrHevc
 	}
-	if payload[index] != byte(NAL_UNIT_PPS)&0x3f {
+	if payload[index]&0x7f != byte(NAL_UNIT_PPS) {
 		return nil, nil, nil, ErrHevc
 	}
 	if numNalus := util.ReadBE[int](payload[index+1 : index+3]); numNalus != 1 {
