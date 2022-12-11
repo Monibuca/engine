@@ -394,7 +394,7 @@ func (w *waitTracks) Accept(t Track) bool {
 
 // 流状态处理中枢，包括接收订阅发布指令等
 func (s *Stream) run() {
-	waitP := make(map[ISubscriber]waitTracks)
+	waitP := make(map[ISubscriber]*waitTracks)
 	for {
 		select {
 		case <-s.timeout.C:
@@ -510,7 +510,7 @@ func (s *Stream) run() {
 						})
 					}
 					if waits.NeedWait() {
-						waitP[suber] = waits
+						waitP[suber] = &waits
 					} else {
 						v.Resolve(util.Null)
 					}
