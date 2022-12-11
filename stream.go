@@ -414,7 +414,7 @@ func (s *Stream) run() {
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
-						if l == 0 && s.DelayCloseTimeout > 0 {
+						if s.DelayCloseTimeout > 0 && len(s.Subscribers) == 0 {
 							s.action(ACTION_LASTLEAVE)
 						}
 					}
