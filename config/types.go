@@ -98,14 +98,36 @@ type Engine struct {
 	Publish
 	Subscribe
 	HTTP
-	RTPReorder bool
-	EnableAVCC bool //启用AVCC格式，rtmp协议使用
-	EnableRTP  bool //启用RTP格式，rtsp、gb18181等协议使用
+	RTPReorder     bool
+	EnableAVCC     bool //启用AVCC格式，rtmp协议使用
+	EnableRTP      bool //启用RTP格式，rtsp、gb18181等协议使用
+	EnableSubEvent bool //启用订阅事件,禁用可以提高性能
+	EnableAuth     bool //启用鉴权
 	Console
 	LogLevel            string
 	RTPReorderBufferLen int //RTP重排序缓冲长度
 	SpeedLimit          int //速度限制最大等待时间
+	EventBusSize        int //事件总线大小
 }
+
+var Global = &Engine{
+	Publish:        Publish{true, true, false, 10, 0, 0},
+	Subscribe:      Subscribe{true, true, nil, nil, true, false, 10},
+	HTTP:           HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
+	RTPReorder:     true,
+	EnableAVCC:     true,
+	EnableRTP:      true,
+	EnableSubEvent: true,
+	EnableAuth:     true,
+	Console: Console{
+		"console.monibuca.com:4242", "", "", "",
+	},
+	LogLevel:            "info",
+	RTPReorderBufferLen: 50,
+	SpeedLimit:          0,
+	EventBusSize:        10,
+}
+
 type myResponseWriter struct {
 }
 
@@ -191,13 +213,4 @@ func (cfg *Engine) OnEvent(event any) {
 			go cfg.Remote(v)
 		}
 	}
-}
-
-var Global = &Engine{
-	Publish{true, true, false, 10, 0, 0},
-	Subscribe{true, true, nil, nil, true, false, 10},
-	HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	false, true, true, Console{
-		"console.monibuca.com:4242", "", "", "",
-	}, "info", 50, 0,
 }

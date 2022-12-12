@@ -30,58 +30,38 @@
 global:
   loglevel: info # 日志级别，可选值：debug,info,warn,error,panic,fatal
   http:
-    # 网关地址，用于访问API
-    listenaddr: :8080
-    # 用于HTTPS方式访问API的端口配置
-    listenaddrtls: ""
+    listenaddr: :8080 # 网关地址，用于访问API
+    listenaddrtls: ""  # 用于HTTPS方式访问API的端口配置
     certfile: ""
     keyfile: ""
-    # 是否自动添加cors头
-    cors: true
-    # 用户名和密码，用于API访问时的基本身份认证
-    username: ""
+    cors: true  # 是否自动添加cors头
+    username: ""  # 用户名和密码，用于API访问时的基本身份认证
     password: ""
   publish:
-      # 是否发布音频流
-      pubaudio: true
-      # 是否发布视频流
-      pubvideo: true
-      # 剔出已经存在的发布者，用于顶替原有发布者
-      kickexist: false
-      # 发布流默认过期时间单位秒，超过该时间发布者没有恢复流将被删除
-      publishtimeout: 10
-      # 自动关闭触发后延迟的秒数(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
-      delayclosetimeout: 0
-      # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
-      waitclosetimeout: 0
+      pubaudio: true # 是否发布音频流
+      pubvideo: true # 是否发布视频流
+      kickexist: false # 剔出已经存在的发布者，用于顶替原有发布者
+      publishtimeout: 10 # 发布流默认过期时间单位秒，超过该时间发布者没有恢复流将被删除
+      delayclosetimeout: 0 # 自动关闭触发后延迟的秒数(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
+      waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
   subscribe:
-      # 是否订阅音频流
-      subaudio: true
-      # 是否订阅视频流
-      subvideo: true
-      # 只订阅关键帧
-      iframeonly: false
-      # 等待发布者的秒数，用于订阅尚未发布的流
-      waittimeout: 10
-  # 启用RTP包乱序重排
-  rtpreorder : false
-  # 启用AVCC格式缓存，用于rtmp协议
-  enableavcc : true
-  # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
-  enablertp : true
-  # rtp乱序重排缓存长度
-  rtpreoderbufferlen: 50 
-  # 限速超时时间（毫秒）0为不限速，对于读取文件这类流需要限速，否则读取过快
-  speedlimit: 0
+      subaudio: true # 是否订阅音频流
+      subvideo: true # 是否订阅视频流
+      iframeonly: false # 只订阅关键帧
+      waittimeout: 10 # 等待发布者的秒数，用于订阅尚未发布的流
+  rtpreorder : true # 启用RTP包乱序重排
+  enableavcc : true  # 启用AVCC格式缓存，用于rtmp协议
+  enablertp : true # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
+  enableauth: true # 启用鉴权,详细查看鉴权机制
+  enablesubevent: true # 启用订阅事件，用于订阅者上下线事件,关闭可以提高性能
+  rtpreoderbufferlen: 50 # rtp乱序重排缓存长度
+  speedlimit: 0 # 限速超时时间（毫秒）0为不限速，对于读取文件这类流需要限速，否则读取过快
+  eventbussize: 10 # 事件总线缓存大小，事件较多时容易堵阻塞线程，需要增大缓存
   console: 
-    # 连接远程控制台的地址
-    server : console.monibuca.com:4242
-    # 远程控制台的秘钥
-    secret: ""
-    # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
-    publicaddr: ""
-    # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址（https）
-    publicaddrtls: ""
+    server : console.monibuca.com:4242 # 连接远程控制台的地址
+    secret: "" # 远程控制台的秘钥
+    publicaddr: "" # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
+    publicaddrtls: "" # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址（https）
 ```
 
 # 配置覆盖机制
@@ -108,3 +88,28 @@ stateDiagram-v2
     🟡等待关闭 --> 🔴已关闭  :超时
     🟡等待关闭 --> 🔴已关闭  :发布者断开
 ```
+
+# 鉴权机制
+
+## 单独鉴权
+引擎中定义如下两个接口，插件中的发布者或者订阅者可以实现这两个接口，引擎会在发布或者订阅时调用这两个接口进行鉴权
+```go
+type AuthSub interface {
+	OnAuth(*util.Promise[ISubscriber]) error
+}
+
+type AuthPub interface {
+	OnAuth(*util.Promise[IPublisher]) error
+}
+```
+- OnAuth返回错误即鉴权失败
+- Promise方便异步鉴权，可以后续调用其Resolve或Reject方法进行鉴权结果的返回
+
+## 全局鉴权
+引擎中定义如下两个全局函数的变量，插件中可以对这两个变量进行赋值，引擎会在发布或者订阅时调用这两个接口进行鉴权
+```go
+var OnAuthSub func(p *util.Promise[ISubscriber]) error
+var OnAuthPub func(p *util.Promise[IPublisher]) error
+```
+** 注意：如果单独鉴权和全局鉴权同时存在，优先使用单独鉴权 **
+** 全局鉴权函数可以被多次覆盖，所以需要自己实现鉴权逻辑的合并 **

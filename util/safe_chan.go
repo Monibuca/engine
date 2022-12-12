@@ -46,38 +46,33 @@ func (sc *SafeChan[T]) IsFull() bool {
 	return atomic.LoadInt32(&sc.senders) > 0
 }
 
-type Promise[S any, R any] struct {
+type Promise[S any] struct {
 	Value S
 	err   error
-	c     chan R
+	c     chan struct{}
 	state int32 // 0 pendding  1 fullfilled -1 rejected
 }
 
-func (r *Promise[S, R]) Resolve(result R) {
+func (r *Promise[S]) Resolve() {
 	if atomic.CompareAndSwapInt32(&r.state, 0, 1) {
-		r.c <- result
+		r.c <- struct{}{}
 	}
 }
-func (r *Promise[S, R]) Reject(err error) {
+func (r *Promise[S]) Reject(err error) {
 	if atomic.CompareAndSwapInt32(&r.state, 0, -1) {
 		r.err = err
 		close(r.c)
 	}
 }
-func (p *Promise[S, R]) AWait() (R, error) {
-	return <-p.c, p.err
+func (p *Promise[S]) Await() error {
+	<-p.c
+	return p.err
 }
-func (p *Promise[S, R]) Then() (r R) {
-	r, _ = p.AWait()
-	return
-}
-func (p *Promise[S, R]) Catch() (err error) {
-	_, err = p.AWait()
-	return
-}
-func NewPromise[S any, R any](value S) *Promise[S, R] {
-	return &Promise[S, R]{
+
+func NewPromise[S any](value S) *Promise[S] {
+	return &Promise[S]{
 		Value: value,
-		c:     make(chan R, 1),
+		c:     make(chan struct{}, 1),
 	}
 }
+

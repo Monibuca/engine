@@ -12,6 +12,7 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/track"
 	"m7s.live/engine/v4/util"
@@ -46,6 +47,9 @@ type SEclose struct {
 }
 
 type SEKick struct {
+}
+type UnsubscribeEvent struct {
+	Subscriber ISubscriber
 }
 
 // 四状态机
@@ -356,7 +360,7 @@ func (w *waitTrackNames) Accept(name string) bool {
 }
 
 type waitTracks struct {
-	*util.Promise[ISubscriber, struct{}] // 等待中的Promise
+	*util.Promise[ISubscriber] // 等待中的Promise
 	audio                                waitTrackNames
 	video                                waitTrackNames
 	data                                 waitTrackNames
@@ -387,7 +391,7 @@ func (w *waitTracks) Accept(t Track) bool {
 	if w.NeedWait() {
 		return false
 	} else {
-		w.Resolve(util.Null)
+		w.Resolve()
 		return true
 	}
 }
@@ -411,6 +415,9 @@ func (s *Stream) run() {
 					if sub := s.Subscribers[l]; sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:l], s.Subscribers[l+1:]...)
 						s.Info("suber -1", zap.String("id", sub.GetIO().ID), zap.String("type", sub.GetIO().Type), zap.Int("remains", len(s.Subscribers)))
+						if config.Global.EnableSubEvent {
+							EventBus <- UnsubscribeEvent{sub}
+						}
 						if s.Publisher != nil {
 							s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 						}
@@ -429,7 +436,7 @@ func (s *Stream) run() {
 					s.timeout.Reset(time.Second * 5)
 					//订阅者等待音视频轨道超时了，放弃等待，订阅成功
 					for suber, p := range waitP {
-						p.Resolve(util.Null)
+						p.Resolve()
 						delete(waitP, suber)
 					}
 				}
@@ -440,7 +447,7 @@ func (s *Stream) run() {
 		case action, ok := <-s.actionChan.C:
 			if ok {
 				switch v := action.(type) {
-				case *util.Promise[IPublisher, struct{}]:
+				case *util.Promise[IPublisher]:
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
@@ -457,13 +464,13 @@ func (s *Stream) run() {
 						if io.ID != "" {
 							io.Logger = io.Logger.With(zap.String("ID", io.ID))
 						}
-						v.Resolve(util.Null)
+						v.Resolve()
 					} else if republish {
-						v.Resolve(util.Null)
+						v.Resolve()
 					} else {
 						v.Reject(ErrBadName)
 					}
-				case *util.Promise[ISubscriber, struct{}]:
+				case *util.Promise[ISubscriber]:
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
@@ -496,6 +503,9 @@ func (s *Stream) run() {
 						io.Logger = io.Logger.With(zap.String("ID", io.ID))
 					}
 					s.Info("suber +1", zap.String("id", io.ID), zap.String("type", io.Type), zap.Int("remains", len(s.Subscribers)))
+					if config.Global.EnableSubEvent {
+						EventBus <- suber // 全局广播订阅事件
+					}
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						pubConfig := s.Publisher.GetConfig()
@@ -512,7 +522,7 @@ func (s *Stream) run() {
 					if waits.NeedWait() {
 						waitP[suber] = &waits
 					} else {
-						v.Resolve(util.Null)
+						v.Resolve()
 					}
 					if len(s.Subscribers) == 1 {
 						s.action(ACTION_FIRSTENTER)

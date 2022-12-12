@@ -21,6 +21,14 @@ type ClientConfig interface {
 	config.Pull | config.Push
 }
 
+type AuthSub interface {
+	OnAuth(*util.Promise[ISubscriber]) error
+}
+
+type AuthPub interface {
+	OnAuth(*util.Promise[IPublisher]) error
+}
+
 // 发布者或者订阅者的共用结构体
 type IO[C IOConfig] struct {
 	ID                 string
@@ -120,6 +128,8 @@ func (io *IO[C]) Stop() {
 
 var ErrBadName = errors.New("Stream Already Exist")
 var ErrStreamIsClosed = errors.New("Stream Is Closed")
+var OnAuthSub func(p *util.Promise[ISubscriber]) error
+var OnAuthPub func(p *util.Promise[IPublisher]) error
 
 // receive 用于接收发布或者订阅
 func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
@@ -173,22 +183,59 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 				}
 			}
 		}()
-		if promise := util.NewPromise[IPublisher, struct{}](specific.(IPublisher)); s.Receive(promise) {
-			return promise.Catch()
+		if config.Global.EnableAuth {
+			authPromise := util.NewPromise(specific.(IPublisher))
+			if auth, ok := specific.(AuthPub); ok {
+				if err = auth.OnAuth(authPromise); err != nil {
+					return err
+				}
+				if err = authPromise.Await(); err != nil {
+					return err
+				}
+			} else if OnAuthPub != nil {
+				if err = OnAuthPub(authPromise); err != nil {
+					return err
+				}
+				if err = authPromise.Await(); err != nil {
+					return err
+				}
+			}
+		}
+		if promise := util.NewPromise(specific.(IPublisher)); s.Receive(promise) {
+			err = promise.Await()
+			return err
 		}
 	} else {
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		if create {
 			EventBus <- s // 通知发布者按需拉流
 		}
-		EventBus <- specific // 全局广播订阅事件
 		defer func() {
 			if err == nil {
 				specific.OnEvent(specific)
 			}
 		}()
-		if promise := util.NewPromise[ISubscriber, struct{}](specific.(ISubscriber)); s.Receive(promise) {
-			return promise.Catch()
+		if config.Global.EnableAuth {
+			authPromise := util.NewPromise(specific.(ISubscriber))
+			if auth, ok := specific.(AuthSub); ok {
+				if err = auth.OnAuth(authPromise); err != nil {
+					return err
+				}
+				if err = authPromise.Await(); err != nil {
+					return err
+				}
+			} else if OnAuthSub != nil {
+				if err = OnAuthSub(authPromise); err != nil {
+					return err
+				}
+				if err = authPromise.Await(); err != nil {
+					return err
+				}
+			}
+		}
+		if promise := util.NewPromise(specific.(ISubscriber)); s.Receive(promise) {
+			err = promise.Await()
+			return err
 		}
 	}
 	return ErrStreamIsClosed
