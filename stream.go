@@ -24,7 +24,7 @@ type StreamAction byte
 type StateEvent struct {
 	Action StreamAction
 	From   StreamState
-	Stream *Stream
+	Stream *Stream `json:"-"`
 }
 
 func (se StateEvent) Next() (next StreamState, ok bool) {
