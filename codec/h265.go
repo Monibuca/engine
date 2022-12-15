@@ -173,9 +173,9 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 	if payload[index]&0x7f != byte(NAL_UNIT_PPS) {
 		return nil, nil, nil, ErrHevc
 	}
-	if numNalus := util.ReadBE[int](payload[index+1 : index+3]); numNalus != 1 {
-		return nil, nil, nil, ErrHevc
-	}
+	// if numNalus := util.ReadBE[int](payload[index+1 : index+3]); numNalus != 1 {
+	// 	return nil, nil, nil, ErrHevc
+	// }
 	ppsLen := util.ReadBE[int](payload[index+3 : index+5])
 	if len(payload) < 43+vpsLen+spsLen+ppsLen {
 		return nil, nil, nil, ErrHevc

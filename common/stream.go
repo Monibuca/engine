@@ -7,6 +7,7 @@ import (
 type IStream interface {
 	AddTrack(Track)
 	RemoveTrack(Track)
+	Close()
 	IsClosed() bool
 	SSRC() uint32
 	log.Zap

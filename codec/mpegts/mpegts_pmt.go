@@ -14,14 +14,14 @@ import (
 // PMT
 
 var (
-	TSHeader = []byte{0x47, 0x40, 0x00, 0x10, 0x00}
+	TSHeader = []byte{0x47, 0x40 | (PID_PMT >> 8), PID_PMT & 0xff, 0x10, 0x00} //PID:0x100
 	PSI      = []byte{0x02, 0xb0, 0x17, 0x00, 0x01, 0xc1, 0x00, 0x00}
-	PMT      = []byte{0xe1, 0x01, 0xf0, 0x00} //PID:0x100
-	h264     = []byte{STREAM_TYPE_H264, 0xe1, 0x01, 0xf0, 0x00}
-	h265     = []byte{STREAM_TYPE_H265, 0xe1, 0x01, 0xf0, 0x00}
-	aac      = []byte{STREAM_TYPE_AAC, 0xe1, 0x02, 0xf0, 0x00}
-	pcma     = []byte{STREAM_TYPE_G711A, 0xe1, 0x02, 0xf0, 0x00}
-	pcmu     = []byte{STREAM_TYPE_G711U, 0xe1, 0x02, 0xf0, 0x00}
+	PMT      = []byte{0xe0 | (PID_VIDEO >> 8), PID_VIDEO & 0xff, 0xf0, 0x00} //PcrPID:0x101
+	h264     = []byte{STREAM_TYPE_H264, 0xe0 | (PID_VIDEO >> 8), PID_VIDEO & 0xff, 0xf0, 0x00}
+	h265     = []byte{STREAM_TYPE_H265, 0xe0 | (PID_VIDEO >> 8), PID_VIDEO & 0xff, 0xf0, 0x00}
+	aac      = []byte{STREAM_TYPE_AAC, 0xe0 | (PID_AUDIO >> 8), PID_AUDIO & 0xff, 0xf0, 0x00}
+	pcma     = []byte{STREAM_TYPE_G711A, 0xe0 | (PID_AUDIO >> 8), PID_AUDIO & 0xff, 0xf0, 0x00}
+	pcmu     = []byte{STREAM_TYPE_G711U, 0xe0 | (PID_AUDIO >> 8), PID_AUDIO & 0xff, 0xf0, 0x00}
 	stuffing []byte
 )
 
@@ -341,29 +341,28 @@ func WritePMT(w io.Writer, pmt MpegTsPMT) (err error) {
 
 func WritePMTPacket(w io.Writer, videoCodec codec.VideoCodecID, audioCodec codec.AudioCodecID) {
 	w.Write(TSHeader)
+	crc := make([]byte, 4)
+	paddingSize := TS_PACKET_SIZE - len(crc) - len(PSI) - len(PMT) - len(TSHeader) - 10
 	pmt := net.Buffers{PSI, PMT}
-	pmtlen := len(PSI) + len(PMT)
 	switch videoCodec {
 	case codec.CodecID_H264:
 		pmt = append(pmt, h264)
-		pmtlen += 5
 	case codec.CodecID_H265:
 		pmt = append(pmt, h265)
-		pmtlen += 5
+	default:
+		paddingSize += 5
 	}
 	switch audioCodec {
 	case codec.CodecID_AAC:
 		pmt = append(pmt, aac)
-		pmtlen += 5
 	case codec.CodecID_PCMA:
 		pmt = append(pmt, pcma)
-		pmtlen += 5
 	case codec.CodecID_PCMU:
 		pmt = append(pmt, pcmu)
-		pmtlen += 5
+	default:
+		paddingSize += 5
 	}
-	crc := make([]byte, 4)
 	util.PutBE(crc, GetCRC32_2(pmt))
-	pmt = append(pmt, crc, stuffing[:TS_PACKET_SIZE-pmtlen-5-4])
+	pmt = append(pmt, crc, stuffing[:paddingSize])
 	pmt.WriteTo(w)
 }

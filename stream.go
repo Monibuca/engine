@@ -172,11 +172,11 @@ type Stream struct {
 	Path        string
 	Publisher   IPublisher
 	State       StreamState
+	StateEvent  StateEvent    // 进入当前状态的事件
 	Subscribers []ISubscriber // 订阅者
 	Tracks      Tracks
 	AppName     string
 	StreamName  string
-	CloseReason StreamAction //流关闭原因
 }
 type StreamSummay struct {
 	Path        string
@@ -191,7 +191,7 @@ type StreamSummay struct {
 // Summary 返回流的简要信息
 func (s *Stream) Summary() (r StreamSummay) {
 	if s.Publisher != nil {
-		r.Type = s.Publisher.GetIO().Type
+		r.Type = s.Publisher.GetPublisher().Type
 	}
 	r.Tracks = util.MapList(&s.Tracks.Map, func(name string, t Track) string {
 		b := t.GetBase()
@@ -247,6 +247,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 	var next StreamState
 	if next, ok = event.Next(); ok {
 		r.State = next
+		r.StateEvent = event
 		// 给Publisher状态变更的回调，方便进行远程拉流等操作
 		var stateEvent any
 		r.Info(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[next]), zap.String("action", ActionNames[action]))
@@ -255,12 +256,12 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEwaitPublish{event, r.Publisher}
 			waitTime := 0
 			if r.Publisher != nil {
-				waitTime = r.Publisher.GetConfig().WaitCloseTimeout
+				waitTime = r.Publisher.GetPublisher().Config.WaitCloseTimeout
 			}
 			if l := len(r.Subscribers); l > 0 {
 				r.broadcast(stateEvent)
 				if waitTime == 0 {
-					waitTime = r.Subscribers[l-1].GetConfig().WaitTimeout
+					waitTime = r.Subscribers[l-1].GetSubscriber().Config.WaitTimeout
 				}
 			} else if waitTime == 0 {
 				waitTime = 1 //没有订阅者也没有配置发布者等待重连时间，默认1秒后关闭流
@@ -274,7 +275,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEwaitClose{event}
 			r.timeout.Reset(r.DelayCloseTimeout)
 		case STATE_CLOSED:
-			r.CloseReason = action
 			for !r.actionChan.Close() {
 				// 等待channel发送完毕
 				time.Sleep(time.Millisecond * 100)
@@ -296,7 +296,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 }
 
 func (r *Stream) IsShutdown() bool {
-	return r.CloseReason == ACTION_CLOSE
+	return r.StateEvent.Action == ACTION_CLOSE || (r.StateEvent.Action == ACTION_TIMEOUT && r.StateEvent.From == STATE_WAITCLOSE)
 }
 
 func (r *Stream) IsClosed() bool {
@@ -361,9 +361,9 @@ func (w *waitTrackNames) Accept(name string) bool {
 
 type waitTracks struct {
 	*util.Promise[ISubscriber] // 等待中的Promise
-	audio                                waitTrackNames
-	video                                waitTrackNames
-	data                                 waitTrackNames
+	audio                      waitTrackNames
+	video                      waitTrackNames
+	data                       waitTrackNames
 }
 
 // NeedWait 是否需要等待Track
@@ -414,7 +414,8 @@ func (s *Stream) run() {
 				for l := len(s.Subscribers) - 1; l >= 0; l-- {
 					if sub := s.Subscribers[l]; sub.IsClosed() {
 						s.Subscribers = append(s.Subscribers[:l], s.Subscribers[l+1:]...)
-						s.Info("suber -1", zap.String("id", sub.GetIO().ID), zap.String("type", sub.GetIO().Type), zap.Int("remains", len(s.Subscribers)))
+						io := sub.GetSubscriber()
+						s.Info("suber -1", zap.String("id", io.ID), zap.String("type", io.Type), zap.Int("remains", len(s.Subscribers)))
 						if config.Global.EnableSubEvent {
 							EventBus <- UnsubscribeEvent{sub}
 						}
@@ -456,7 +457,7 @@ func (s *Stream) run() {
 						s.Publisher = v.Value
 					}
 					if s.action(ACTION_PUBLISH) {
-						io := v.Value.GetIO()
+						io := v.Value.GetPublisher()
 						io.Spesic = v.Value
 						io.Stream = s
 						io.StartTime = time.Now()
@@ -475,7 +476,7 @@ func (s *Stream) run() {
 						v.Reject(ErrStreamIsClosed)
 					}
 					suber := v.Value
-					io := suber.GetIO()
+					io := suber.GetSubscriber()
 					io.Spesic = suber
 					s.Subscribers = append(s.Subscribers, suber)
 					sbConfig := io.Config
@@ -508,7 +509,7 @@ func (s *Stream) run() {
 					}
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
-						pubConfig := s.Publisher.GetConfig()
+						pubConfig := s.Publisher.GetPublisher().Config
 						if !pubConfig.PubAudio {
 							waits.audio.StopWait()
 						}

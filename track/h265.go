@@ -89,6 +89,9 @@ func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.Video.DecoderConfiguration.Raw[0] = vps
 			vt.Video.DecoderConfiguration.Raw[1] = sps
 			vt.Video.DecoderConfiguration.Raw[2] = pps
+		} else {
+			vt.Stream.Error("H265 ParseVpsSpsPps Error")
+			vt.Stream.Close()
 		}
 	} else {
 		vt.Video.WriteAVCC(ts, frame)

@@ -30,7 +30,7 @@ type AuthPub interface {
 }
 
 // 发布者或者订阅者的共用结构体
-type IO[C IOConfig] struct {
+type IO struct {
 	ID                 string
 	Type               string
 	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
@@ -42,16 +42,15 @@ type IO[C IOConfig] struct {
 	io.Writer          `json:"-"`
 	io.Closer          `json:"-"`
 	Args               url.Values
-	Config             *C  `json:"-"`
 	Spesic             IIO `json:"-"`
 }
 
-func (io *IO[C]) IsClosed() bool {
+func (io *IO) IsClosed() bool {
 	return io.Err() != nil
 }
 
 // SetIO（可选） 设置Writer、Reader、Closer
-func (i *IO[C]) SetIO(conn any) {
+func (i *IO) SetIO(conn any) {
 	if v, ok := conn.(io.Closer); ok {
 		i.Closer = v
 	}
@@ -64,12 +63,12 @@ func (i *IO[C]) SetIO(conn any) {
 }
 
 // SetParentCtx（可选）
-func (i *IO[C]) SetParentCtx(parent context.Context) {
+func (i *IO) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
 
 // SetStuff（可选） 设置Writer、Reader、Closer、Context和本IO关联
-func (i *IO[C]) SetStuff(stuffs ...any) {
+func (i *IO) SetStuff(stuffs ...any) {
 	for _, stuff := range stuffs {
 		switch v := stuff.(type) {
 		case context.Context:
@@ -88,7 +87,7 @@ func (i *IO[C]) SetStuff(stuffs ...any) {
 	}
 }
 
-func (i *IO[C]) OnEvent(event any) {
+func (i *IO) OnEvent(event any) {
 	switch event.(type) {
 	case SEclose, SEKick:
 		if i.Closer != nil {
@@ -99,28 +98,28 @@ func (i *IO[C]) OnEvent(event any) {
 		}
 	}
 }
-func (io *IO[C]) GetStream() *Stream {
-	return io.Stream
+
+func (io *IO) IsShutdown() bool {
+	return io.Stream.IsShutdown()
 }
-func (io *IO[C]) GetIO() *IO[C] {
+
+func (io *IO) GetIO() *IO {
 	return io
 }
 
-func (io *IO[C]) GetConfig() *C {
-	return io.Config
-}
-
 type IIO interface {
+	receive(string, IIO) error
 	IsClosed() bool
 	OnEvent(any)
 	Stop()
 	SetIO(any)
 	SetParentCtx(context.Context)
-	GetStream() *Stream
+	SetStuff(...any)
+	IsShutdown() bool
 }
 
 // Stop 停止订阅或者发布，由订阅者或者发布者调用
-func (io *IO[C]) Stop() {
+func (io *IO) Stop() {
 	if io.CancelFunc != nil {
 		io.CancelFunc()
 	}
@@ -132,7 +131,7 @@ var OnAuthSub func(p *util.Promise[ISubscriber]) error
 var OnAuthPub func(p *util.Promise[IPublisher]) error
 
 // receive 用于接收发布或者订阅
-func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
+func (io *IO) receive(streamPath string, specific IIO) error {
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
@@ -141,9 +140,8 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 	}
 	io.Args = u.Query()
 	wt := time.Second * 5
-	var c any = conf
-	if v, ok := c.(*config.Subscribe); ok {
-		wt = util.Second2Duration(v.WaitTimeout)
+	if v, ok := specific.(ISubscriber); ok {
+		wt = util.Second2Duration(v.GetSubscriber().Config.WaitTimeout)
 	}
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
@@ -154,17 +152,17 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 	if s == nil {
 		return ErrBadName
 	}
-	io.Config = conf
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
 	}
-	if v, ok := c.(*config.Publish); ok {
+	if v, ok := specific.(IPublisher); ok {
+		conf := v.GetPublisher().Config
 		io.Type = strings.TrimSuffix(io.Type, "Publisher")
 		oldPublisher := s.Publisher
 		if oldPublisher != nil && !oldPublisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
-			if v.KickExist {
-				s.Warn("kick", zap.String("type", oldPublisher.GetIO().Type))
+			if conf.KickExist {
+				s.Warn("kick", zap.String("type", oldPublisher.GetPublisher().Type))
 				oldPublisher.OnEvent(SEKick{})
 			} else if oldPublisher == specific {
 				//断线重连
@@ -172,8 +170,8 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 				return ErrBadName
 			}
 		}
-		s.PublishTimeout = util.Second2Duration(v.PublishTimeout)
-		s.DelayCloseTimeout = util.Second2Duration(v.DelayCloseTimeout)
+		s.PublishTimeout = util.Second2Duration(conf.PublishTimeout)
+		s.DelayCloseTimeout = util.Second2Duration(conf.DelayCloseTimeout)
 		defer func() {
 			if err == nil {
 				if oldPublisher == nil {
@@ -184,19 +182,16 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 			}
 		}()
 		if config.Global.EnableAuth {
-			authPromise := util.NewPromise(specific.(IPublisher))
+			onAuthPub := OnAuthPub
 			if auth, ok := specific.(AuthPub); ok {
-				if err = auth.OnAuth(authPromise); err != nil {
-					return err
+				onAuthPub = auth.OnAuth
+			}
+			if onAuthPub != nil {
+				authPromise := util.NewPromise(specific.(IPublisher))
+				if err = onAuthPub(authPromise); err == nil {
+					err = authPromise.Await()
 				}
-				if err = authPromise.Await(); err != nil {
-					return err
-				}
-			} else if OnAuthPub != nil {
-				if err = OnAuthPub(authPromise); err != nil {
-					return err
-				}
-				if err = authPromise.Await(); err != nil {
+				if err != nil {
 					return err
 				}
 			}
@@ -216,19 +211,16 @@ func (io *IO[C]) receive(streamPath string, specific IIO, conf *C) error {
 			}
 		}()
 		if config.Global.EnableAuth {
-			authPromise := util.NewPromise(specific.(ISubscriber))
+			onAuthSub := OnAuthSub
 			if auth, ok := specific.(AuthSub); ok {
-				if err = auth.OnAuth(authPromise); err != nil {
-					return err
+				onAuthSub = auth.OnAuth
+			}
+			if onAuthSub != nil {
+				authPromise := util.NewPromise(specific.(ISubscriber))
+				if err = onAuthSub(authPromise); err == nil {
+					err = authPromise.Await()
 				}
-				if err = authPromise.Await(); err != nil {
-					return err
-				}
-			} else if OnAuthSub != nil {
-				if err = OnAuthSub(authPromise); err != nil {
-					return err
-				}
-				if err = authPromise.Await(); err != nil {
+				if err != nil {
 					return err
 				}
 			}

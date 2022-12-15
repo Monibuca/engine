@@ -69,9 +69,7 @@ func (v VideoDeConf) GetAnnexB() (r net.Buffers) {
 
 type ISubscriber interface {
 	IIO
-	receive(string, IIO, *config.Subscribe) error
-	GetIO() *IO[config.Subscribe]
-	GetConfig() *config.Subscribe
+	GetSubscriber() *Subscriber
 	IsPlaying() bool
 	PlayRaw()
 	PlayBlock(byte)
@@ -125,8 +123,13 @@ func (tp *TrackPlayer) ReadAudio() (ap *AVFrame[AudioSlice]) {
 
 // Subscriber 订阅者实体定义
 type Subscriber struct {
-	IO[config.Subscribe]
+	IO
+	Config      *config.Subscribe
 	TrackPlayer `json:"-"`
+}
+
+func (s *Subscriber) GetSubscriber() *Subscriber {
+	return s
 }
 
 func (s *Subscriber) OnEvent(event any) {
@@ -193,7 +196,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
 		spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
 	}
-	sendAudioDecConf := func() {
+	sendAudioDecConf := func(frame *AVFrame[AudioSlice]) {
 		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
 		s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
 	}
@@ -245,9 +248,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, s.Video.Track.DecoderConfiguration.AVCC)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
 		}
-		sendAudioDecConf = func() {
+		sendAudioDecConf = func(frame *AVFrame[AudioSlice]) {
 			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.SkipTS, s.Audio.Track.DecoderConfiguration.AVCC)
+			ts := s.SkipTS
+			if frame != nil {
+				ts = frame.AbsTime
+			}
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, ts, s.Audio.Track.DecoderConfiguration.AVCC)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
 		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
@@ -317,7 +324,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		if hasAudio {
 			if !audioSent {
 				if s.Audio.Track.IsAAC() {
-					sendAudioDecConf()
+					sendAudioDecConf(nil)
 				}
 				audioSent = true
 			}
@@ -327,7 +334,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					return
 				}
 				if s.Audio.Track.IsAAC() && s.Audio.decConfChanged() {
-					sendAudioDecConf()
+					sendAudioDecConf(ap)
 				}
 				sendAudioFrame(ap)
 				s.Audio.ring.MoveNext()

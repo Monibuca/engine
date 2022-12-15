@@ -10,17 +10,20 @@ import (
 
 type IPublisher interface {
 	IIO
-	GetConfig() *config.Publish
-	receive(string, IIO, *config.Publish) error
-	GetIO() *IO[config.Publish]
+	GetPublisher() *Publisher
 	getAudioTrack() common.AudioTrack
 	getVideoTrack() common.VideoTrack
 }
 
 type Publisher struct {
-	IO[config.Publish]
+	IO
+	Config            *config.Publish
 	common.AudioTrack `json:"-"`
 	common.VideoTrack `json:"-"`
+}
+
+func (p *Publisher) GetPublisher() *Publisher {
+	return p
 }
 
 func (p *Publisher) Stop() {
@@ -34,7 +37,7 @@ func (p *Publisher) getVideoTrack() common.VideoTrack {
 	return p.VideoTrack
 }
 func (p *Publisher) Equal(p2 IPublisher) bool {
-	return p.GetIO() == p2.GetIO()
+	return p == p2.GetPublisher()
 }
 func (p *Publisher) OnEvent(event any) {
 	switch v := event.(type) {

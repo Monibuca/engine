@@ -210,7 +210,8 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
 	if !ok {
 		conf = EngineConfig
 	}
-	return pub.receive(streamPath, pub, conf.GetPublishConfig())
+	pub.GetPublisher().Config = conf.GetPublishConfig()
+	return pub.receive(streamPath, pub)
 }
 
 var ErrStreamNotExist = errors.New("stream not exist")
@@ -227,7 +228,8 @@ func (opt *Plugin) SubscribeExist(streamPath string, sub ISubscriber) error {
 	if !ok {
 		conf = EngineConfig
 	}
-	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
+	sub.GetSubscriber().Config = conf.GetSubscribeConfig()
+	return sub.receive(streamPath, sub)
 }
 
 // Subscribe 订阅一个流，如果流不存在则创建一个等待流
@@ -237,7 +239,8 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 	if !ok {
 		conf = EngineConfig
 	}
-	return sub.receive(streamPath, sub, conf.GetSubscribeConfig())
+	sub.GetSubscriber().Config = conf.GetSubscribeConfig()
+	return sub.receive(streamPath, sub)
 }
 
 // SubscribeBlock 阻塞订阅一个流，直到订阅结束
@@ -280,13 +283,13 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 			opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
 		}()
 		for puller.Reconnect() {
-			if puller.Pull(); !puller.GetStream().IsShutdown() {
+			if puller.Pull(); !puller.IsShutdown() {
 				if err = puller.Connect(); err != nil {
 					return
 				}
 				if err = opt.Publish(streamPath, puller); err != nil {
 					if puber := Streams.Get(streamPath).Publisher; puber != puller {
-						io := puber.GetIO()
+						io := puber.GetPublisher()
 						opt.Warn("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
 						return
 					}
