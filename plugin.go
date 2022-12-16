@@ -255,10 +255,11 @@ var ErrNoPullConfig = errors.New("no pull config")
 var Pullers sync.Map
 
 func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
-	opt.Info("pull", zap.String("path", streamPath), zap.String("url", url))
+	zurl := zap.String("url", url)
+	opt.Info("pull", zap.String("path", streamPath), zurl)
 	defer func() {
 		if err != nil {
-			opt.Error("pull failed", zap.String("remoteURL", url), zap.Error(err))
+			opt.Error("pull failed", zurl, zap.Error(err))
 		}
 	}()
 	conf, ok := opt.Config.(config.PullConfig)
@@ -269,33 +270,32 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 
 	puller.init(streamPath, url, pullConf)
 
-	if err = puller.Connect(); err != nil {
-		return
-	}
-
-	if err = opt.Publish(streamPath, puller); err != nil {
-		return
-	}
-	Pullers.Store(puller, url)
 	go func() {
-		defer func() {
-			Pullers.Delete(puller)
-			opt.Info("stop pull", zap.String("remoteURL", url), zap.Error(err))
-		}()
-		for puller.Reconnect() {
-			if puller.Pull(); !puller.IsShutdown() {
-				if err = puller.Connect(); err != nil {
-					return
-				}
+		Pullers.Store(puller, url)
+		defer Pullers.Delete(puller)
+		for opt.Info("start pull", zurl); ; opt.Warn("restart pull", zurl) {
+			if err = puller.Connect(); err != nil {
+				opt.Error("pull connect", zurl, zap.Error(err))
+				time.Sleep(time.Second * 5)
+			} else {
 				if err = opt.Publish(streamPath, puller); err != nil {
 					if puber := Streams.Get(streamPath).Publisher; puber != puller {
 						io := puber.GetPublisher()
-						opt.Warn("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
+						opt.Error("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
 						return
 					}
+					opt.Error("pull publish", zurl, zap.Error(err))
 				}
-			} else {
-				return
+				if err = puller.Pull(); err != nil {
+					opt.Error("pull", zurl, zap.Error(err))
+				}
+			}
+			if !puller.Reconnect() {
+				opt.Warn("stop pull stop reconnect", zurl)
+				break
+			} else if puller.IsShutdown() {
+				opt.Warn("stop pull shutdown", zurl)
+				break
 			}
 		}
 	}()
@@ -332,31 +332,29 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 
 	pusher.init(streamPath, url, pushConfig)
 
-	if err = pusher.Connect(); err != nil {
-		return
-	}
-
-	if err = opt.Subscribe(streamPath, pusher); err != nil {
-		return
-	}
-	Pushers.Store(url, pusher)
 	go func() {
-		defer opt.Info("push finished", zp, zu)
+		Pushers.Store(url, pusher)
 		defer Pushers.Delete(url)
-		for pusher.Reconnect() {
-			opt.Info("start push", zp, zu)
-			if err = pusher.Push(); !pusher.IsClosed() {
-				if err != nil {
-					opt.Info("stop push", zp, zu, zap.Error(err))
-				}
-				if err = pusher.Connect(); err != nil {
-					return
-				}
-				if err = opt.Subscribe(streamPath, pusher); err != nil {
-					return
-				}
+		for opt.Info("start push", zp, zu); ; opt.Warn("restart push", zp, zu) {
+			if err = opt.Subscribe(streamPath, pusher); err != nil {
+				opt.Error("push subscribe", zp, zu, zap.Error(err))
+				time.Sleep(time.Second * 5)
 			} else {
-				return
+				if err = pusher.Connect(); err != nil {
+					opt.Error("push connect", zp, zu, zap.Error(err))
+					time.Sleep(time.Second * 5)
+				} else {
+					if err = pusher.Push(); err != nil {
+						opt.Error("push", zp, zu, zap.Error(err))
+					}
+				}
+			}
+			if !pusher.Reconnect() {
+				opt.Warn("stop push stop reconnect", zp, zu)
+				break
+			} else if pusher.IsShutdown() {
+				opt.Warn("stop push shutdown", zp, zu)
+				break
 			}
 		}
 	}()

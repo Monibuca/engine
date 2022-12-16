@@ -1,6 +1,7 @@
 package codec
 
 import (
+	"errors"
 	"io"
 	"net"
 
@@ -73,7 +74,7 @@ var (
 		7:  "H264",
 		12: "H265"}
 )
-
+var ErrInvalidFLV = errors.New("invalid flv")
 var FLVHeader = []byte{'F', 'L', 'V', 0x01, 0x05, 0, 0, 0, 9, 0, 0, 0, 0}
 
 func WriteFLVTag(w io.Writer, t byte, timestamp uint32, payload net.Buffers) (err error) {

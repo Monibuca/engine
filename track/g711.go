@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 )
@@ -49,6 +50,10 @@ func (g711 *G711) WriteRTP(raw []byte) {
 }
 
 func (g711 *G711) WriteAVCC(ts uint32, frame AVCCFrame) {
+	if len(frame) < 2 {
+		g711.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+		return
+	}
 	g711.WriteSlice(AudioSlice(frame[1:]))
 	g711.Audio.WriteAVCC(ts, frame)
 	g711.Flush()

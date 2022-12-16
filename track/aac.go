@@ -67,11 +67,11 @@ func (aac *AAC) writeRTPFrame(frame *RTPFrame) {
 }
 
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
+	if len(frame) < 4 {
+		aac.Audio.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+		return
+	}
 	if frame.IsSequence() {
-		if len(frame) < 2 {
-			aac.Audio.Stream.Error("AVCC sequence header too short", zap.ByteString("data", frame))
-			return
-		}
 		aac.Audio.DecoderConfiguration.AVCC = net.Buffers{frame}
 		config1, config2 := frame[2], frame[3]
 		aac.Profile = (config1 & 0xF8) >> 3

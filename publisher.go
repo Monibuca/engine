@@ -116,7 +116,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
 type IPuller interface {
 	IPublisher
 	Connect() error
-	Pull()
+	Pull() error
 	Reconnect() bool
 	init(streamPath string, url string, conf *config.Pull)
 }

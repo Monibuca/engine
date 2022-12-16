@@ -80,6 +80,10 @@ func (vt *H264) WriteSlice(slice NALUSlice) {
 }
 
 func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
+	if len(frame) < 5 {
+		vt.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+		return
+	}
 	if frame.IsSequence() {
 		vt.dcChanged = true
 		vt.Video.DecoderConfiguration.Seq++
@@ -90,6 +94,9 @@ func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
 			vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
 			vt.Video.DecoderConfiguration.Raw[0] = info.SequenceParameterSetNALUnit
 			vt.Video.DecoderConfiguration.Raw[1] = info.PictureParameterSetNALUnit
+		} else {
+			vt.Stream.Error("H264 ParseSpsPps Error")
+			vt.Stream.Close()
 		}
 	} else {
 		vt.Video.WriteAVCC(ts, frame)

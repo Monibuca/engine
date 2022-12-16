@@ -79,6 +79,10 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 	}
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
+	if len(frame) < 5 {
+		vt.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+		return
+	}
 	if frame.IsSequence() {
 		vt.Video.dcChanged = true
 		vt.Video.DecoderConfiguration.Seq++

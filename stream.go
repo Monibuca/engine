@@ -525,7 +525,7 @@ func (s *Stream) run() {
 					} else {
 						v.Resolve()
 					}
-					if len(s.Subscribers) == 1 {
+					if len(s.Subscribers) == 1 && s.State == STATE_WAITCLOSE {
 						s.action(ACTION_FIRSTENTER)
 					}
 				case TrackRemoved:
