@@ -48,31 +48,31 @@ func (sc *SafeChan[T]) IsFull() bool {
 
 type Promise[S any] struct {
 	Value S
-	err   error
-	c     chan struct{}
+	c     chan error
 	state int32 // 0 pendding  1 fullfilled -1 rejected
 }
 
 func (r *Promise[S]) Resolve() {
 	if atomic.CompareAndSwapInt32(&r.state, 0, 1) {
-		r.c <- struct{}{}
-	}
-}
-func (r *Promise[S]) Reject(err error) {
-	if atomic.CompareAndSwapInt32(&r.state, 0, -1) {
-		r.err = err
+		r.c <- nil
 		close(r.c)
 	}
 }
+
+func (r *Promise[S]) Reject(err error) {
+	if atomic.CompareAndSwapInt32(&r.state, 0, -1) {
+		r.c <- err
+		close(r.c)
+	}
+}
+
 func (p *Promise[S]) Await() error {
-	<-p.c
-	return p.err
+	return <-p.c
 }
 
 func NewPromise[S any](value S) *Promise[S] {
 	return &Promise[S]{
 		Value: value,
-		c:     make(chan struct{}, 1),
+		c:     make(chan error, 1),
 	}
 }
-

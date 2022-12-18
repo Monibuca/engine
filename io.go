@@ -42,7 +42,7 @@ type IO struct {
 	io.Writer          `json:"-"`
 	io.Closer          `json:"-"`
 	Args               url.Values
-	Spesic             IIO `json:"-"`
+	Spesific           IIO `json:"-"`
 }
 
 func (io *IO) IsClosed() bool {
@@ -152,8 +152,15 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if s == nil {
 		return ErrBadName
 	}
+	io.Stream = s
+	io.Spesific = specific
+	io.StartTime = time.Now()
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
+	}
+	io.Logger = s.With(zap.String("type", io.Type))
+	if io.ID != "" {
+		io.Logger = io.Logger.With(zap.String("ID", io.ID))
 	}
 	if v, ok := specific.(IPublisher); ok {
 		conf := v.GetPublisher().Config

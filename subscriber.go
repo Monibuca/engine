@@ -179,7 +179,7 @@ func (s *Subscriber) PlayRTP() {
 
 // PlayBlock 阻塞式读取数据
 func (s *Subscriber) PlayBlock(subType byte) {
-	spesic := s.Spesic
+	spesic := s.Spesific
 	if spesic == nil {
 		s.Error("play before subscribe")
 		return
@@ -198,7 +198,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	}
 	sendAudioDecConf := func(frame *AVFrame[AudioSlice]) {
 		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-		s.Spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+		s.Spesific.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
 	}
 	var sendVideoFrame func(*AVFrame[NALUSlice])
 	var sendAudioFrame func(*AVFrame[AudioSlice])
@@ -265,8 +265,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime, frame.AVCC)
 		}
 	}
-
-	defer s.Info("stop")
+	defer s.onStop()
 	for ctx.Err() == nil {
 		hasVideo, hasAudio := s.Video.ring != nil && s.Config.SubVideo, s.Audio.ring != nil && s.Config.SubAudio
 		if hasVideo {
@@ -347,6 +346,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		if !hasVideo && !hasAudio {
 			time.Sleep(time.Second)
 		}
+	}
+}
+
+func (s *Subscriber) onStop() {
+	if !s.IsClosed() {
+		s.Info("stop")
+		s.Stream.Receive(s.Spesific)
 	}
 }
 
