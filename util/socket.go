@@ -62,7 +62,7 @@ func ListenUDP(address string, networkBuffer int) (*net.UDPConn, error) {
 }
 
 // CORS 加入跨域策略头包含CORP
-func CORS(next http.HandlerFunc) http.HandlerFunc {
+func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := w.Header()
 		header.Set("Access-Control-Allow-Credentials", "true")
@@ -80,7 +80,7 @@ func CORS(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func BasicAuth(u, p string, next http.HandlerFunc) http.HandlerFunc {
+func BasicAuth(u, p string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract the username and password from the request
 		// Authorization header. If no Authentication header is present

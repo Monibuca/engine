@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"net/http"
+	"time"
 
 	. "github.com/logrusorgru/aurora"
 	"golang.org/x/sync/errgroup"
@@ -12,6 +13,7 @@ import (
 
 var _ HTTPConfig = (*HTTP)(nil)
 
+type Middleware func(string, http.Handler) http.Handler
 type HTTP struct {
 	ListenAddr    string
 	ListenAddrTLS string
@@ -20,15 +22,24 @@ type HTTP struct {
 	CORS          bool //是否自动添加CORS头
 	UserName      string
 	Password      string
+	ReadTimeout   float64
+	WriteTimeout  float64
+	IdleTimeout   float64
 	mux           *http.ServeMux
+	middlewares   []Middleware
 }
 type HTTPConfig interface {
 	GetHTTPConfig() *HTTP
 	Listen(ctx context.Context) error
-	HandleFunc(string, func(http.ResponseWriter, *http.Request))
+	Handle(string, http.Handler)
+	AddMiddleware(Middleware)
 }
 
-func (config *HTTP) HandleFunc(path string, f func(http.ResponseWriter, *http.Request)) {
+func (config *HTTP) AddMiddleware(middleware Middleware) {
+	config.middlewares = append(config.middlewares, middleware)
+}
+
+func (config *HTTP) Handle(path string, f http.Handler) {
 	if config.mux == nil {
 		config.mux = http.NewServeMux()
 	}
@@ -38,7 +49,10 @@ func (config *HTTP) HandleFunc(path string, f func(http.ResponseWriter, *http.Re
 	if config.UserName != "" && config.Password != "" {
 		f = util.BasicAuth(config.UserName, config.Password, f)
 	}
-	config.mux.HandleFunc(path, f)
+	for _, middleware := range config.middlewares {
+		f = middleware(path, f)
+	}
+	config.mux.Handle(path, f)
 }
 
 func (config *HTTP) GetHTTPConfig() *HTTP {
@@ -54,13 +68,27 @@ func (config *HTTP) Listen(ctx context.Context) error {
 	if config.ListenAddrTLS != "" && (config == &Global.HTTP || config.ListenAddrTLS != Global.ListenAddrTLS) {
 		g.Go(func() error {
 			log.Info("🌐 https listen at ", Blink(config.ListenAddrTLS))
-			return http.ListenAndServeTLS(config.ListenAddrTLS, config.CertFile, config.KeyFile, config.mux)
+			var server = http.Server{
+				Addr:         config.ListenAddrTLS,
+				ReadTimeout:  time.Duration(config.ReadTimeout) * time.Second,
+				WriteTimeout: time.Duration(config.WriteTimeout) * time.Second,
+				IdleTimeout:  time.Duration(config.IdleTimeout) * time.Second,
+				Handler:      config.mux,
+			}
+			return server.ListenAndServeTLS(config.CertFile, config.KeyFile)
 		})
 	}
 	if config.ListenAddr != "" && (config == &Global.HTTP || config.ListenAddr != Global.ListenAddr) {
 		g.Go(func() error {
 			log.Info("🌐 http listen at ", Blink(config.ListenAddr))
-			return http.ListenAndServe(config.ListenAddr, config.mux)
+			var server = http.Server{
+				Addr:         config.ListenAddr,
+				ReadTimeout:  time.Duration(config.ReadTimeout) * time.Second,
+				WriteTimeout: time.Duration(config.WriteTimeout) * time.Second,
+				IdleTimeout:  time.Duration(config.IdleTimeout) * time.Second,
+				Handler:      config.mux,
+			}
+			return server.ListenAndServe()
 		})
 	}
 	g.Go(func() error {

@@ -37,6 +37,9 @@ global:
     cors: true  # 是否自动添加cors头
     username: ""  # 用户名和密码，用于API访问时的基本身份认证
     password: ""
+    readtimeout: 0 # 读取超时时间，单位秒，0为不限制
+    writetimeout: 0 # 写入超时时间，单位秒，0为不限制
+    idletimeout: 0 # 空闲超时时间，单位秒，0为不限制
   publish:
       pubaudio: true # 是否发布音频流
       pubvideo: true # 是否发布视频流
@@ -113,3 +116,32 @@ var OnAuthPub func(p *util.Promise[IPublisher]) error
 ```
 ** 注意：如果单独鉴权和全局鉴权同时存在，优先使用单独鉴权 **
 ** 全局鉴权函数可以被多次覆盖，所以需要自己实现鉴权逻辑的合并 **
+
+# Http中间件
+在HTTPConfig接口中增加了AddMiddleware方法，可以通过该方法添加中间件，中间件的定义如下
+```go
+type Middleware func(string, http.Handler) http.Handler
+type HTTPConfig interface {
+	GetHTTPConfig() *HTTP
+	Listen(ctx context.Context) error
+	Handle(string, http.Handler)
+	AddMiddleware(Middleware)
+}
+
+```
+中间件的添加必须在FirstConfig之前，也就是在Listen之前
+例如：
+```go
+type MyMiddlewareConfig struct {
+  	config.HTTP
+}
+var myMiddlewareConfig = &MyMiddlewareConfig{}
+func init(){
+  myMiddlewareConfig.AddMiddleware(func(pattern string, handler http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+      // do something
+      handler.ServeHTTP(w, r)
+    })
+  })
+}
+```

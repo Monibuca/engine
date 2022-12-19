@@ -64,13 +64,13 @@ type Plugin struct {
 	saveTimer          *time.Timer //用于保存的时候的延迟，防抖
 }
 
-func (opt *Plugin) logHandler(pattern string, handler func(http.ResponseWriter, *http.Request)) http.HandlerFunc {
-	return func(rw http.ResponseWriter, r *http.Request) {
+func (opt *Plugin) logHandler(pattern string, handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		opt.Debug("visit", zap.String("path", r.URL.String()), zap.String("remote", r.RemoteAddr))
-		handler(rw, r)
-	}
+		handler.ServeHTTP(rw, r)
+	})
 }
-func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+func (opt *Plugin) handle(pattern string, handler http.Handler) {
 	if opt == nil {
 		return
 	}
@@ -80,12 +80,12 @@ func (opt *Plugin) handleFunc(pattern string, handler func(http.ResponseWriter, 
 	}
 	if ok {
 		opt.Debug("http handle added:" + pattern)
-		conf.HandleFunc(pattern, opt.logHandler(pattern, handler))
+		conf.Handle(pattern, opt.logHandler(pattern, handler))
 	}
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
 		opt.Debug("http handle added to engine:" + pattern)
-		EngineConfig.HandleFunc(pattern, opt.logHandler(pattern, handler))
+		EngineConfig.Handle(pattern, opt.logHandler(pattern, handler))
 	}
 	apiList = append(apiList, pattern)
 }
@@ -174,7 +174,7 @@ func (opt *Plugin) registerHandler() {
 			if name != "ServeHTTP" {
 				patten = strings.ToLower(strings.ReplaceAll(name, "_", "/"))
 			}
-			opt.handleFunc(patten, handler)
+			opt.handle(patten, http.HandlerFunc(handler))
 		}
 	}
 }
