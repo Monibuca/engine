@@ -336,6 +336,11 @@ func (s *Stream) run() {
 		select {
 		case <-s.timeout.C:
 			if s.State == STATE_PUBLISHING {
+				for sub := range s.Subscribers {
+					if sub.IsClosed() {
+						s.onSuberClose(sub)
+					}
+				}
 				s.Tracks.ModifyRange(func(name string, t Track) {
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
@@ -344,10 +349,8 @@ func (s *Stream) run() {
 						s.Subscribers.Broadcast(TrackRemoved{t})
 					}
 				})
-				for sub := range s.Subscribers {
-					if sub.IsClosed() {
-						s.onSuberClose(sub)
-					}
+				if s.State != STATE_PUBLISHING {
+					continue
 				}
 				if s.Tracks.Len() == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)

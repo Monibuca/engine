@@ -122,7 +122,7 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 		return nil, nil, nil, ErrHevc
 	}
 
-	if payload[0] != 0x1c || payload[1] != 0x00 || payload[2] != 0 || payload[3] != 0 || payload[4] != 0 {
+	if payload[0] != 0x1c || payload[1] != 0x00 {
 		return nil, nil, nil, ErrHevc
 	}
 

@@ -100,6 +100,9 @@ func (i *IO) OnEvent(event any) {
 }
 
 func (io *IO) IsShutdown() bool {
+	if io.Stream == nil {
+		return false
+	}
 	return io.Stream.IsShutdown()
 }
 
