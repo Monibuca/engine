@@ -130,6 +130,7 @@ func (io *IO) Stop() {
 
 var ErrBadName = errors.New("Stream Already Exist")
 var ErrStreamIsClosed = errors.New("Stream Is Closed")
+var ErrPublisherLost = errors.New("Publisher Lost")
 var OnAuthSub func(p *util.Promise[ISubscriber]) error
 var OnAuthPub func(p *util.Promise[IPublisher]) error
 

@@ -4,7 +4,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/pion/rtp"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
@@ -18,14 +17,9 @@ type H265 struct {
 
 func NewH265(stream IStream) (vt *H265) {
 	vt = &H265{}
-	vt.Video.Name = "h265"
 	vt.Video.CodecID = codec.CodecID_H265
-	vt.Video.SampleRate = 90000
-	vt.Video.Stream = stream
-	vt.Video.Init(256)
-	vt.Video.Media.Poll = time.Millisecond * 10 //适配高帧率
-	vt.Video.DecoderConfiguration.PayloadType = 96
 	vt.Video.DecoderConfiguration.Raw = make(NALUSlice, 3)
+	vt.SetStuff("h265", stream, int(256), byte(96), uint32(90000), vt, time.Millisecond*10)
 	vt.dtsEst = NewDTSEstimator()
 	return
 }
@@ -79,7 +73,7 @@ func (vt *H265) WriteSlice(slice NALUSlice) {
 	}
 }
 func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if len(frame) < 5 {
+	if len(frame) < 6 {
 		vt.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
 		return
 	}
@@ -101,20 +95,6 @@ func (vt *H265) WriteAVCC(ts uint32, frame AVCCFrame) {
 		vt.Video.WriteAVCC(ts, frame)
 		vt.Video.Media.RingBuffer.Value.IFrame = frame.IsIDR()
 		vt.Flush()
-	}
-}
-
-// WriteRTPPack 写入已反序列化的RTP包
-func (vt *H265) WriteRTPPack(p *rtp.Packet) {
-	for frame := vt.UnmarshalRTPPacket(p); frame != nil; frame = vt.nextRTPFrame() {
-		vt.writeRTPFrame(frame)
-	}
-}
-
-// WriteRTP 写入未反序列化的RTP包
-func (vt *H265) WriteRTP(raw []byte) {
-	for frame := vt.UnmarshalRTP(raw); frame != nil; frame = vt.nextRTPFrame() {
-		vt.writeRTPFrame(frame)
 	}
 }
 

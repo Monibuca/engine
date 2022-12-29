@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -163,8 +162,7 @@ func (tracks *Tracks) MarshalJSON() ([]byte, error) {
 
 // Stream 流定义
 type Stream struct {
-	timeout    *time.Timer              //当前状态的超时定时器
-	waitP      map[*waitTracks]struct{} //订阅者等待Track
+	timeout    *time.Timer //当前状态的超时定时器
 	actionChan util.SafeChan[any]
 	*zap.Logger
 	StartTime time.Time //创建时间
@@ -200,7 +198,7 @@ func (s *Stream) Summary() (r StreamSummay) {
 	})
 	r.Path = s.Path
 	r.State = s.State
-	r.Subscribers = len(s.Subscribers)
+	r.Subscribers = s.Subscribers.Len()
 	r.StartTime = s.StartTime
 	return
 }
@@ -221,18 +219,17 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 	} else {
 		p := strings.Split(streamPath, "/")
 		s = &Stream{
-			Path:        streamPath,
-			AppName:     p[0],
-			StreamName:  util.LastElement(p),
-			StartTime:   time.Now(),
-			Subscribers: make(Subscribers),
+			Path:       streamPath,
+			AppName:    p[0],
+			StreamName: util.LastElement(p),
+			StartTime:  time.Now(),
+			timeout:    time.NewTimer(waitTimeout),
 		}
+		s.Subscribers.Init()
 		s.Logger = log.With(zap.String("stream", streamPath))
 		s.Info("created")
 		Streams.Map[streamPath] = s
-
 		s.actionChan.Init(1)
-		s.timeout = time.NewTimer(waitTimeout)
 		s.Tracks.Init()
 		go s.run()
 		return s, true
@@ -255,15 +252,9 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			if r.Publisher != nil {
 				waitTime = r.Publisher.GetPublisher().Config.WaitCloseTimeout
 			}
+			r.Subscribers.OnPublisherLost(event)
 			suber := r.Subscribers.Pick()
 			if suber != nil {
-				for sub, wait := range r.Subscribers {
-					if _, ok := r.waitP[wait]; ok {
-						wait.Reject(errors.New("publisher lost"))
-						delete(r.waitP, wait)
-					}
-					sub.OnEvent(event)
-				}
 				r.Subscribers.Broadcast(stateEvent)
 				if waitTime == 0 {
 					waitTime = suber.GetSubscriber().Config.WaitTimeout
@@ -286,7 +277,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			}
 			stateEvent = SEclose{event}
 			r.Subscribers.Broadcast(stateEvent)
-			r.Subscribers = nil
 			Streams.Delete(r.Path)
 			r.timeout.Stop()
 		}
@@ -311,11 +301,14 @@ func (r *Stream) IsClosed() bool {
 	return r.State == STATE_CLOSED
 }
 
-func (s *Stream) Close() {
-	s.Receive(ACTION_CLOSE)
+func (r *Stream) Close() {
+	r.Receive(ACTION_CLOSE)
 }
 
 func (s *Stream) Receive(event any) bool {
+	if s.IsClosed() {
+		return false
+	}
 	return s.actionChan.Send(event)
 }
 
@@ -324,19 +317,24 @@ func (s *Stream) onSuberClose(sub ISubscriber) {
 	if s.Publisher != nil {
 		s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 	}
-	if s.DelayCloseTimeout > 0 && len(s.Subscribers) == 0 {
+	if s.DelayCloseTimeout > 0 && s.Subscribers.Len() == 0 {
 		s.action(ACTION_LASTLEAVE)
 	}
 }
 
 // 流状态处理中枢，包括接收订阅发布指令等
 func (s *Stream) run() {
-	s.waitP = make(map[*waitTracks]struct{})
 	for {
 		select {
 		case <-s.timeout.C:
 			if s.State == STATE_PUBLISHING {
-				for sub := range s.Subscribers {
+				for sub := range s.Subscribers.internal {
+					if sub.IsClosed() {
+						delete(s.Subscribers.internal, sub)
+						s.Info("innersuber -1", zap.Int("remains", len(s.Subscribers.internal)))
+					}
+				}
+				for sub := range s.Subscribers.public {
 					if sub.IsClosed() {
 						s.onSuberClose(sub)
 					}
@@ -357,10 +355,7 @@ func (s *Stream) run() {
 				} else {
 					s.timeout.Reset(time.Second * 5)
 					//订阅者等待音视频轨道超时了，放弃等待，订阅成功
-					for wait := range s.waitP {
-						wait.Resolve()
-						delete(s.waitP, wait)
-					}
+					s.Subscribers.AbortWait()
 				}
 			} else {
 				s.Debug("timeout", zap.String("state", StateNames[s.State]))
@@ -377,9 +372,7 @@ func (s *Stream) run() {
 					if !republish {
 						s.Publisher = v.Value
 					}
-					if s.action(ACTION_PUBLISH) {
-						v.Resolve()
-					} else if republish {
+					if s.action(ACTION_PUBLISH) || republish {
 						v.Resolve()
 					} else {
 						v.Reject(ErrBadName)
@@ -391,8 +384,9 @@ func (s *Stream) run() {
 					suber := v.Value
 					io := suber.GetSubscriber()
 					sbConfig := io.Config
-					var waits waitTracks
-					waits.Promise = v
+					waits := &waitTracks{
+						Promise: v,
+					}
 					if ats := io.Args.Get("ats"); ats != "" {
 						waits.audio.Wait(strings.Split(ats, ",")...)
 					} else if sbConfig.SubAudio {
@@ -408,26 +402,21 @@ func (s *Stream) run() {
 					} else {
 						// waits.data.Wait()
 					}
-					s.Subscribers.Add(suber, &waits)
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						pubConfig := s.Publisher.GetPublisher().Config
-						if !pubConfig.PubAudio {
+						if !pubConfig.PubAudio || s.Subscribers.waitAborted {
 							waits.audio.StopWait()
 						}
-						if !pubConfig.PubVideo {
+						if !pubConfig.PubVideo || s.Subscribers.waitAborted {
 							waits.video.StopWait()
 						}
 						s.Tracks.Range(func(name string, t Track) {
 							waits.Accept(t)
 						})
 					}
-					if waits.NeedWait() {
-						s.waitP[&waits] = struct{}{}
-					} else {
-						v.Resolve()
-					}
-					if len(s.Subscribers) == 1 && s.State == STATE_WAITCLOSE {
+					s.Subscribers.Add(suber, waits)
+					if s.Subscribers.Len() == 1 && s.State == STATE_WAITCLOSE {
 						s.action(ACTION_FIRSTENTER)
 					}
 				case ISubscriber:
@@ -451,15 +440,7 @@ func (s *Stream) run() {
 					name := v.GetBase().Name
 					if s.Tracks.Add(name, v) {
 						s.Info("track +1", zap.String("name", name))
-						for sub, wait := range s.Subscribers {
-							if _, ok := s.waitP[wait]; ok {
-								if wait.Accept(v) {
-									delete(s.waitP, wait)
-								}
-							} else {
-								sub.OnEvent(v)
-							}
-						}
+						s.Subscribers.OnTrack(v)
 					}
 				case StreamAction:
 					s.action(v)
@@ -467,11 +448,7 @@ func (s *Stream) run() {
 					s.Error("unknown action", zap.Any("action", action))
 				}
 			} else {
-				for w := range s.waitP {
-					w.Reject(ErrStreamIsClosed)
-					// s.Subscribers[sub] = nil
-					// delete(s.waitP, w)
-				}
+				s.Subscribers.Dispose()
 				s.Tracks.Range(func(_ string, t Track) {
 					if dt, ok := t.(*track.Data); ok {
 						dt.Dispose()

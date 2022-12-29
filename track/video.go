@@ -142,6 +142,10 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	vt.Media.WriteAVCC(ts, frame)
 	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
 		nalulen := util.ReadBE[int](nalus[:vt.nalulenSize])
+		if nalulen == 0 {
+			vt.Stream.Warn("WriteAVCC with nalulen=0", zap.Int("len", len(nalus)))
+			return
+		}
 		if end := nalulen + vt.nalulenSize; len(nalus) >= end {
 			vt.AVRing.RingBuffer.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
 			nalus = nalus[end:]

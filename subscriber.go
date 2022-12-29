@@ -124,6 +124,7 @@ func (tp *TrackPlayer) ReadAudio() (ap *AVFrame[AudioSlice]) {
 // Subscriber 订阅者实体定义
 type Subscriber struct {
 	IO
+	IsInternal  bool //是否内部订阅,不放入订阅列表
 	Config      *config.Subscribe
 	TrackPlayer `json:"-"`
 }
@@ -198,7 +199,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	}
 	sendAudioDecConf := func(frame *AVFrame[AudioSlice]) {
 		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-		s.Spesific.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+		spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
 	}
 	var sendVideoFrame func(*AVFrame[NALUSlice])
 	var sendAudioFrame func(*AVFrame[AudioSlice])
@@ -347,12 +348,15 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			time.Sleep(time.Second)
 		}
 	}
+	println("exit")
 }
 
 func (s *Subscriber) onStop() {
 	if !s.IsClosed() {
 		s.Info("stop")
-		s.Stream.Receive(s.Spesific)
+		if !s.IsInternal {
+			s.Stream.Receive(s.Spesific)
+		}
 	}
 }
 

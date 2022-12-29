@@ -31,6 +31,7 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// 	return
 	// }
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
+	// println("数据时间差", 数据时间差, "实际时间差", 实际时间差)
 	if 过快毫秒 := (数据时间差 - 实际时间差) / time.Millisecond; 过快毫秒 > 300 {
 		if 过快毫秒 > p.等待上限 {
 			time.Sleep(time.Millisecond * p.等待上限)
@@ -57,10 +58,27 @@ func (av *Media[T]) SetSpeedLimit(value int) {
 	av.等待上限 = time.Duration(value)
 }
 
-func (av *Media[T]) Init(n int) {
-	av.AVRing.Init(n)
-	av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
-	av.等待上限 = time.Duration(config.Global.SpeedLimit)
+func (av *Media[T]) SetStuff(stuff ...any) {
+	for _, s := range stuff {
+		switch v := s.(type) {
+		case time.Duration:
+			av.Poll = v
+		case string:
+			av.Name = v
+		case int:
+			av.AVRing.Init(v)
+			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
+			av.等待上限 = time.Duration(config.Global.SpeedLimit)
+		case uint32:
+			av.SampleRate = v
+		case byte:
+			av.DecoderConfiguration.PayloadType = v
+		case IStream:
+			av.Stream = v
+		case RTPWriter:
+			av.RTPWriter = v
+		}
+	}
 }
 
 func (av *Media[T]) LastWriteTime() time.Time {
