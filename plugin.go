@@ -254,7 +254,7 @@ func (opt *Plugin) SubscribeBlock(streamPath string, sub ISubscriber, t byte) (e
 var ErrNoPullConfig = errors.New("no pull config")
 var Pullers sync.Map
 
-func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool) (err error) {
+func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int) (err error) {
 	zurl := zap.String("url", url)
 	opt.Info("pull", zap.String("path", streamPath), zurl)
 	defer func() {
@@ -302,9 +302,13 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save bool
 		}
 		opt.Warn("stop pull stop reconnect", zurl)
 	}()
-
-	if save {
-		pullConf.AddPull(streamPath, url)
+	switch save {
+	case 1:
+		pullConf.AddPullOnStart(streamPath, url)
+	case 2:
+		pullConf.AddPullOnSub(streamPath, url)
+	}
+	if save > 0 {
 		if opt.Modified == nil {
 			opt.Modified = make(config.Config)
 		}

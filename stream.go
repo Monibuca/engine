@@ -405,15 +405,15 @@ func (s *Stream) run() {
 					if s.Publisher != nil {
 						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
 						pubConfig := s.Publisher.GetPublisher().Config
+						s.Tracks.Range(func(name string, t Track) {
+							waits.Accept(t)
+						})
 						if !pubConfig.PubAudio || s.Subscribers.waitAborted {
 							waits.audio.StopWait()
 						}
 						if !pubConfig.PubVideo || s.Subscribers.waitAborted {
 							waits.video.StopWait()
 						}
-						s.Tracks.Range(func(name string, t Track) {
-							waits.Accept(t)
-						})
 					}
 					s.Subscribers.Add(suber, waits)
 					if s.Subscribers.Len() == 1 && s.State == STATE_WAITCLOSE {

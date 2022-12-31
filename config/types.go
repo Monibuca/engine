@@ -54,21 +54,27 @@ func (c *Subscribe) GetSubscribeConfig() *Subscribe {
 }
 
 type Pull struct {
-	RePull          int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
-	PullOnStart     bool              // 启动时拉流
-	PullOnSubscribe bool              // 订阅时自动拉流
-	PullList        map[string]string // 自动拉流列表，以streamPath为key，url为value
+	RePull      int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
+	PullOnStart map[string]string // 启动时拉流的列表
+	PullOnSub   map[string]string // 订阅时自动拉流的列表
 }
 
 func (p *Pull) GetPullConfig() *Pull {
 	return p
 }
 
-func (p *Pull) AddPull(streamPath string, url string) {
-	if p.PullList == nil {
-		p.PullList = make(map[string]string)
+func (p *Pull) AddPullOnStart(streamPath string, url string) {
+	if p.PullOnStart == nil {
+		p.PullOnStart = make(map[string]string)
 	}
-	p.PullList[streamPath] = url
+	p.PullOnStart[streamPath] = url
+}
+
+func (p *Pull) AddPullOnSub(streamPath string, url string) {
+	if p.PullOnSub == nil {
+		p.PullOnSub = make(map[string]string)
+	}
+	p.PullOnSub[streamPath] = url
 }
 
 type Push struct {
