@@ -389,11 +389,15 @@ func (s *Stream) run() {
 					}
 					if ats := io.Args.Get("ats"); ats != "" {
 						waits.audio.Wait(strings.Split(ats, ",")...)
+					} else if len(sbConfig.SubAudioTracks) > 0 {
+						waits.audio.Wait(sbConfig.SubAudioTracks...)
 					} else if sbConfig.SubAudio {
 						waits.audio.Wait()
 					}
 					if vts := io.Args.Get("vts"); vts != "" {
 						waits.video.Wait(strings.Split(vts, ",")...)
+					} else if len(sbConfig.SubVideoTracks) > 0 {
+						waits.video.Wait(sbConfig.SubVideoTracks...)
 					} else if sbConfig.SubVideo {
 						waits.video.Wait()
 					}
