@@ -7,6 +7,7 @@ import (
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
+
 type RTPWriter interface {
 	writeRTPFrame(frame *RTPFrame)
 }
@@ -33,7 +34,6 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 	return av.UnmarshalRTPPacket(&p)
 }
 
-
 // WriteRTPPack 写入已反序列化的RTP包
 func (av *Media[T]) WriteRTPPack(p *rtp.Packet) {
 	for frame := av.UnmarshalRTPPacket(p); frame != nil; frame = av.nextRTPFrame() {
@@ -48,12 +48,11 @@ func (av *Media[T]) WriteRTP(raw []byte) {
 	}
 }
 
-
 type RTPDemuxer struct {
-	lastSeq  uint16 //上一个收到的序号，用于乱序重排
-	lastSeq2 uint16 //记录上上一个收到的序列号
-	乱序重排     util.RTPReorder[*RTPFrame]
-	RTPWriter
+	lastSeq   uint16 //上一个收到的序号，用于乱序重排
+	lastSeq2  uint16 //记录上上一个收到的序列号
+	乱序重排      util.RTPReorder[*RTPFrame]
+	RTPWriter `json:"-"`
 }
 
 // 获取缓存中下一个rtpFrame
@@ -87,6 +86,4 @@ func (av *RTPDemuxer) recorderRTP(frame *RTPFrame) *RTPFrame {
 
 type RTPMuxer struct {
 	rtpSequence uint16 //用于生成下一个rtp包的序号
-	
 }
-
