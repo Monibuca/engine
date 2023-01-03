@@ -48,6 +48,7 @@ func InstallPlugin(config config.Plugin) *Plugin {
 }
 
 type FirstConfig config.Config
+type DefaultYaml string
 
 // Plugin 插件信息
 type Plugin struct {
@@ -91,20 +92,20 @@ func (opt *Plugin) handle(pattern string, handler http.Handler) {
 }
 
 // 读取独立配置合并入总配置中
-// TODO: 覆盖逻辑有待商榷
 func (opt *Plugin) assign() {
 	f, err := os.Open(opt.settingPath())
 	defer f.Close()
 	if err == nil {
 		var b []byte
 		b, err = io.ReadAll(f)
-		opt.modifiedYaml = string(b)
-		if err = yaml.Unmarshal(b, &opt.Modified); err == nil {
-			if opt.RawConfig == nil {
-				opt.RawConfig = opt.Modified
-			} else {
-				opt.RawConfig.Assign(opt.Modified)
+		if err == nil {
+			opt.modifiedYaml = string(b)
+			if err = yaml.Unmarshal(b, &opt.Modified); err == nil {
+				err = yaml.Unmarshal(b, &opt.RawConfig)
 			}
+		}
+		if err != nil {
+			opt.Warn("assign config failed", zap.Error(err))
 		}
 	}
 	if opt == Engine {
@@ -150,6 +151,7 @@ func (opt *Plugin) run() {
 	if err != nil {
 		panic(err)
 	}
+	delete(opt.RawConfig, "defaultyaml")
 	opt.Debug("config", zap.Any("config", opt.Config))
 	// opt.RawConfig = config.Struct2Config(opt.Config)
 	if conf, ok := opt.Config.(config.HTTPConfig); ok {

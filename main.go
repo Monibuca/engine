@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -96,11 +97,19 @@ func Run(ctx context.Context, configFile string) (err error) {
 	EventBus = make(chan any, EngineConfig.EventBusSize)
 	go EngineConfig.Listen(Engine)
 	for name, plugin := range Plugins {
-		plugin.RawConfig = cg.GetChild(name)
-		if plugin.RawConfig != nil {
-			if b, err := yaml.Marshal(plugin.RawConfig); err == nil {
+		userConfig := cg.GetChild(name)
+		if userConfig != nil {
+			if b, err := yaml.Marshal(userConfig); err == nil {
 				plugin.Yaml = string(b)
 			}
+		}
+		if defaultYaml := reflect.ValueOf(plugin.Config).Elem().FieldByName("DefaultYaml"); defaultYaml.IsValid() {
+			if err := yaml.Unmarshal([]byte(defaultYaml.String()), &plugin.RawConfig); err != nil {
+				log.Error("parsing default config error:", err)
+			}
+		}
+		if plugin.Yaml != "" {
+			yaml.Unmarshal([]byte(plugin.Yaml), &plugin.RawConfig)
 		}
 		plugin.assign()
 	}

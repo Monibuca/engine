@@ -348,11 +348,10 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			time.Sleep(time.Second)
 		}
 	}
-	println("exit")
 }
 
 func (s *Subscriber) onStop() {
-	if !s.IsClosed() {
+	if !s.Stream.IsClosed() {
 		s.Info("stop")
 		if !s.IsInternal {
 			s.Stream.Receive(s.Spesific)

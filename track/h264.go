@@ -36,7 +36,6 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	if len(vt.Value.Raw) > 0 {
 		vt.Flush()
 	}
-	// println(vt.Value.DTS, vt.Value.PTS, vt.Value.PTS-vt.Value.DTS, len(frame))
 	// println(vt.FPS)
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {

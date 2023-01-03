@@ -26,6 +26,7 @@ func (p *流速控制) 时间戳差(绝对时间戳 uint32) time.Duration {
 }
 func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	数据时间差, 实际时间差 := p.时间戳差(绝对时间戳), time.Since(p.起始时间)
+	// println("数据时间差", 数据时间差, "实际时间差", 实际时间差, "绝对时间戳", 绝对时间戳, "起始时间戳", p.起始时间戳, "起始时间", p.起始时间.Format("2006-01-02 15:04:05"))
 	// if 实际时间差 > 数据时间差 {
 	// 	p.重置(绝对时间戳)
 	// 	return
@@ -136,6 +137,7 @@ func (av *Media[T]) Flush() {
 		av.重置(curValue.AbsTime)
 	} else {
 		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
+		println(curValue.DeltaTime ,curValue.DTS , preValue.DTS)
 		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
 	}
 	av.Base.Flush(&curValue.BaseFrame)

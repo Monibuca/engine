@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"strings"
 
-	"go.uber.org/zap"
 	"m7s.live/engine/v4/log"
 )
 
@@ -162,11 +161,11 @@ func (config Config) Merge(source Config) {
 			case Config:
 				m.Merge(v.(Config))
 			default:
-				log.Debug("merge", zap.String("k", k), zap.Any("v", v))
+				log.Debug("merge", k, v)
 				config[k] = v
 			}
 		} else {
-			log.Debug("exist", zap.String("k", k))
+			log.Debug("exist", k)
 		}
 	}
 }

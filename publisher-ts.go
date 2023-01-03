@@ -87,8 +87,8 @@ func (t *TSPublisher) OnPES(pes mpegts.MpegTsPESPacket) {
 					t.AudioTrack.WriteSlice(pes.Payload[7:frameLen])
 					pes.Payload = pes.Payload[frameLen:remainLen]
 					remainLen -= frameLen
-					t.AudioTrack.Flush()
 				}
+				t.AudioTrack.Flush()
 			case *track.G711:
 				t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload)
 			}
