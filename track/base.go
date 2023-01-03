@@ -137,7 +137,7 @@ func (av *Media[T]) Flush() {
 		av.重置(curValue.AbsTime)
 	} else {
 		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
-		println(curValue.DeltaTime ,curValue.DTS , preValue.DTS)
+		// println(curValue.DeltaTime ,curValue.DTS , preValue.DTS)
 		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
 	}
 	av.Base.Flush(&curValue.BaseFrame)
