@@ -14,6 +14,15 @@ func NewDTSEstimator() *DTSEstimator {
 	return result
 }
 
+func (d *DTSEstimator) Clone() *DTSEstimator {
+	return &DTSEstimator{
+		d.hasB,
+		d.prevPTS,
+		d.prevDTS,
+		append([]uint32(nil), d.cache...),
+	}
+}
+
 func (d *DTSEstimator) add(pts uint32) {
 	i := 0
 	if len(d.cache) >= 4 {

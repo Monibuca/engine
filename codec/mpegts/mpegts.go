@@ -71,15 +71,15 @@ const (
 	STREAM_TYPE_PRIVATE_DATA     = 0x06
 	STREAM_TYPE_MHEG             = 0x07
 
-	STREAM_TYPE_H264  = 0x1B
-	STREAM_TYPE_H265  = 0x24
-	STREAM_TYPE_AAC   = 0x0F
-	STREAM_TYPE_G711A = 0x90
-	STREAM_TYPE_G711U = 0x91
+	STREAM_TYPE_H264   = 0x1B
+	STREAM_TYPE_H265   = 0x24
+	STREAM_TYPE_AAC    = 0x0F
+	STREAM_TYPE_G711A  = 0x90
+	STREAM_TYPE_G711U  = 0x91
 	STREAM_TYPE_G722_1 = 0x92
 	STREAM_TYPE_G723_1 = 0x93
-	STREAM_TYPE_G726  = 0x94
-	STREAM_TYPE_G729  = 0x99
+	STREAM_TYPE_G726   = 0x94
+	STREAM_TYPE_G729   = 0x99
 
 	STREAM_TYPE_ADPCM = 0x11
 	STREAM_TYPE_PCM   = 0x0A
@@ -102,24 +102,10 @@ const (
 //
 
 type MpegTsStream struct {
-	firstTsPkt *MpegTsPacket // 每一帧的第一个TS包
-	patPkt     *MpegTsPacket // 装载PAT的TS包
-	pmtPkt     *MpegTsPacket // 装载PMT的TS包
-	pat        *MpegTsPAT    // PAT表信息
-	pmt        *MpegTsPMT    // PMT表信息
-	closed     bool          //是否已经关闭
-	// TsPesPktChan chan *MpegTsPesStream // TS + PES Packet Channel,将封装的每一帧ES数据,通过channel来传输
-}
-
-func NewMpegTsStream() (ts *MpegTsStream) {
-	ts = new(MpegTsStream)
-	ts.firstTsPkt = new(MpegTsPacket)
-	ts.patPkt = new(MpegTsPacket)
-	ts.pmtPkt = new(MpegTsPacket)
-	ts.pat = new(MpegTsPAT)
-	ts.pmt = new(MpegTsPMT)
-	// ts.TsPesPktChan = make(chan *MpegTsPesStream, bufferLength)
-	return
+	PAT         MpegTsPAT // PAT表信息
+	PMT         MpegTsPMT // PMT表信息
+	tsPktBuffer [][]byte  // TS包缓存
+	PESChan     chan *MpegTsPESPacket
 }
 
 // ios13818-1-CN.pdf 33/165
@@ -514,64 +500,70 @@ func (s *MpegTsStream) ReadPAT(packet *MpegTsPacket, pr io.Reader) (err error) {
 			pr = &util.Crc32Reader{R: pr, Crc32: 0xffffffff}
 		}
 		// Header + PSI + Paylod
-		pat, err := ReadPAT(pr)
-		if err != nil {
-			return err
-		}
-		s.pat = &pat
-		s.patPkt = packet
+		s.PAT, err = ReadPAT(pr)
 	}
 	return
 }
 func (s *MpegTsStream) ReadPMT(packet *MpegTsPacket, pr io.Reader) (err error) {
 	// 在读取PAT中已经将所有频道节目信息(PMT_PID)保存了起来
 	// 接着读取所有TS包里面的PID,找出PID==PMT_PID的TS包,就是PMT表
-	for _, v := range s.pat.Program {
+	for _, v := range s.PAT.Program {
 		if v.ProgramMapPID == packet.Header.Pid {
 			if len(packet.Payload) == 188 {
 				pr = &util.Crc32Reader{R: pr, Crc32: 0xffffffff}
 			}
 			// Header + PSI + Paylod
-			pmt, err := ReadPMT(pr)
-			if err != nil {
-				return err
-			}
-			// send pmt
-			s.pmt = &pmt
-			s.pmtPkt = packet
+			s.PMT, err = ReadPMT(pr)
 		}
 	}
 	return
 }
-func (s *MpegTsStream) Feed(ts io.Reader, onStream func(MpegTsPmtStream), onPES func(MpegTsPESPacket)) error {
+func (s *MpegTsStream) Feed(ts io.Reader) error {
 	var frame int64
 	var tsPktArr []MpegTsPacket
+	var reader, pr bytes.Reader
+	defer func() {
+		s.tsPktBuffer = s.tsPktBuffer[:0]
+	}()
 	for {
-		packet, err := ReadTsPacket(ts)
+		bufferLen := len(s.tsPktBuffer)
+		if cap(s.tsPktBuffer) > bufferLen {
+			if s.tsPktBuffer = s.tsPktBuffer[:bufferLen+1]; s.tsPktBuffer[bufferLen] == nil {
+				s.tsPktBuffer[bufferLen] = make([]byte, TS_PACKET_SIZE)
+			}
+		} else {
+			s.tsPktBuffer = append(s.tsPktBuffer, make([]byte, TS_PACKET_SIZE))
+		}
+		tsData := s.tsPktBuffer[bufferLen]
+		_, err := io.ReadFull(ts, tsData)
+		reader.Reset(tsData)
 		if err == io.EOF {
 			// 文件结尾 把最后面的数据发出去
 			pesPkt, err := TsToPES(tsPktArr)
 			if err != nil {
 				return err
 			}
-			onPES(pesPkt)
+			s.PESChan <- &pesPkt
 			return nil
+		} else if err != nil {
+			return err
 		}
+		packet, err := ReadTsPacket(&reader)
 		if err != nil {
 			return err
 		}
-		pr := bytes.NewReader(packet.Payload)
-		err = s.ReadPAT(&packet, pr)
+		pr.Reset(packet.Payload)
+		err = s.ReadPAT(&packet, &pr)
 		if err != nil {
 			return err
 		}
-		err = s.ReadPMT(&packet, pr)
+		err = s.ReadPMT(&packet, &pr)
 		if err != nil {
 			return err
 		}
 		// 在读取PMT中已经将所有的音视频PES的索引信息全部保存了起来
 		// 接着读取所有TS包里面的PID,找出PID==elementaryPID的TS包,就是音视频数据
-		for _, v := range s.pmt.Stream {
+		for _, v := range s.PMT.Stream {
 			if v.ElementaryPID == packet.Header.Pid {
 				if packet.Header.PayloadUnitStartIndicator == 1 {
 					if frame != 0 {
@@ -579,11 +571,10 @@ func (s *MpegTsStream) Feed(ts io.Reader, onStream func(MpegTsPmtStream), onPES 
 						if err != nil {
 							return err
 						}
-						onPES(pesPkt)
-						tsPktArr = nil
+						s.PESChan <- &pesPkt
+						s.tsPktBuffer = s.tsPktBuffer[:0]
+						tsPktArr = tsPktArr[:0]
 					}
-					s.firstTsPkt = &packet
-					onStream(v)
 					frame++
 				}
 				tsPktArr = append(tsPktArr, packet)

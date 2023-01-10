@@ -39,7 +39,7 @@ func (vt *H264) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	// println(vt.FPS)
 }
 func (vt *H264) WriteSlice(slice NALUSlice) {
-	// println(slice.H264Type())
+	// print(slice.H264Type())
 	switch slice.H264Type() {
 	case codec.NALU_SPS:
 		vt.SPSInfo, _ = codec.ParseSPS(slice[0])

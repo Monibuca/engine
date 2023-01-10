@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -230,6 +231,26 @@ func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Requ
 	if err := Engine.Publish(streamPath, &pub); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	} else {
+		w.Write([]byte("ok"))
+	}
+}
+
+func (conf *GlobalConfig) API_replay_ts(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	if streamPath == "" {
+		streamPath = "dump/ts"
+	}
+	dumpFile := q.Get("dump")
+	if dumpFile == "" {
+		dumpFile = streamPath + ".ts"
+	}
+	var pub TSPublisher
+	if err := Engine.Publish(streamPath, &pub); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		f, _ := os.Open(dumpFile)
+		go pub.Feed(f)
 		w.Write([]byte("ok"))
 	}
 }

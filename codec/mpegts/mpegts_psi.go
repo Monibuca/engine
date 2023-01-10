@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"m7s.live/engine/v4/util"
 )
@@ -51,7 +50,7 @@ func ReadPSI(r io.Reader, pt uint32) (lr *io.LimitedReader, psi MpegTsPSI, err e
 		// ioutil.Discard常用在,http中,如果Get请求,获取到了很大的Body,要丢弃Body,就用这个方法.
 		// 因为http默认重链接的时候,必须等body读取完成.
 		// 用于发送需要读取但不想存储的数据,目的是耗尽读取端的数据
-		if _, err = io.CopyN(ioutil.Discard, r, int64(pointer_field)); err != nil {
+		if _, err = io.CopyN(io.Discard, r, int64(pointer_field)); err != nil {
 			return
 		}
 	}

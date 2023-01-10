@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 
 	"m7s.live/engine/v4/util"
 )
@@ -295,14 +294,14 @@ func ReadPESHeader(r io.Reader) (header MpegTsPESHeader, err error) {
 
 		// pes_PrivateData(128)
 		if header.PesPrivateDataFlag != 0 {
-			if _, err = io.CopyN(ioutil.Discard, lrHeader, int64(16)); err != nil {
+			if _, err = io.CopyN(io.Discard, lrHeader, int64(16)); err != nil {
 				return
 			}
 		}
 
 		// packFieldLength(8)
 		if header.PackHeaderFieldFlag != 0 {
-			if _, err = io.CopyN(ioutil.Discard, lrHeader, int64(1)); err != nil {
+			if _, err = io.CopyN(io.Discard, lrHeader, int64(1)); err != nil {
 				return
 			}
 		}
@@ -310,14 +309,14 @@ func ReadPESHeader(r io.Reader) (header MpegTsPESHeader, err error) {
 		// marker_bit(1) + programPacketSequenceCounter(7) + marker_bit(1) +
 		// mpeg1_mpeg2_Identifier(1) + originalStuffLength(6)
 		if header.ProgramPacketSequenceCounterFlag != 0 {
-			if _, err = io.CopyN(ioutil.Discard, lrHeader, int64(2)); err != nil {
+			if _, err = io.CopyN(io.Discard, lrHeader, int64(2)); err != nil {
 				return
 			}
 		}
 
 		// 01 + p_STD_bufferScale(1) + p_STD_bufferSize(13)
 		if header.PSTDBufferFlag != 0 {
-			if _, err = io.CopyN(ioutil.Discard, lrHeader, int64(2)); err != nil {
+			if _, err = io.CopyN(io.Discard, lrHeader, int64(2)); err != nil {
 				return
 			}
 		}
@@ -325,7 +324,7 @@ func ReadPESHeader(r io.Reader) (header MpegTsPESHeader, err error) {
 		// marker_bit(1) + pes_Extension_Field_Length(7) +
 		// streamIDExtensionFlag(1)
 		if header.PesExtensionFlag != 0 {
-			if _, err = io.CopyN(ioutil.Discard, lrHeader, int64(2)); err != nil {
+			if _, err = io.CopyN(io.Discard, lrHeader, int64(2)); err != nil {
 				return
 			}
 		}
@@ -333,7 +332,7 @@ func ReadPESHeader(r io.Reader) (header MpegTsPESHeader, err error) {
 
 	// 把剩下的头的数据消耗掉
 	if lrHeader.N > 0 {
-		if _, err = io.CopyN(ioutil.Discard, lrHeader, int64(lrHeader.N)); err != nil {
+		if _, err = io.CopyN(io.Discard, lrHeader, int64(lrHeader.N)); err != nil {
 			return
 		}
 	}

@@ -130,7 +130,7 @@ var Global = &Engine{
 	},
 	LogLevel:            "info",
 	RTPReorderBufferLen: 50,
-	SpeedLimit:          0,
+	SpeedLimit:          500,
 	EventBusSize:        10,
 }
 
