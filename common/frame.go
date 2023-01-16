@@ -27,9 +27,6 @@ type RawSlice interface {
 	~[][]byte | ~[]byte
 }
 
-//	func (nalu *H264NALU) Append(slice ...NALUSlice) {
-//		*nalu = append(*nalu, slice...)
-//	}
 func (nalu NALUSlice) H264Type() (naluType codec.H264NALUType) {
 	return naluType.Parse(nalu[0][0])
 }

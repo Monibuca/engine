@@ -54,6 +54,9 @@ func (p *Publisher) OnEvent(event any) {
 }
 
 func (p *Publisher) WriteAVCCVideo(ts uint32, frame common.AVCCFrame) {
+	if len(frame) < 6 {
+		return
+	}
 	if p.VideoTrack == nil {
 		if frame.IsSequence() {
 			ts = 0
@@ -77,11 +80,14 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame common.AVCCFrame) {
 }
 
 func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
+	if len(frame) < 4 {
+		return
+	}
 	if p.AudioTrack == nil {
 		codecID := frame.AudioCodecID()
 		switch codecID {
 		case codec.CodecID_AAC:
-			if !frame.IsSequence() || len(frame) < 4 {
+			if !frame.IsSequence() {
 				return
 			}
 			a := track.NewAAC(p.Stream)

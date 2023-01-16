@@ -526,15 +526,13 @@ func (s *MpegTsStream) Feed(ts io.Reader) error {
 		s.tsPktBuffer = s.tsPktBuffer[:0]
 	}()
 	for {
-		bufferLen := len(s.tsPktBuffer)
-		if cap(s.tsPktBuffer) > bufferLen {
-			if s.tsPktBuffer = s.tsPktBuffer[:bufferLen+1]; s.tsPktBuffer[bufferLen] == nil {
-				s.tsPktBuffer[bufferLen] = make([]byte, TS_PACKET_SIZE)
-			}
+		var tsData []byte
+		if tsDataP := util.MallocSlice(&s.tsPktBuffer); tsDataP == nil {
+			tsData = make([]byte, TS_PACKET_SIZE)
+			s.tsPktBuffer = append(s.tsPktBuffer, tsData)
 		} else {
-			s.tsPktBuffer = append(s.tsPktBuffer, make([]byte, TS_PACKET_SIZE))
+			tsData = *tsDataP
 		}
-		tsData := s.tsPktBuffer[bufferLen]
 		_, err := io.ReadFull(ts, tsData)
 		reader.Reset(tsData)
 		if err == io.EOF {

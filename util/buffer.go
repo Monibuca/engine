@@ -56,8 +56,13 @@ func (b *Buffer) Write(a []byte) (n int, err error) {
 func (b Buffer) Len() int {
 	return len(b)
 }
+
 func (b Buffer) CanRead() bool {
-	return b.Len() > 0
+	return b.CanReadN(1)
+}
+
+func (b Buffer) CanReadN(n int) bool {
+	return b.Len() >= n
 }
 func (b Buffer) Cap() int {
 	return cap(b)
@@ -85,6 +90,16 @@ func (b *Buffer) Glow(n int) {
 	l := b.Len()
 	b.Malloc(n)
 	*b = b.SubBuf(0, l)
+}
+
+// MallocSlice 用来对容量够的slice进行长度扩展+1，并返回新的位置的指针，用于写入
+func MallocSlice[T any](slice *[]T) *T {
+	oslice := *slice
+	if rawLen := len(oslice); cap(oslice) > rawLen {
+		*slice = oslice[:rawLen+1]
+		return &(*slice)[rawLen]
+	}
+	return nil
 }
 
 // ConcatBuffers 合并碎片内存为一个完整内存

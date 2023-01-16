@@ -138,6 +138,8 @@ func (vt *Video) WriteAnnexB(frame AnnexBFrame) (s []NALUSlice) {
 	}
 	return
 }
+
+
 func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	vt.Media.WriteAVCC(ts, frame)
 	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
@@ -147,7 +149,12 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 			return
 		}
 		if end := nalulen + vt.nalulenSize; len(nalus) >= end {
-			vt.AVRing.RingBuffer.Value.AppendRaw(NALUSlice{nalus[vt.nalulenSize:end]})
+			slice := nalus[vt.nalulenSize:end]
+			if _rawSlice := util.MallocSlice(&vt.AVRing.Value.Raw); _rawSlice == nil {
+				vt.Value.AppendRaw(NALUSlice{slice})
+			} else {
+				_rawSlice.Reset().Append(slice)
+			}
 			nalus = nalus[end:]
 		} else {
 			vt.Stream.Error("WriteAVCC", zap.Int("len", len(nalus)), zap.Int("naluLenSize", vt.nalulenSize), zap.Int("end", end))
