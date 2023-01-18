@@ -93,9 +93,7 @@ func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 }
 
 func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
-	curValue := &av.Value
-	curValue.BytesIn += len(frame)
-	curValue.AppendAVCC(frame)
+	av.Media.WriteAVCC(ts, frame)
 	av.generateTimestamp(ts * 90)
 	av.Flush()
 }

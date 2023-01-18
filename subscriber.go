@@ -312,9 +312,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					break
 				}
 			}
-			if vstate < SUBSTATE_NORMAL {
-				continue
-			}
+			// if vstate < SUBSTATE_NORMAL {
+			// 	continue
+			// }
 		}
 		// 正常模式下或者纯音频模式下，音频开始播放
 		if hasAudio {

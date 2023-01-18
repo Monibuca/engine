@@ -132,6 +132,8 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	vt.Value.IFrame = frame.IsIDR()
 	vt.Media.WriteAVCC(ts, frame)
+	vt.Value.DTS = ts * 90
+	vt.Value.PTS = (ts + frame.CTS()) * 90
 	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
 		nalulen := util.ReadBE[int](nalus[:vt.nalulenSize])
 		if nalulen == 0 {
@@ -227,13 +229,13 @@ func (vt *Video) CompleteAVCC(rv *AVFrame[NALUSlice]) {
 }
 
 func (vt *Video) Flush() {
-	if vt.Value.IFrame {
+	rv := &vt.Value
+	if rv.IFrame {
 		vt.computeGOP()
 	}
 	if vt.Attached == 0 && vt.IDRing != nil && vt.DecoderConfiguration.Seq > 0 {
 		defer vt.Attach()
 	}
-	rv := &vt.Value
 	// 没有实际媒体数据
 	if len(rv.Raw) == 0 {
 		rv.Reset()

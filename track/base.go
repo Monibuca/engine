@@ -130,29 +130,30 @@ func (av *Media[T]) generateTimestamp(ts uint32) {
 
 func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 	curValue := &av.Value
-	cts := frame.CTS()
+	curValue.AbsTime = ts
 	curValue.BytesIn += len(frame)
 	curValue.AppendAVCC(frame)
-	curValue.DTS = ts * 90
-	curValue.PTS = (ts + cts) * 90
 	// av.Stream.Tracef("WriteAVCC:ts %d,cts %d,len %d", ts, cts, len(frame))
 }
 
 func (av *Media[T]) Flush() {
 	curValue, preValue := &av.Value, av.LastValue
+	// 补完RTP
 	if config.Global.EnableRTP && len(curValue.RTP) == 0 {
 		av.CompleteRTP(curValue)
 	}
+	// 补完AVCC
 	if config.Global.EnableAVCC && len(curValue.AVCC) == 0 {
 		av.CompleteAVCC(curValue)
 	}
 	if av.起始时间.IsZero() {
-		curValue.AbsTime = curValue.DTS / 90
+		curValue.DeltaTime = 0
 		av.重置(curValue.AbsTime)
-	} else {
+	} else if curValue.AbsTime == 0 {
 		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
-		// println(curValue.DeltaTime ,curValue.DTS , preValue.DTS)
 		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
+	} else {
+		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime
 	}
 	av.Base.Flush(&curValue.BaseFrame)
 	if av.等待上限 > 0 {

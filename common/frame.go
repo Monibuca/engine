@@ -142,6 +142,8 @@ func (av *AVFrame[T]) Reset() {
 		av.Raw = av.Raw[:0]
 	}
 	av.BytesIn = 0
+	av.AbsTime = 0
+	av.DeltaTime = 0
 }
 
 func (avcc AVCCFrame) IsIDR() bool {

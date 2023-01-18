@@ -14,9 +14,9 @@ type AVRing[T RawSlice] struct {
 
 func (r *AVRing[T]) Step() *AVFrame[T] {
 	current := r.RingBuffer.MoveNext()
-	current.Sequence = r.MoveCount
 	current.canRead = false
 	current.Reset()
+	current.Sequence = r.MoveCount
 	r.LastValue.canRead = true
 	return current
 }
