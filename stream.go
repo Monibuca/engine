@@ -387,21 +387,21 @@ func (s *Stream) run() {
 					waits := &waitTracks{
 						Promise: v,
 					}
-					if ats := io.Args.Get("ats"); ats != "" {
+					if ats := io.Args.Get(sbConfig.SubAudioArgName); ats != "" {
 						waits.audio.Wait(strings.Split(ats, ",")...)
 					} else if len(sbConfig.SubAudioTracks) > 0 {
 						waits.audio.Wait(sbConfig.SubAudioTracks...)
 					} else if sbConfig.SubAudio {
 						waits.audio.Wait()
 					}
-					if vts := io.Args.Get("vts"); vts != "" {
+					if vts := io.Args.Get(sbConfig.SubVideoArgName); vts != "" {
 						waits.video.Wait(strings.Split(vts, ",")...)
 					} else if len(sbConfig.SubVideoTracks) > 0 {
 						waits.video.Wait(sbConfig.SubVideoTracks...)
 					} else if sbConfig.SubVideo {
 						waits.video.Wait()
 					}
-					if dts := io.Args.Get("dts"); dts != "" {
+					if dts := io.Args.Get(sbConfig.SubDataArgName); dts != "" {
 						waits.data.Wait(strings.Split(dts, ",")...)
 					} else {
 						// waits.data.Wait()

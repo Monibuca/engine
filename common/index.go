@@ -80,17 +80,16 @@ type VideoTrack interface {
 	GetDecoderConfiguration() DecoderConfiguration[NALUSlice]
 	CurrentFrame() *AVFrame[NALUSlice]
 	PreFrame() *AVFrame[NALUSlice]
-	WriteSlice(NALUSlice)
+	WriteSliceBytes(slice []byte)
 	WriteAnnexB(uint32, uint32, AnnexBFrame)
 	SetLostFlag()
 }
 
 type AudioTrack interface {
 	AVTrack
-	GetDecoderConfiguration() DecoderConfiguration[AudioSlice]
-	CurrentFrame() *AVFrame[AudioSlice]
-	PreFrame() *AVFrame[AudioSlice]
-	WriteSlice(AudioSlice)
+	GetDecoderConfiguration() DecoderConfiguration[[]byte]
+	CurrentFrame() *AVFrame[[]byte]
+	PreFrame() *AVFrame[[]byte]
 	WriteADTS([]byte)
-	WriteRaw(uint32, AudioSlice)
+	WriteRaw(uint32, []byte)
 }

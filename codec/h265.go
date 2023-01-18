@@ -14,6 +14,10 @@ func (H265NALUType) Parse(b byte) H265NALUType {
 	return H265NALUType(b & 0x7E >> 1)
 }
 
+func ParseH265NALUType(b byte) H265NALUType {
+	return H265NALUType(b & 0x7E >> 1)
+}
+
 const (
 	// HEVC_VPS    = 0x40
 	// HEVC_SPS    = 0x42

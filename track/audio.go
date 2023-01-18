@@ -7,11 +7,8 @@ import (
 	. "m7s.live/engine/v4/common"
 )
 
-var adcflv1 = []byte{codec.FLV_TAG_TYPE_AUDIO, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0}
-var adcflv2 = []byte{0, 0, 0, 15}
-
 type Audio struct {
-	Media[AudioSlice]
+	Media[[]byte]
 	CodecID    codec.AudioCodecID
 	Channels   byte
 	SampleSize byte
@@ -75,7 +72,7 @@ func (a *Audio) WriteADTS(adts []byte) {
 	a.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
 	a.Channels = channel
 	avcc := []byte{0xAF, 0x00, config1, config2}
-	a.DecoderConfiguration = DecoderConfiguration[AudioSlice]{
+	a.DecoderConfiguration = DecoderConfiguration[[]byte]{
 		97,
 		net.Buffers{avcc},
 		avcc[2:],
@@ -84,41 +81,32 @@ func (a *Audio) WriteADTS(adts []byte) {
 	a.Attach()
 }
 
-func (av *Audio) WriteRaw(pts uint32, raw AudioSlice) {
+func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	curValue := &av.Value
 	curValue.BytesIn += len(raw)
 	if len(av.AVCCHead) == 2 {
 		raw = raw[7:] //AAC 去掉7个字节的ADTS头
 	}
-	av.WriteSlice(raw)
-	curValue.DTS = pts
-	curValue.PTS = pts
+	curValue.AppendRaw(raw)
+	av.generateTimestamp(pts)
 	av.Flush()
 }
 
 func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
-	curValue := &av.AVRing.RingBuffer.Value
+	curValue := &av.Value
 	curValue.BytesIn += len(frame)
 	curValue.AppendAVCC(frame)
-	curValue.DTS = ts * 90
-	curValue.PTS = curValue.DTS
+	av.generateTimestamp(ts * 90)
+	av.Flush()
 }
 
-func (a *Audio) Flush() {
-	// AVCC 格式补完
-	value := &a.Value
-	if a.ComplementAVCC() {
-		value.AppendAVCC(a.AVCCHead)
-		for _, raw := range value.Raw {
-			value.AppendAVCC(raw)
-		}
+func (a *Audio) CompleteAVCC(value *AVFrame[[]byte]) {
+	value.AppendAVCC(a.AVCCHead)
+	for _, raw := range value.Raw {
+		value.AppendAVCC(raw)
 	}
-	if a.ComplementRTP() {
-		var packet = make(net.Buffers, len(value.Raw))
-		for i, raw := range value.Raw {
-			packet[i] = raw
-		}
-		a.PacketizeRTP(packet)
-	}
-	a.Media.Flush()
+}
+
+func (a *Audio) CompleteRTP(value *AVFrame[[]byte]) {
+	a.PacketizeRTP(value.Raw)
 }

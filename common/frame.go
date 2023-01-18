@@ -10,18 +10,6 @@ import (
 )
 
 type NALUSlice net.Buffers
-
-// type H264Slice NALUSlice
-// type H265Slice NALUSlice
-
-// type H264NALU []H264Slice
-// type H265NALU []H265Slice
-
-type AudioSlice []byte
-
-// type AACSlice AudioSlice
-// type G711Slice AudioSlice
-
 // 裸数据片段
 type RawSlice interface {
 	~[][]byte | ~[]byte
@@ -43,9 +31,12 @@ func (nalu NALUSlice) Bytes() (b []byte) {
 	return
 }
 
-func (nalu *NALUSlice) Reset() *NALUSlice {
+func (nalu *NALUSlice) Reset(b ...[]byte) *NALUSlice {
 	if len(*nalu) > 0 {
 		*nalu = (*nalu)[:0]
+	}
+	if len(b) > 0 {
+		*nalu = append(*nalu, b...)
 	}
 	return nalu
 }
@@ -111,12 +102,11 @@ type DataFrame[T any] struct {
 type AVFrame[T RawSlice] struct {
 	BaseFrame
 	IFrame  bool
-	SEI     T
 	PTS     uint32
 	DTS     uint32
-	AVCC    net.Buffers `json:"-"` // 打包好的AVCC格式
+	AVCC    net.Buffers `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
 	RTP     []*RTPFrame `json:"-"`
-	Raw     []T         `json:"-"` // 裸数据
+	Raw     []T         `json:"-"` // 裸数据,通常代表Access Unit
 	canRead bool
 }
 

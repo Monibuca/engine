@@ -8,10 +8,6 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
-type RTPWriter interface {
-	writeRTPFrame(frame *RTPFrame)
-}
-
 func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
 	if av.DecoderConfiguration.PayloadType != p.PayloadType {
 		av.Stream.Warn("RTP PayloadType error", zap.Uint8("want", av.DecoderConfiguration.PayloadType), zap.Uint8("got", p.PayloadType))
@@ -34,6 +30,15 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 	return av.UnmarshalRTPPacket(&p)
 }
 
+func (av *Media[T]) writeRTPFrame(frame *RTPFrame) {
+	av.Value.AppendRTP(frame)
+	av.WriteRTPFrame(frame)
+	if frame.Marker {
+		av.SpesificTrack.generateTimestamp(frame.Timestamp)
+		av.SpesificTrack.Flush()
+	}
+}
+
 // WriteRTPPack 写入已反序列化的RTP包
 func (av *Media[T]) WriteRTPPack(p *rtp.Packet) {
 	for frame := av.UnmarshalRTPPacket(p); frame != nil; frame = av.nextRTPFrame() {
@@ -48,11 +53,40 @@ func (av *Media[T]) WriteRTP(raw []byte) {
 	}
 }
 
+// https://www.cnblogs.com/moonwalk/p/15903760.html
+// Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
+func (av *Media[T]) PacketizeRTP(payloads ...[][]byte) {
+	packetCount := len(payloads)
+	if cap(av.Value.RTP) < packetCount {
+		av.Value.RTP = make([]*RTPFrame, packetCount)
+	} else {
+		av.Value.RTP = av.Value.RTP[:packetCount]
+	}
+	for i, pp := range payloads {
+		av.rtpSequence++
+		packet := av.Value.RTP[i]
+		if packet == nil {
+			packet = &RTPFrame{}
+			av.Value.RTP[i] = packet
+			packet.Version = 2
+			packet.PayloadType = av.DecoderConfiguration.PayloadType
+			packet.Payload = make([]byte, 0, 1200)
+			packet.SSRC = av.SSRC
+		}
+		packet.Payload = packet.Payload[:0]
+		packet.SequenceNumber = av.rtpSequence
+		packet.Timestamp = av.Value.PTS
+		packet.Marker = i == packetCount-1
+		for _, p := range pp {
+			packet.Payload = append(packet.Payload, p...)
+		}
+	}
+}
+
 type RTPDemuxer struct {
-	lastSeq   uint16 //上一个收到的序号，用于乱序重排
-	lastSeq2  uint16 //记录上上一个收到的序列号
-	乱序重排      util.RTPReorder[*RTPFrame]
-	RTPWriter `json:"-"`
+	lastSeq  uint16 //上一个收到的序号，用于乱序重排
+	lastSeq2 uint16 //记录上上一个收到的序列号
+	乱序重排     util.RTPReorder[*RTPFrame]
 }
 
 // 获取缓存中下一个rtpFrame

@@ -44,6 +44,15 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	}
 }
 
+type SpesificTrack[T RawSlice] interface {
+	CompleteRTP(*AVFrame[T])
+	CompleteAVCC(*AVFrame[T])
+	WriteSliceBytes([]byte)
+	WriteRTPFrame(*RTPFrame)
+	generateTimestamp(uint32)
+	Flush()
+}
+
 // Media 基础媒体Track类
 type Media[T RawSlice] struct {
 	Base
@@ -53,6 +62,7 @@ type Media[T RawSlice] struct {
 	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	RTPMuxer
 	RTPDemuxer
+	SpesificTrack[T] `json:"-"`
 	流速控制
 }
 
@@ -77,8 +87,8 @@ func (av *Media[T]) SetStuff(stuff ...any) {
 			av.DecoderConfiguration.PayloadType = v
 		case IStream:
 			av.Stream = v
-		case RTPWriter:
-			av.RTPWriter = v
+		case SpesificTrack[T]:
+			av.SpesificTrack = v
 		}
 	}
 }
@@ -107,20 +117,15 @@ func (av *Media[T]) GetDecoderConfiguration() DecoderConfiguration[T] {
 }
 
 func (av *Media[T]) CurrentFrame() *AVFrame[T] {
-	return &av.AVRing.RingBuffer.Value
+	return &av.Value
 }
 func (av *Media[T]) PreFrame() *AVFrame[T] {
-	return av.AVRing.RingBuffer.LastValue
+	return av.LastValue
 }
 
-func (av *Media[T]) generateTimestamp() {
-	ts := av.AVRing.RingBuffer.Value.RTP[0].Timestamp
-	av.AVRing.RingBuffer.Value.PTS = ts
-	av.AVRing.RingBuffer.Value.DTS = ts
-}
-
-func (av *Media[T]) WriteSlice(slice T) {
-	av.Value.AppendRaw(slice)
+func (av *Media[T]) generateTimestamp(ts uint32) {
+	av.Value.PTS = ts
+	av.Value.DTS = ts
 }
 
 func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
@@ -135,7 +140,14 @@ func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
 
 func (av *Media[T]) Flush() {
 	curValue, preValue := &av.Value, av.LastValue
+	if config.Global.EnableRTP && len(curValue.RTP) == 0 {
+		av.CompleteRTP(curValue)
+	}
+	if config.Global.EnableAVCC && len(curValue.AVCC) == 0 {
+		av.CompleteAVCC(curValue)
+	}
 	if av.起始时间.IsZero() {
+		curValue.AbsTime = curValue.DTS / 90
 		av.重置(curValue.AbsTime)
 	} else {
 		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
@@ -147,43 +159,4 @@ func (av *Media[T]) Flush() {
 		av.控制流速(curValue.AbsTime)
 	}
 	av.Step()
-}
-
-func (av *Media[T]) ComplementAVCC() bool {
-	return config.Global.EnableAVCC && len(av.Value.AVCC) == 0
-}
-
-// 是否需要补完RTP格式
-func (av *Media[T]) ComplementRTP() bool {
-	return config.Global.EnableRTP && len(av.Value.RTP) == 0
-}
-
-// https://www.cnblogs.com/moonwalk/p/15903760.html
-// Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
-func (av *Media[T]) PacketizeRTP(payloads ...[][]byte) {
-	packetCount := len(payloads)
-	if cap(av.Value.RTP) < packetCount {
-		av.Value.RTP = make([]*RTPFrame, packetCount)
-	} else {
-		av.Value.RTP = av.Value.RTP[:packetCount]
-	}
-	for i, pp := range payloads {
-		av.rtpSequence++
-		packet := av.Value.RTP[i]
-		if packet == nil {
-			packet = &RTPFrame{}
-			av.Value.RTP[i] = packet
-			packet.Version = 2
-			packet.PayloadType = av.DecoderConfiguration.PayloadType
-			packet.Payload = make([]byte, 0, 1200)
-			packet.SSRC = av.SSRC
-		}
-		packet.Payload = packet.Payload[:0]
-		packet.SequenceNumber = av.rtpSequence
-		packet.Timestamp = av.Value.PTS
-		packet.Marker = i == packetCount-1
-		for _, p := range pp {
-			packet.Payload = append(packet.Payload, p...)
-		}
-	}
 }

@@ -27,9 +27,9 @@ const (
 	SUBSTATE_NORMAL
 )
 
-type AudioFrame AVFrame[AudioSlice]
+type AudioFrame AVFrame[[]byte]
 type VideoFrame AVFrame[NALUSlice]
-type AudioDeConf DecoderConfiguration[AudioSlice]
+type AudioDeConf DecoderConfiguration[[]byte]
 type VideoDeConf DecoderConfiguration[NALUSlice]
 type FLVFrame net.Buffers
 type AudioRTP RTPFrame
@@ -47,10 +47,6 @@ func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 //		return append(r, b...)
 //	}
 func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
-	if v.SEI != nil {
-		r = append(r, codec.NALU_Delimiter2)
-		r = append(r, v.SEI...)
-	}
 	r = append(r, codec.NALU_Delimiter2)
 	for i, nalu := range v.Raw {
 		if i > 0 {
@@ -103,7 +99,7 @@ func (p *PlayContext[T, R]) decConfChanged() bool {
 type TrackPlayer struct {
 	context.Context    `json:"-"`
 	context.CancelFunc `json:"-"`
-	Audio              PlayContext[*track.Audio, AudioSlice]
+	Audio              PlayContext[*track.Audio, []byte]
 	Video              PlayContext[*track.Video, NALUSlice]
 	SkipTS             uint32 //跳过的时间戳
 	FirstAbsTS         uint32 //订阅起始时间戳
@@ -115,7 +111,7 @@ func (tp *TrackPlayer) ReadVideo() (vp *AVFrame[NALUSlice]) {
 	return
 }
 
-func (tp *TrackPlayer) ReadAudio() (ap *AVFrame[AudioSlice]) {
+func (tp *TrackPlayer) ReadAudio() (ap *AVFrame[[]byte]) {
 	ap = tp.Audio.ring.Read(tp.Context)
 	tp.Audio.Frame = ap
 	return
@@ -197,19 +193,19 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
 		spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
 	}
-	sendAudioDecConf := func(frame *AVFrame[AudioSlice]) {
+	sendAudioDecConf := func(frame *AVFrame[[]byte]) {
 		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
 		spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
 	}
 	var sendVideoFrame func(*AVFrame[NALUSlice])
-	var sendAudioFrame func(*AVFrame[AudioSlice])
+	var sendAudioFrame func(*AVFrame[[]byte])
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
 			// println(frame.Sequence, frame.AbsTime, frame.PTS, frame.DTS, frame.IFrame)
 			spesic.OnEvent((*VideoFrame)(frame))
 		}
-		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+		sendAudioFrame = func(frame *AVFrame[[]byte]) {
 			spesic.OnEvent((*AudioFrame)(frame))
 		}
 	case SUBTYPE_RTP:
@@ -223,7 +219,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				spesic.OnEvent((VideoRTP)(vp))
 			}
 		}
-		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+		sendAudioFrame = func(frame *AVFrame[[]byte]) {
 			for _, p := range frame.RTP {
 				audioSeq++
 				vp := *p
@@ -249,7 +245,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, s.Video.Track.DecoderConfiguration.AVCC)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
 		}
-		sendAudioDecConf = func(frame *AVFrame[AudioSlice]) {
+		sendAudioDecConf = func(frame *AVFrame[[]byte]) {
 			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
 			ts := s.SkipTS
 			if frame != nil {
@@ -262,7 +258,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			// println(frame.Sequence, frame.AbsTime, frame.DeltaTime, frame.IFrame)
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, frame.AVCC)
 		}
-		sendAudioFrame = func(frame *AVFrame[AudioSlice]) {
+		sendAudioFrame = func(frame *AVFrame[[]byte]) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime, frame.AVCC)
 		}
 	}

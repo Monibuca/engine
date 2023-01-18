@@ -40,7 +40,9 @@ func (b H264NALUType) Offset() int {
 func (b H264NALUType) Byte() byte {
 	return byte(b)
 }
-
+func ParseH264NALUType(b byte) H264NALUType {
+	return H264NALUType(b & 0x1F)
+}
 func (H264NALUType) Parse(b byte) H264NALUType {
 	return H264NALUType(b & 0x1F)
 }

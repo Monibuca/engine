@@ -84,8 +84,7 @@ func (t *TSPublisher) ReadPES() {
 						if frameLen > remainLen {
 							break
 						}
-
-						t.AudioTrack.WriteSlice(pes.Payload[7:frameLen])
+						t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload[:frameLen])
 						pes.Payload = pes.Payload[frameLen:remainLen]
 						remainLen -= frameLen
 					}
