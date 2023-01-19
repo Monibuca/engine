@@ -250,10 +250,9 @@ func (vt *Video) Flush() {
 			return
 		}
 	}
-	// 仅存一枚I帧
-	if vt.idrCount == 1 {
-		// 下一帧为I帧，即将覆盖，需要扩环
-		if vt.Next().Value.IFrame {
+	if vt.Next().Value.IFrame {
+		// 仅存一枚I帧，需要扩环
+		if vt.idrCount == 1 {
 			if vt.AVRing.RingBuffer.Size < 256 {
 				vt.Link(util.NewRing[AVFrame[NALUSlice]](5)) // 扩大缓冲环
 			}
