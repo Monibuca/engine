@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/util"
 )
 
 func NewG711(stream IStream, alaw bool) (g711 *G711) {
@@ -33,11 +34,14 @@ type G711 struct {
 }
 
 func (g711 *G711) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if len(frame) < 2 {
-		g711.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+	if l := util.SizeOfBuffers(frame); l < 2 {
+		g711.Stream.Error("AVCC data too short", zap.Int("len", l))
 		return
 	}
-	g711.Value.AppendRaw(frame[1:])
+	g711.Value.AppendRaw(frame[0][1:])
+	for _, data := range frame[1:] {
+		g711.Value.AppendRaw(data)
+	}
 	g711.Audio.WriteAVCC(ts, frame)
 }
 

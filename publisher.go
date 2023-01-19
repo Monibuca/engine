@@ -93,7 +93,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
 			a := track.NewAAC(p.Stream)
 			p.AudioTrack = a
 			a.Audio.SampleSize = 16
-			a.AVCCHead = []byte{frame[0], 1}
+			a.AVCCHead = []byte{frame[0][0], 1}
 			a.WriteAVCC(0, frame)
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
@@ -103,13 +103,13 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
 			}
 			a := track.NewG711(p.Stream, alaw)
 			p.AudioTrack = a
-			a.Audio.SampleRate = uint32(codec.SoundRate[(frame[0]&0x0c)>>2])
+			a.Audio.SampleRate = uint32(codec.SoundRate[(frame[0][0]&0x0c)>>2])
 			a.Audio.SampleSize = 16
-			if frame[0]&0x02 == 0 {
+			if frame[0][0]&0x02 == 0 {
 				a.Audio.SampleSize = 8
 			}
-			a.Channels = frame[0]&0x01 + 1
-			a.AVCCHead = frame[:1]
+			a.Channels = frame[0][0]&0x01 + 1
+			a.AVCCHead = frame[0][:1]
 			p.AudioTrack.WriteAVCC(ts, frame)
 		default:
 			p.Stream.Error("audio codec not support yet", zap.Uint8("codecId", uint8(codecID)))

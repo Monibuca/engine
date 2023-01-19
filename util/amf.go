@@ -1,11 +1,9 @@
-package codec
+package util
 
 import (
 	"fmt"
 	"io"
 	"reflect"
-
-	"m7s.live/engine/v4/util"
 )
 
 // Action Message Format -- AMF 0
@@ -82,7 +80,7 @@ var (
 type EcmaArray map[string]any
 
 type AMF struct {
-	util.Buffer
+	Buffer
 }
 
 func (amf *AMF) ReadShortString() string {
@@ -136,7 +134,7 @@ func (amf *AMF) Unmarshal() (obj any, err error) {
 	if !amf.CanRead() {
 		return nil, io.ErrUnexpectedEOF
 	}
-	defer func(b util.Buffer) {
+	defer func(b Buffer) {
 		if err != nil {
 			amf.Buffer = b
 		}
@@ -239,7 +237,7 @@ func (amf *AMF) Marshal(v any) []byte {
 		amf.WriteString(vv)
 	case float64, uint, float32, int, int16, int32, int64, uint16, uint32, uint64, uint8, int8:
 		amf.WriteByte(AMF0_NUMBER)
-		amf.WriteFloat64(util.ToFloat64(vv))
+		amf.WriteFloat64(ToFloat64(vv))
 	case bool:
 		amf.WriteByte(AMF0_BOOLEAN)
 		if vv {

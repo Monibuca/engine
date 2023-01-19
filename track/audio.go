@@ -99,10 +99,7 @@ func (av *Audio) WriteAVCC(ts uint32, frame AVCCFrame) {
 }
 
 func (a *Audio) CompleteAVCC(value *AVFrame[[]byte]) {
-	value.AppendAVCC(a.AVCCHead)
-	for _, raw := range value.Raw {
-		value.AppendAVCC(raw)
-	}
+	value.AVCC = append(append(value.AVCC, a.AVCCHead), value.Raw...)
 }
 
 func (a *Audio) CompleteRTP(value *AVFrame[[]byte]) {

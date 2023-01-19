@@ -10,6 +10,7 @@ import (
 )
 
 type NALUSlice net.Buffers
+
 // 裸数据片段
 type RawSlice interface {
 	~[][]byte | ~[]byte
@@ -61,8 +62,8 @@ func (nalu *NALUSlice) Append(b ...[]byte) {
 // 	return false
 // }
 
-type AVCCFrame []byte   // 一帧AVCC格式的数据
-type AnnexBFrame []byte // 一帧AnnexB格式数据
+type AVCCFrame net.Buffers // 一帧AVCC格式的数据
+type AnnexBFrame []byte    // 一帧AnnexB格式数据
 type RTPFrame struct {
 	rtp.Packet
 }
@@ -110,16 +111,16 @@ type AVFrame[T RawSlice] struct {
 	canRead bool
 }
 
-func (av *AVFrame[T]) AppendRaw(raw ...T) {
-	av.Raw = append(av.Raw, raw...)
+func (av *AVFrame[T]) AppendRaw(raw T) {
+	av.Raw = append(av.Raw, raw)
 }
 
-func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
+func (av *AVFrame[T]) AppendAVCC(avcc AVCCFrame) {
 	av.AVCC = append(av.AVCC, avcc...)
 }
 
-func (av *AVFrame[T]) AppendRTP(rtp ...*RTPFrame) {
-	av.RTP = append(av.RTP, rtp...)
+func (av *AVFrame[T]) AppendRTP(rtp *RTPFrame) {
+	av.RTP = append(av.RTP, rtp)
 }
 
 // Clear 清空数据 gc
@@ -147,20 +148,50 @@ func (av *AVFrame[T]) Reset() {
 }
 
 func (avcc AVCCFrame) IsIDR() bool {
-	v := avcc[0] >> 4
+	v := avcc[0][0] >> 4
 	return v == 1 || v == 4 //generated keyframe
 }
 func (avcc AVCCFrame) IsSequence() bool {
-	return avcc[1] == 0
+	return avcc[0][1] == 0
 }
 func (avcc AVCCFrame) CTS() uint32 {
-	return uint32(avcc[2])<<24 | uint32(avcc[3])<<8 | uint32(avcc[4])
+	return uint32(avcc[0][2])<<24 | uint32(avcc[0][3])<<8 | uint32(avcc[0][4])
 }
 func (avcc AVCCFrame) VideoCodecID() codec.VideoCodecID {
-	return codec.VideoCodecID(avcc[0] & 0x0F)
+	return codec.VideoCodecID(avcc[0][0] & 0x0F)
 }
 func (avcc AVCCFrame) AudioCodecID() codec.AudioCodecID {
-	return codec.AudioCodecID(avcc[0] >> 4)
+	return codec.AudioCodecID(avcc[0][0] >> 4)
+}
+
+func (avcc *AVCCFrame) ReadByte() (b byte) {
+	cur := *avcc
+	b = cur[0][0]
+	if len(cur[0]) == 1 {
+		*avcc = cur[1:]
+	} else {
+		cur[0] = cur[0][1:]
+	}
+	return
+}
+
+func (avcc *AVCCFrame) ReadN(n int) (result net.Buffers) {
+	require := n
+	cur := *avcc
+	for require > 0 && len(cur) > 0 {
+		firstLen := len(cur[0])
+		if firstLen > require {
+			result = append(result, cur[0][:require])
+			cur[0] = cur[0][require:]
+			return
+		} else {
+			result = append(result, cur[0])
+			require -= firstLen
+			cur = cur[1:]
+			*avcc = cur
+		}
+	}
+	return
 }
 
 //	func (annexb AnnexBFrame) ToSlices() (ret []NALUSlice) {

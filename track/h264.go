@@ -65,16 +65,16 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 }
 
 func (vt *H264) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if len(frame) < 6 {
-		vt.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+	if l:=util.SizeOfBuffers(frame);l < 6 {
+		vt.Stream.Error("AVCC data too short", zap.Int("len", l))
 		return
 	}
 	if frame.IsSequence() {
 		vt.dcChanged = true
 		vt.Video.DecoderConfiguration.Seq++
-		vt.Video.DecoderConfiguration.AVCC = net.Buffers{frame}
+		vt.Video.DecoderConfiguration.AVCC = net.Buffers(frame)
 		var info codec.AVCDecoderConfigurationRecord
-		if _, err := info.Unmarshal(frame[5:]); err == nil {
+		if _, err := info.Unmarshal(frame[0][5:]); err == nil {
 			vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)
 			vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
 			vt.Video.DecoderConfiguration.Raw[0] = info.SequenceParameterSetNALUnit

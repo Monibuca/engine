@@ -89,10 +89,10 @@ func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) e
 func (vt *Video) computeGOP() {
 	vt.idrCount++
 	if vt.IDRing != nil {
-		vt.GOP = int(vt.AVRing.RingBuffer.Value.Sequence - vt.IDRing.Value.Sequence)
-		if l := vt.AVRing.RingBuffer.Size - vt.GOP - 5; l > 5 {
-			vt.AVRing.RingBuffer.Size -= l
-			vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.RingBuffer.Size+l), zap.Int("after", vt.AVRing.RingBuffer.Size), zap.String("name", vt.Name))
+		vt.GOP = int(vt.Value.Sequence - vt.IDRing.Value.Sequence)
+		if l := vt.AVRing.Size - vt.GOP - 5; l > 5 {
+			vt.AVRing.Size -= l
+			vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.Size+l), zap.Int("after", vt.AVRing.Size), zap.String("name", vt.Name))
 			//缩小缓冲环节省内存
 			vt.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
 				if v.IFrame {
@@ -102,7 +102,7 @@ func (vt *Video) computeGOP() {
 			})
 		}
 	}
-	vt.IDRing = vt.AVRing.RingBuffer.Ring
+	vt.IDRing = vt.AVRing.Ring
 }
 
 func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
@@ -134,19 +134,17 @@ func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
 	vt.Media.WriteAVCC(ts, frame)
 	vt.Value.DTS = ts * 90
 	vt.Value.PTS = (ts + frame.CTS()) * 90
-	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
-		nalulen := util.ReadBE[int](nalus[:vt.nalulenSize])
+	frame.ReadN(5)
+	for len(frame) > 0 {
+		nalulen := 0
+		for i, n := 0, vt.nalulenSize; i < n; i++ {
+			nalulen += int(frame.ReadByte()) << ((n - i - 1) << 3)
+		}
 		if nalulen == 0 {
-			vt.Stream.Warn("WriteAVCC with nalulen=0", zap.Int("len", len(nalus)))
+			vt.Stream.Warn("WriteAVCC with nalulen=0")
 			return
 		}
-		if end := nalulen + vt.nalulenSize; len(nalus) >= end {
-			vt.WriteRawBytes(nalus[vt.nalulenSize:end])
-			nalus = nalus[end:]
-		} else {
-			vt.Stream.Error("WriteAVCC", zap.Int("len", len(nalus)), zap.Int("naluLenSize", vt.nalulenSize), zap.Int("end", end))
-			break
-		}
+		vt.WriteSlice(NALUSlice(frame.ReadN(nalulen)))
 	}
 	vt.Flush()
 }
@@ -155,8 +153,12 @@ func (vt *Video) WriteSliceByte(b ...byte) {
 	vt.WriteSliceBytes(b)
 }
 
+func (vt *Video) WriteSlice(slice NALUSlice) {
+	vt.Value.AppendRaw(slice)
+}
+
 func (vt *Video) WriteRawBytes(slice []byte) {
-	if naluSlice := util.MallocSlice(&vt.AVRing.Value.Raw); naluSlice == nil {
+	if naluSlice := util.MallocSlice(&vt.Value.Raw); naluSlice == nil {
 		vt.Value.AppendRaw(NALUSlice{slice})
 	} else {
 		naluSlice.Reset(slice)
@@ -221,10 +223,10 @@ func (vt *Video) CompleteAVCC(rv *AVFrame[NALUSlice]) {
 	// 写入CTS
 	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
 	lengths := b.Malloc(len(rv.Raw) * 4) //每个slice的长度内存复用
-	rv.AppendAVCC(b.SubBuf(0, 5))
+	rv.AVCC = append(rv.AVCC, b.SubBuf(0, 5))
 	for i, nalu := range rv.Raw {
-		rv.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
-		rv.AppendAVCC(nalu...)
+		rv.AVCC = append(rv.AVCC, util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
+		rv.AVCC = append(rv.AVCC, nalu...)
 	}
 }
 
@@ -250,17 +252,19 @@ func (vt *Video) Flush() {
 			return
 		}
 	}
-	// 仅存一枚I帧
-	if vt.idrCount == 1 {
-		// 下一帧为I帧，即将覆盖，需要扩环
-		if vt.Next().Value.IFrame {
-			if vt.AVRing.RingBuffer.Size < 256 {
+	// 下一帧为I帧，即将覆盖，需要扩环
+	if vt.Next().Value.IFrame {
+		// 仅存一枚I帧
+		if vt.idrCount == 1 {
+			if vt.AVRing.Size < 256 {
+				vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.Size), zap.Int("after", vt.AVRing.Size+5), zap.String("name", vt.Name))
 				vt.Link(util.NewRing[AVFrame[NALUSlice]](5)) // 扩大缓冲环
 			}
 		} else {
 			vt.idrCount--
 		}
 	}
+
 	vt.Media.Flush()
 	vt.dcChanged = false
 }

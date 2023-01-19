@@ -74,20 +74,23 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 }
 
 func (aac *AAC) WriteAVCC(ts uint32, frame AVCCFrame) {
-	if len(frame) < 4 {
-		aac.Audio.Stream.Error("AVCC data too short", zap.ByteString("data", frame))
+	if l := util.SizeOfBuffers(frame); l < 4 {
+		aac.Stream.Error("AVCC data too short", zap.Int("len", l))
 		return
 	}
 	if frame.IsSequence() {
-		aac.Audio.DecoderConfiguration.AVCC = net.Buffers{frame}
-		config1, config2 := frame[2], frame[3]
+		aac.Audio.DecoderConfiguration.AVCC = net.Buffers(frame)
+		config1, config2 := frame[0][2], frame[0][3]
 		aac.Profile = (config1 & 0xF8) >> 3
 		aac.Channels = ((config2 >> 3) & 0x0F) //声道
 		aac.Audio.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
-		aac.Audio.DecoderConfiguration.Raw = frame[2:]
+		aac.Audio.DecoderConfiguration.Raw = frame[0][2:]
 		aac.Attach()
 	} else {
-		aac.Value.AppendRaw(frame[2:])
+		aac.Value.AppendRaw(frame[0][2:])
+		for _, data := range frame[1:] {
+			aac.Value.AppendRaw(data)
+		}
 		aac.Audio.WriteAVCC(ts, frame)
 	}
 }
