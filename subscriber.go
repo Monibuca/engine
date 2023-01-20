@@ -242,24 +242,20 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendVideoDecConf = func(frame *AVFrame[NALUSlice]) {
 			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, s.Video.Track.DecoderConfiguration.AVCC)
+			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, 0, s.Video.Track.DecoderConfiguration.AVCC)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
 		}
 		sendAudioDecConf = func(frame *AVFrame[[]byte]) {
 			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-			ts := s.SkipTS
-			if frame != nil {
-				ts = frame.AbsTime
-			}
-			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, ts, s.Audio.Track.DecoderConfiguration.AVCC)
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, 0, s.Audio.Track.DecoderConfiguration.AVCC)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
 		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
 			// println(frame.Sequence, frame.AbsTime, frame.DeltaTime, frame.IFrame)
-			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, frame.AVCC)
+			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime - s.SkipTS, frame.AVCC)
 		}
 		sendAudioFrame = func(frame *AVFrame[[]byte]) {
-			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime, frame.AVCC)
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime - s.SkipTS, frame.AVCC)
 		}
 	}
 	defer s.onStop()
