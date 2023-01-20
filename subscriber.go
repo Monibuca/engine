@@ -276,10 +276,14 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					s.FirstAbsTS = vp.AbsTime
 					firstSeq = vp.Sequence
 					s.Info("firstIFrame", zap.Uint32("seq", vp.Sequence))
-					if s.Config.LiveMode {
-						vstate = SUBSTATE_FIRST
+					if s.Config.FirstScreen {
+						if s.Config.LiveMode {
+							vstate = SUBSTATE_FIRST
+						} else {
+							vstate = SUBSTATE_NORMAL
+						}
 					} else {
-						vstate = SUBSTATE_NORMAL
+						vstate = SUBSTATE_FIRST
 					}
 				case SUBSTATE_FIRST:
 					if s.Video.Track.IDRing.Value.Sequence != firstSeq {
@@ -288,13 +292,17 @@ func (s *Subscriber) PlayBlock(subType byte) {
 						s.SkipTS = vp.AbsTime - beforeJump
 						s.Debug("skip to latest key frame", zap.Uint32("seq", vp.Sequence), zap.Uint32("skipTS", s.SkipTS))
 						vstate = SUBSTATE_NORMAL
-					} else {
+					} else if s.Config.FirstScreen {
 						vp = s.ReadVideo()
 						beforeJump = vp.AbsTime
 						// 防止过快消费
 						if fast := time.Duration(vp.AbsTime-s.FirstAbsTS)*time.Millisecond - time.Since(startTime); fast > 0 && fast < time.Second {
 							time.Sleep(fast)
 						}
+					} else {
+						time.Sleep(time.Millisecond * 20)
+						// 非首屏渲染模式，等待关键帧到来
+						continue
 					}
 				case SUBSTATE_NORMAL:
 					vp = s.ReadVideo()

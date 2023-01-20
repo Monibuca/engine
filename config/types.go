@@ -48,6 +48,7 @@ type Subscribe struct {
 	SubAudioTracks  []string // 指定订阅的音频轨道
 	SubVideoTracks  []string // 指定订阅的视频轨道
 	LiveMode        bool     // 实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后调到该帧。
+	FirstScreen     bool     // 首屏渲染，如果为false就需要等待下一个关键帧
 	IFrameOnly      bool     // 只要关键帧
 	WaitTimeout     int      // 等待流超时
 }
@@ -130,6 +131,7 @@ var Global = &Engine{
 		SubAudioTracks:  nil,
 		SubVideoTracks:  nil,
 		LiveMode:        true,
+		FirstScreen:     true,
 		IFrameOnly:      false,
 		WaitTimeout:     10,
 	},
