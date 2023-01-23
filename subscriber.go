@@ -230,10 +230,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 	case SUBTYPE_FLV:
 		flvHeadCache := make([]byte, 15) //内存复用
-		sendFlvFrame := func(t byte, abs uint32, avcc net.Buffers) {
+		sendFlvFrame := func(t byte, ts uint32, avcc net.Buffers) {
 			flvHeadCache[0] = t
 			result := append(FLVFrame{flvHeadCache[:11]}, avcc...)
-			ts := abs - s.SkipTS
 			dataSize := uint32(util.SizeOfBuffers(avcc))
 			util.PutBE(flvHeadCache[1:4], dataSize)
 			util.PutBE(flvHeadCache[4:7], ts)
