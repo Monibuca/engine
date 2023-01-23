@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
+	"m7s.live/engine/v4/util"
 )
 
 type TimelineData[T any] struct {
@@ -69,17 +70,17 @@ type AVTrack interface {
 	Track
 	Attach()
 	Detach()
-	WriteAVCC(ts uint32, frame AVCCFrame) //写入AVCC格式的数据
+	WriteAVCC(ts uint32, frame util.BLL) //写入AVCC格式的数据
 	WriteRTP([]byte)
 	WriteRTPPack(*rtp.Packet)
 	Flush()
 	SetSpeedLimit(int)
+	SetStuff(stuff ...any)
 }
 type VideoTrack interface {
 	AVTrack
-	GetDecoderConfiguration() DecoderConfiguration[NALUSlice]
-	CurrentFrame() *AVFrame[NALUSlice]
-	PreFrame() *AVFrame[NALUSlice]
+	CurrentFrame() *AVFrame
+	PreFrame() *AVFrame
 	WriteSliceBytes(slice []byte)
 	WriteAnnexB(uint32, uint32, AnnexBFrame)
 	SetLostFlag()
@@ -87,9 +88,8 @@ type VideoTrack interface {
 
 type AudioTrack interface {
 	AVTrack
-	GetDecoderConfiguration() DecoderConfiguration[[]byte]
-	CurrentFrame() *AVFrame[[]byte]
-	PreFrame() *AVFrame[[]byte]
+	CurrentFrame() *AVFrame
+	PreFrame() *AVFrame
 	WriteADTS([]byte)
 	WriteRaw(uint32, []byte)
 }

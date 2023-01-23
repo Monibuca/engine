@@ -77,9 +77,9 @@ var (
 var ErrInvalidFLV = errors.New("invalid flv")
 var FLVHeader = []byte{'F', 'L', 'V', 0x01, 0x05, 0, 0, 0, 9, 0, 0, 0, 0}
 
-func WriteFLVTag(w io.Writer, t byte, timestamp uint32, payload net.Buffers) (err error) {
-	payload = AVCC2FLV(t, payload, timestamp)
-	_, err = payload.WriteTo(w)
+func WriteFLVTag(w io.Writer, t byte, timestamp uint32, payload []byte) (err error) {
+	buffers := AVCC2FLV(t, timestamp, payload)
+	_, err = buffers.WriteTo(w)
 	return
 }
 
@@ -98,15 +98,15 @@ func ReadFLVTag(r io.Reader) (t byte, timestamp uint32, payload []byte, err erro
 	return
 }
 
-func AudioAVCC2FLV(avcc net.Buffers, ts uint32) net.Buffers {
-	return AVCC2FLV(FLV_TAG_TYPE_AUDIO, avcc, ts)
+func AudioAVCC2FLV(ts uint32, avcc ...[]byte) net.Buffers {
+	return AVCC2FLV(FLV_TAG_TYPE_AUDIO, ts, avcc...)
 }
 
-func VideoAVCC2FLV(avcc net.Buffers, ts uint32) net.Buffers {
-	return AVCC2FLV(FLV_TAG_TYPE_VIDEO, avcc, ts)
+func VideoAVCC2FLV(ts uint32, avcc ...[]byte) net.Buffers {
+	return AVCC2FLV(FLV_TAG_TYPE_VIDEO, ts, avcc...)
 }
 
-func AVCC2FLV(t byte, avcc net.Buffers, ts uint32) (flv net.Buffers) {
+func AVCC2FLV(t byte, ts uint32, avcc ...[]byte) (flv net.Buffers) {
 	b := util.Buffer(make([]byte, 0, 15))
 	b.WriteByte(t)
 	dataSize := util.SizeOfBuffers(avcc)

@@ -50,6 +50,19 @@ type AudioSpecificConfig struct {
 	GASpecificConfig
 }
 
+func (asc *AudioSpecificConfig) Parse(data []byte) {
+	asc.AudioObjectType = data[0] >> 3
+	asc.SamplingFrequencyIndex = (data[0] & 0x07 << 1) | (data[1] >> 7)
+	asc.ChannelConfiguration = (data[1] >> 3) & 0x0F
+	asc.FrameLengthFlag = (data[1] >> 2) & 0x01
+	asc.DependsOnCoreCoder = (data[1] >> 1) & 0x01
+	asc.ExtensionFlag = data[1] & 0x01
+}
+
+func (asc *AudioSpecificConfig) ToADTS(rawDataLength int) (adts ADTS, adtsByte []byte, err error) {
+	return AudioSpecificConfigToADTS(asc, rawDataLength)
+}
+
 type GASpecificConfig struct {
 	FrameLengthFlag    byte // 1 bit
 	DependsOnCoreCoder byte // 1 bit

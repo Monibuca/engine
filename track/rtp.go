@@ -8,9 +8,9 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
-func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
-	if av.DecoderConfiguration.PayloadType != p.PayloadType {
-		av.Stream.Warn("RTP PayloadType error", zap.Uint8("want", av.DecoderConfiguration.PayloadType), zap.Uint8("got", p.PayloadType))
+func (av *Media) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
+	if av.PayloadType != p.PayloadType {
+		av.Stream.Warn("RTP PayloadType error", zap.Uint8("want", av.PayloadType), zap.Uint8("got", p.PayloadType))
 		return
 	}
 	frame = &RTPFrame{
@@ -20,7 +20,7 @@ func (av *Media[T]) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
 	return av.recorderRTP(frame)
 }
 
-func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
+func (av *Media) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 	var p rtp.Packet
 	err := p.Unmarshal(raw)
 	if err != nil {
@@ -30,7 +30,7 @@ func (av *Media[T]) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 	return av.UnmarshalRTPPacket(&p)
 }
 
-func (av *Media[T]) writeRTPFrame(frame *RTPFrame) {
+func (av *Media) writeRTPFrame(frame *RTPFrame) {
 	av.Value.AppendRTP(frame)
 	av.WriteRTPFrame(frame)
 	if frame.Marker {
@@ -40,14 +40,14 @@ func (av *Media[T]) writeRTPFrame(frame *RTPFrame) {
 }
 
 // WriteRTPPack 写入已反序列化的RTP包
-func (av *Media[T]) WriteRTPPack(p *rtp.Packet) {
+func (av *Media) WriteRTPPack(p *rtp.Packet) {
 	for frame := av.UnmarshalRTPPacket(p); frame != nil; frame = av.nextRTPFrame() {
 		av.writeRTPFrame(frame)
 	}
 }
 
 // WriteRTP 写入未反序列化的RTP包
-func (av *Media[T]) WriteRTP(raw []byte) {
+func (av *Media) WriteRTP(raw []byte) {
 	for frame := av.UnmarshalRTP(raw); frame != nil; frame = av.nextRTPFrame() {
 		av.writeRTPFrame(frame)
 	}
@@ -55,7 +55,7 @@ func (av *Media[T]) WriteRTP(raw []byte) {
 
 // https://www.cnblogs.com/moonwalk/p/15903760.html
 // Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
-func (av *Media[T]) PacketizeRTP(payloads ...[][]byte) {
+func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 	packetCount := len(payloads)
 	if cap(av.Value.RTP) < packetCount {
 		av.Value.RTP = make([]*RTPFrame, packetCount)
@@ -69,8 +69,10 @@ func (av *Media[T]) PacketizeRTP(payloads ...[][]byte) {
 			packet = &RTPFrame{}
 			av.Value.RTP[i] = packet
 			packet.Version = 2
-			packet.PayloadType = av.DecoderConfiguration.PayloadType
-			packet.Payload = make([]byte, 0, 1200)
+			packet.PayloadType = av.PayloadType
+			item := av.BytesPool.Get(1200)
+			av.Value.AppendMem(item)
+			packet.Payload = item.Bytes[:0]
 			packet.SSRC = av.SSRC
 		}
 		packet.Payload = packet.Payload[:0]

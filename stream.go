@@ -272,7 +272,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.timeout.Reset(r.DelayCloseTimeout)
 		case STATE_CLOSED:
 			for !r.actionChan.Close() {
-				// 等待channel发送完毕
+				// 等待channel发送完毕，伪自旋锁
 				time.Sleep(time.Millisecond * 100)
 			}
 			stateEvent = SEclose{event}

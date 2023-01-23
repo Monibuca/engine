@@ -27,15 +27,23 @@ const (
 	SUBSTATE_NORMAL
 )
 
-type AudioFrame AVFrame[[]byte]
-type VideoFrame AVFrame[NALUSlice]
-type AudioDeConf DecoderConfiguration[[]byte]
-type VideoDeConf DecoderConfiguration[NALUSlice]
+type VideoDeConf []byte
+type AudioDeConf []byte
+type AudioFrame AVFrame
+type VideoFrame AVFrame
 type FLVFrame net.Buffers
 type AudioRTP RTPFrame
 type VideoRTP RTPFrame
 type HasAnnexB interface {
 	GetAnnexB() (r net.Buffers)
+}
+
+func (a AudioDeConf) WithOutRTMP() []byte {
+	return a[2:]
+}
+
+func (v VideoDeConf) WithOutRTMP() []byte {
+	return v[5:]
 }
 
 func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
@@ -48,17 +56,33 @@ func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 //	}
 func (v *VideoFrame) GetAnnexB() (r net.Buffers) {
 	r = append(r, codec.NALU_Delimiter2)
-	for i, nalu := range v.Raw {
-		if i > 0 {
+	for slice := v.AUList.Head; slice != nil; slice = slice.Next {
+		r = append(r, slice.ToBuffers()...)
+		if slice.Next != nil {
 			r = append(r, codec.NALU_Delimiter1)
 		}
-		r = append(r, nalu...)
 	}
 	return
 }
-func (v VideoDeConf) GetAnnexB() (r net.Buffers) {
-	for _, nalu := range v.Raw {
-		r = append(r, codec.NALU_Delimiter2, nalu)
+
+func (v *VideoFrame) WriteAnnexBTo(w io.Writer) (n int, err error) {
+	var n1 int
+	var n2 int64
+	if n1, err = w.Write(codec.NALU_Delimiter2); err != nil {
+		return
+	}
+	n += n1
+	for slice := v.AUList.Head; slice != nil; slice = slice.Next {
+		if n2, err = slice.WriteTo(w); err != nil {
+			return
+		}
+		n += int(n2)
+		if slice.Next != nil {
+			if n1, err = w.Write(codec.NALU_Delimiter1); err != nil {
+				return
+			}
+			n += n1
+		}
 	}
 	return
 }
@@ -74,44 +98,42 @@ type ISubscriber interface {
 }
 type PlayContext[T interface {
 	GetDecConfSeq() int
-	ReadRing() *AVRing[R]
-	GetDecoderConfiguration() DecoderConfiguration[R]
-}, R RawSlice] struct {
+	ReadRing() *AVRing
+}] struct {
 	Track   T
-	ring    *AVRing[R]
+	ring    *AVRing
 	confSeq int
-	Frame   *AVFrame[R]
+	Frame   *AVFrame
 }
 
-func (p *PlayContext[T, R]) MarshalJSON() ([]byte, error) {
+func (p *PlayContext[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(p.Track)
 }
 
-func (p *PlayContext[T, R]) init(t T) {
+func (p *PlayContext[T]) init(t T) {
 	p.Track = t
 	p.ring = t.ReadRing()
 }
 
-func (p *PlayContext[T, R]) decConfChanged() bool {
+func (p *PlayContext[T]) decConfChanged() bool {
 	return p.confSeq != p.Track.GetDecConfSeq()
 }
 
 type TrackPlayer struct {
 	context.Context    `json:"-"`
 	context.CancelFunc `json:"-"`
-	Audio              PlayContext[*track.Audio, []byte]
-	Video              PlayContext[*track.Video, NALUSlice]
+	Audio              PlayContext[*track.Audio]
+	Video              PlayContext[*track.Video]
 	SkipTS             uint32 //跳过的时间戳
-	FirstAbsTS         uint32 //订阅起始时间戳
 }
 
-func (tp *TrackPlayer) ReadVideo() (vp *AVFrame[NALUSlice]) {
+func (tp *TrackPlayer) ReadVideo() (vp *AVFrame) {
 	vp = tp.Video.ring.Read(tp.Context)
 	tp.Video.Frame = vp
 	return
 }
 
-func (tp *TrackPlayer) ReadAudio() (ap *AVFrame[[]byte]) {
+func (tp *TrackPlayer) ReadAudio() (ap *AVFrame) {
 	ap = tp.Audio.ring.Read(tp.Context)
 	tp.Audio.Frame = ap
 	return
@@ -189,28 +211,28 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	var firstSeq, beforeJump uint32 //第一个关键帧的seq
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
-	sendVideoDecConf := func(frame *AVFrame[NALUSlice]) {
-		s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-		spesic.OnEvent(VideoDeConf(s.Video.Track.DecoderConfiguration))
+	sendVideoDecConf := func(frame *AVFrame) {
+		s.Video.confSeq = s.Video.Track.SequenceHeadSeq
+		spesic.OnEvent(VideoDeConf(s.Video.Track.SequenceHead))
 	}
-	sendAudioDecConf := func(frame *AVFrame[[]byte]) {
-		s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-		spesic.OnEvent(AudioDeConf(s.Audio.Track.DecoderConfiguration))
+	sendAudioDecConf := func(frame *AVFrame) {
+		s.Audio.confSeq = s.Audio.Track.SequenceHeadSeq
+		spesic.OnEvent(AudioDeConf(s.Audio.Track.SequenceHead))
 	}
-	var sendVideoFrame func(*AVFrame[NALUSlice])
-	var sendAudioFrame func(*AVFrame[[]byte])
+	var sendVideoFrame func(*AVFrame)
+	var sendAudioFrame func(*AVFrame)
 	switch subType {
 	case SUBTYPE_RAW:
-		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+		sendVideoFrame = func(frame *AVFrame) {
 			// println(frame.Sequence, frame.AbsTime, frame.PTS, frame.DTS, frame.IFrame)
 			spesic.OnEvent((*VideoFrame)(frame))
 		}
-		sendAudioFrame = func(frame *AVFrame[[]byte]) {
+		sendAudioFrame = func(frame *AVFrame) {
 			spesic.OnEvent((*AudioFrame)(frame))
 		}
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16
-		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+		sendVideoFrame = func(frame *AVFrame) {
 			for _, p := range frame.RTP {
 				videoSeq++
 				vp := *p
@@ -219,7 +241,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				spesic.OnEvent((VideoRTP)(vp))
 			}
 		}
-		sendAudioFrame = func(frame *AVFrame[[]byte]) {
+		sendAudioFrame = func(frame *AVFrame) {
 			for _, p := range frame.RTP {
 				audioSeq++
 				vp := *p
@@ -230,36 +252,31 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 	case SUBTYPE_FLV:
 		flvHeadCache := make([]byte, 15) //内存复用
-		sendFlvFrame := func(t byte, abs uint32, avcc net.Buffers) {
+		sendFlvFrame := func(t byte, ts uint32, avcc ...[]byte) {
 			flvHeadCache[0] = t
 			result := append(FLVFrame{flvHeadCache[:11]}, avcc...)
-			ts := abs - s.SkipTS
 			dataSize := uint32(util.SizeOfBuffers(avcc))
 			util.PutBE(flvHeadCache[1:4], dataSize)
 			util.PutBE(flvHeadCache[4:7], ts)
 			flvHeadCache[7] = byte(ts >> 24)
 			spesic.OnEvent(append(result, util.PutBE(flvHeadCache[11:15], dataSize+11)))
 		}
-		sendVideoDecConf = func(frame *AVFrame[NALUSlice]) {
-			s.Video.confSeq = s.Video.Track.DecoderConfiguration.Seq
-			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, s.Video.Track.DecoderConfiguration.AVCC)
+		sendVideoDecConf = func(frame *AVFrame) {
+			s.Video.confSeq = s.Video.Track.SequenceHeadSeq
+			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, 0, s.Video.Track.SequenceHead)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
 		}
-		sendAudioDecConf = func(frame *AVFrame[[]byte]) {
-			s.Audio.confSeq = s.Audio.Track.DecoderConfiguration.Seq
-			ts := s.SkipTS
-			if frame != nil {
-				ts = frame.AbsTime
-			}
-			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, ts, s.Audio.Track.DecoderConfiguration.AVCC)
+		sendAudioDecConf = func(frame *AVFrame) {
+			s.Audio.confSeq = s.Audio.Track.SequenceHeadSeq
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, 0, s.Audio.Track.SequenceHead)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
-		sendVideoFrame = func(frame *AVFrame[NALUSlice]) {
+		sendVideoFrame = func(frame *AVFrame) {
 			// println(frame.Sequence, frame.AbsTime, frame.DeltaTime, frame.IFrame)
-			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime, frame.AVCC)
+			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, frame.AbsTime-s.SkipTS, frame.AVCC.ToBuffers()...)
 		}
-		sendAudioFrame = func(frame *AVFrame[[]byte]) {
-			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime, frame.AVCC)
+		sendAudioFrame = func(frame *AVFrame) {
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, frame.AbsTime-s.SkipTS, frame.AVCC.ToBuffers()...)
 		}
 	}
 	defer s.onStop()
@@ -267,13 +284,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		hasVideo, hasAudio := s.Video.ring != nil && s.Config.SubVideo, s.Audio.ring != nil && s.Config.SubAudio
 		if hasVideo {
 			for ctx.Err() == nil {
-				var vp *AVFrame[NALUSlice]
+				var vp *AVFrame
 				switch vstate {
 				case SUBSTATE_INIT:
 					s.Video.ring.Ring = s.Video.Track.IDRing
 					vp = s.ReadVideo()
 					startTime = time.Now()
-					s.FirstAbsTS = vp.AbsTime
+					s.SkipTS = vp.AbsTime
 					firstSeq = vp.Sequence
 					s.Info("firstIFrame", zap.Uint32("seq", vp.Sequence))
 					if s.Config.LiveMode {
@@ -290,9 +307,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 						vstate = SUBSTATE_NORMAL
 					} else {
 						vp = s.ReadVideo()
-						beforeJump = vp.AbsTime
+						beforeJump = vp.AbsTime - s.SkipTS
 						// 防止过快消费
-						if fast := time.Duration(vp.AbsTime-s.FirstAbsTS)*time.Millisecond - time.Since(startTime); fast > 0 && fast < time.Second {
+						if fast := time.Duration(beforeJump)*time.Millisecond - time.Since(startTime); fast > 0 && fast < time.Second {
 							time.Sleep(fast)
 						}
 					}

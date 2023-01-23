@@ -117,7 +117,6 @@ type IIO interface {
 	Stop()
 	SetIO(any)
 	SetParentCtx(context.Context)
-	SetStuff(...any)
 	IsShutdown() bool
 }
 

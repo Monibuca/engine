@@ -6,6 +6,7 @@ import (
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/track"
+	"m7s.live/engine/v4/util"
 )
 
 type IPublisher interface {
@@ -53,15 +54,14 @@ func (p *Publisher) OnEvent(event any) {
 	}
 }
 
-func (p *Publisher) WriteAVCCVideo(ts uint32, frame common.AVCCFrame) {
-	if len(frame) < 6 {
+func (p *Publisher) WriteAVCCVideo(ts uint32, frame util.BLL) {
+	if frame.ByteLength < 6 {
 		return
 	}
 	if p.VideoTrack == nil {
-		if frame.IsSequence() {
+		if frame.GetByte(1) == 0 {
 			ts = 0
-			codecID := frame.VideoCodecID()
-			switch codecID {
+			switch codecID := codec.VideoCodecID(frame.GetByte(0) & 0x0F); codecID {
 			case codec.CodecID_H264:
 				p.VideoTrack = track.NewH264(p.Stream)
 			case codec.CodecID_H265:
@@ -79,21 +79,20 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame common.AVCCFrame) {
 	}
 }
 
-func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
-	if len(frame) < 4 {
+func (p *Publisher) WriteAVCCAudio(ts uint32, frame util.BLL) {
+	if frame.ByteLength < 4 {
 		return
 	}
 	if p.AudioTrack == nil {
-		codecID := frame.AudioCodecID()
-		switch codecID {
+		b0 := frame.GetByte(0)
+		switch codecID := codec.AudioCodecID(b0 >> 4); codecID {
 		case codec.CodecID_AAC:
-			if !frame.IsSequence() {
+			if frame.GetByte(1) != 0 {
 				return
 			}
 			a := track.NewAAC(p.Stream)
 			p.AudioTrack = a
-			a.Audio.SampleSize = 16
-			a.AVCCHead = []byte{frame[0][0], 1}
+			a.AVCCHead = []byte{frame.GetByte(0), 1}
 			a.WriteAVCC(0, frame)
 		case codec.CodecID_PCMA,
 			codec.CodecID_PCMU:
@@ -103,14 +102,13 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame common.AVCCFrame) {
 			}
 			a := track.NewG711(p.Stream, alaw)
 			p.AudioTrack = a
-			a.Audio.SampleRate = uint32(codec.SoundRate[(frame[0][0]&0x0c)>>2])
-			a.Audio.SampleSize = 16
-			if frame[0][0]&0x02 == 0 {
+			a.Audio.SampleRate = uint32(codec.SoundRate[(b0&0x0c)>>2])
+			if b0&0x02 == 0 {
 				a.Audio.SampleSize = 8
 			}
-			a.Channels = frame[0][0]&0x01 + 1
-			a.AVCCHead = frame[0][:1]
-			p.AudioTrack.WriteAVCC(ts, frame)
+			a.Channels = b0&0x01 + 1
+			a.AVCCHead = []byte{b0}
+			a.WriteAVCC(ts, frame)
 		default:
 			p.Stream.Error("audio codec not support yet", zap.Uint8("codecId", uint8(codecID)))
 		}

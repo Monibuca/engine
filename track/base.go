@@ -44,9 +44,9 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	}
 }
 
-type SpesificTrack[T RawSlice] interface {
-	CompleteRTP(*AVFrame[T])
-	CompleteAVCC(*AVFrame[T])
+type SpesificTrack interface {
+	CompleteRTP(*AVFrame)
+	CompleteAVCC(*AVFrame)
 	WriteSliceBytes([]byte)
 	WriteRTPFrame(*RTPFrame)
 	generateTimestamp(uint32)
@@ -54,23 +54,43 @@ type SpesificTrack[T RawSlice] interface {
 }
 
 // Media 基础媒体Track类
-type Media[T RawSlice] struct {
+type Media struct {
 	Base
-	AVRing[T]
-	SampleRate           uint32
-	SSRC                 uint32
-	DecoderConfiguration DecoderConfiguration[T] `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	AVRing
+	SampleRate      uint32
+	SSRC            uint32
+	PayloadType     byte
+	BytesPool       util.BytesPool
+	SequenceHead    []byte `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	SequenceHeadSeq int
 	RTPMuxer
 	RTPDemuxer
-	SpesificTrack[T] `json:"-"`
+	SpesificTrack `json:"-"`
 	流速控制
 }
 
-func (av *Media[T]) SetSpeedLimit(value int) {
+func (av *Media) GetDecConfSeq() int {
+	return av.SequenceHeadSeq
+}
+
+// 为json序列化而计算的数据
+func (av *Media) SnapForJson() {
+	v := av.LastValue
+	if av.RawPart != nil {
+		av.RawPart = av.RawPart[:0]
+	}
+	av.RawSize = v.AUList.ByteLength
+	r := v.AUList.Head.NewReader()
+	for b, err := r.ReadByte(); err == nil && len(av.RawPart) < 10; b, err = r.ReadByte() {
+		av.RawPart = append(av.RawPart, int(b))
+	}
+}
+
+func (av *Media) SetSpeedLimit(value int) {
 	av.等待上限 = time.Duration(value)
 }
 
-func (av *Media[T]) SetStuff(stuff ...any) {
+func (av *Media) SetStuff(stuff ...any) {
 	for _, s := range stuff {
 		switch v := s.(type) {
 		case time.Duration:
@@ -84,20 +104,22 @@ func (av *Media[T]) SetStuff(stuff ...any) {
 		case uint32:
 			av.SampleRate = v
 		case byte:
-			av.DecoderConfiguration.PayloadType = v
+			av.PayloadType = v
 		case IStream:
 			av.Stream = v
-		case SpesificTrack[T]:
+		case util.BytesPool:
+			av.BytesPool = v
+		case SpesificTrack:
 			av.SpesificTrack = v
 		}
 	}
 }
 
-func (av *Media[T]) LastWriteTime() time.Time {
+func (av *Media) LastWriteTime() time.Time {
 	return av.AVRing.RingBuffer.LastValue.Timestamp
 }
 
-func (av *Media[T]) Play(ctx context.Context, onMedia func(*AVFrame[T]) error) error {
+func (av *Media) Play(ctx context.Context, onMedia func(*AVFrame) error) error {
 	for ar := av.ReadRing(); ctx.Err() == nil; ar.MoveNext() {
 		ap := ar.Read(ctx)
 		if err := onMedia(ap); err != nil {
@@ -108,42 +130,38 @@ func (av *Media[T]) Play(ctx context.Context, onMedia func(*AVFrame[T]) error) e
 	return ctx.Err()
 }
 
-func (av *Media[T]) ReadRing() *AVRing[T] {
+func (av *Media) ReadRing() *AVRing {
 	return util.Clone(av.AVRing)
 }
 
-func (av *Media[T]) GetDecoderConfiguration() DecoderConfiguration[T] {
-	return av.DecoderConfiguration
-}
-
-func (av *Media[T]) CurrentFrame() *AVFrame[T] {
+func (av *Media) CurrentFrame() *AVFrame {
 	return &av.Value
 }
-func (av *Media[T]) PreFrame() *AVFrame[T] {
+func (av *Media) PreFrame() *AVFrame {
 	return av.LastValue
 }
 
-func (av *Media[T]) generateTimestamp(ts uint32) {
+func (av *Media) generateTimestamp(ts uint32) {
 	av.Value.PTS = ts
 	av.Value.DTS = ts
 }
 
-func (av *Media[T]) WriteAVCC(ts uint32, frame AVCCFrame) {
-	curValue := &av.Value
-	curValue.AbsTime = ts
-	curValue.BytesIn += len(frame)
-	curValue.AppendAVCC(frame)
-	// av.Stream.Tracef("WriteAVCC:ts %d,cts %d,len %d", ts, cts, len(frame))
+func (av *Media) AppendAuBytes(b ...[]byte) {
+	var au util.BLL
+	for _, bb := range b {
+		au.Push(av.BytesPool.GetShell(bb))
+	}
+	av.Value.AUList.Push(&au)
 }
 
-func (av *Media[T]) Flush() {
+func (av *Media) Flush() {
 	curValue, preValue := &av.Value, av.LastValue
 	// 补完RTP
 	if config.Global.EnableRTP && len(curValue.RTP) == 0 {
 		av.CompleteRTP(curValue)
 	}
 	// 补完AVCC
-	if config.Global.EnableAVCC && len(curValue.AVCC) == 0 {
+	if config.Global.EnableAVCC && curValue.AVCC.ByteLength == 0 {
 		av.CompleteAVCC(curValue)
 	}
 	if av.起始时间.IsZero() {
