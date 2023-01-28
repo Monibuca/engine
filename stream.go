@@ -11,6 +11,7 @@ import (
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/track"
 	"m7s.live/engine/v4/util"
@@ -151,6 +152,24 @@ type StreamTimeoutConfig struct {
 }
 type Tracks struct {
 	util.Map[string, Track]
+	MainVideo *track.Video
+}
+
+func (tracks *Tracks) Add(name string, t Track) bool {
+	if v, ok := t.(*track.Video); ok && tracks.MainVideo == nil {
+		tracks.MainVideo = v
+	}
+	return tracks.Map.Add(name, t)
+}
+
+func (tracks *Tracks) SetIDR(video Track) {
+	if video == tracks.MainVideo {
+		tracks.Map.Range(func(_ string, t Track) {
+			if v, ok := t.(*track.Audio); ok {
+				v.Narrow()
+			}
+		})
+	}
 }
 
 func (tracks *Tracks) MarshalJSON() ([]byte, error) {
@@ -186,6 +205,10 @@ type StreamSummay struct {
 	BPS         int
 }
 
+func (s *Stream) GetPublisherConfig() *config.Publish {
+	return s.Publisher.GetPublisher().Config
+}
+
 // Summary 返回流的简要信息
 func (s *Stream) Summary() (r StreamSummay) {
 	if s.Publisher != nil {
@@ -206,7 +229,9 @@ func (s *Stream) Summary() (r StreamSummay) {
 func (s *Stream) SSRC() uint32 {
 	return uint32(uintptr(unsafe.Pointer(s)))
 }
-
+func (s *Stream) SetIDR(video Track) {
+	s.Tracks.SetIDR(video)
+}
 func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream, created bool) {
 	p := strings.Split(streamPath, "/")
 	if len(p) < 2 {
@@ -248,7 +273,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
-			waitTime := 0
+			waitTime := time.Duration(0)
 			if r.Publisher != nil {
 				waitTime = r.Publisher.GetPublisher().Config.WaitCloseTimeout
 			}
@@ -260,9 +285,9 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 					waitTime = suber.GetSubscriber().Config.WaitTimeout
 				}
 			} else if waitTime == 0 {
-				waitTime = 1 //没有订阅者也没有配置发布者等待重连时间，默认1秒后关闭流
+				waitTime = time.Second //没有订阅者也没有配置发布者等待重连时间，默认1秒后关闭流
 			}
-			r.timeout.Reset(util.Second2Duration(waitTime))
+			r.timeout.Reset(waitTime)
 		case STATE_PUBLISHING:
 			stateEvent = SEpublish{event}
 			r.Subscribers.Broadcast(stateEvent)

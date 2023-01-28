@@ -57,17 +57,17 @@ type AVFrame struct {
 	RTP     []*RTPFrame `json:"-"`
 	AUList  util.BLLs   `json:"-"` // 裸数据
 	mem     util.BLL
-	canRead bool
+	CanRead bool `json:"-"`
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame util.BLL) {
 	av.AbsTime = ts
 	av.BytesIn += frame.ByteLength
-	av.AVCC = frame
+	frame.Transfer(&av.AVCC)
 	av.DTS = ts * 90
 }
 
-func (av *AVFrame) AppendMem(item *util.BLI) {
+func (av *AVFrame) AppendMem(item *util.ListItem[util.BLI]) {
 	av.mem.Push(item)
 }
 

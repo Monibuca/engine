@@ -144,7 +144,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	io.Args = u.Query()
 	wt := time.Second * 5
 	if v, ok := specific.(ISubscriber); ok {
-		wt = util.Second2Duration(v.GetSubscriber().Config.WaitTimeout)
+		wt = v.GetSubscriber().Config.WaitTimeout
 	}
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
@@ -180,8 +180,8 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				return ErrBadName
 			}
 		}
-		s.PublishTimeout = util.Second2Duration(conf.PublishTimeout)
-		s.DelayCloseTimeout = util.Second2Duration(conf.DelayCloseTimeout)
+		s.PublishTimeout = conf.PublishTimeout
+		s.DelayCloseTimeout = conf.DelayCloseTimeout
 		defer func() {
 			if err == nil {
 				if oldPublisher == nil {

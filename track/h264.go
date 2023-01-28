@@ -116,7 +116,7 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 			if util.Bit1(frame.Payload[1], 0) {
 				vt.WriteSliceByte(naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60))
 			}
-			rv.AUList.PushItem(&util.BLI{Bytes: frame.Payload[naluType.Offset():]})
+			rv.AUList.Push(vt.BytesPool.GetShell(frame.Payload[naluType.Offset():]))
 		}
 	}
 	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延
@@ -133,7 +133,7 @@ func (vt *H264) CompleteRTP(value *AVFrame) {
 		if value.IFrame {
 			out = append(out, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 		}
-		for au := vt.Value.AUList.Head; au != nil; au = au.Next {
+		vt.Value.AUList.Range(func(au *util.BLL) bool {
 			if au.ByteLength < 1200 {
 				out = append(out, au.ToBuffers())
 			} else {
@@ -151,7 +151,8 @@ func (vt *H264) CompleteRTP(value *AVFrame) {
 				}
 				buf[0][1] |= 1 << 6 // set end bit
 			}
-		}
+			return true
+		})
 		vt.PacketizeRTP(out...)
 	}
 }

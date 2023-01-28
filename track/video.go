@@ -2,11 +2,9 @@ package track
 
 import (
 	"bytes"
-	"context"
-	"net"
 
 	// . "github.com/logrusorgru/aurora"
-	"go.uber.org/zap"
+
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
@@ -15,27 +13,29 @@ import (
 type Video struct {
 	Media
 	CodecID     codec.VideoCodecID
-	IDRing      *util.Ring[AVFrame] `json:"-"` //最近的关键帧位置，首屏渲染
-	GOP         int                 //关键帧间隔
-	nalulenSize int                 //avcc格式中表示nalu长度的字节数，通常为4
-	idrCount    int                 //缓存中包含的idr数量
-	dcChanged   bool                //解码器配置是否改变了，一般由于变码率导致
+	GOP         int  //关键帧间隔
+	nalulenSize int  //avcc格式中表示nalu长度的字节数，通常为4
+	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
 	dtsEst      *DTSEstimator
 	lostFlag    bool // 是否丢帧
 	codec.SPSInfo
-	ParamaterSets
-	SPS []byte
-	PPS []byte
+	ParamaterSets `json:"-"`
+	SPS           []byte `json:"-"`
+	PPS           []byte `json:"-"`
 }
 
-func (vt *Video) Attach() {
-	vt.Stream.AddTrack(vt)
-	vt.Attached = 1
+func (v *Video) Attach() {
+	if v.Attached.CompareAndSwap(false, true) {
+		v.Stream.AddTrack(v)
+	}
 }
-func (vt *Video) Detach() {
-	vt.Stream.RemoveTrack(vt)
-	vt.Attached = 2
+
+func (v *Video) Detach() {
+	if v.Attached.CompareAndSwap(true, false) {
+		v.Stream.RemoveTrack(v)
+	}
 }
+
 func (vt *Video) GetName() string {
 	if vt.Name == "" {
 		return vt.CodecID.String()
@@ -44,45 +44,34 @@ func (vt *Video) GetName() string {
 }
 
 // PlayFullAnnexB 订阅annex-b格式的流数据，每一个I帧增加sps、pps头
-func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) error) error {
-	for vr := vt.ReadRing(); ctx.Err() == nil; vr.MoveNext() {
-		vp := vr.Read(ctx)
-		var data net.Buffers
-		if vp.IFrame {
-			data = vt.GetAnnexB()
-		}
-		data = append(data, codec.NALU_Delimiter2)
-		for slice := vp.AUList.Head; slice != nil; slice = slice.Next {
-			data = append(data, slice.ToBuffers()...)
-			if slice.Next != nil {
-				data = append(data, codec.NALU_Delimiter1)
-			}
-		}
+// func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) error) error {
+// 	for vr := vt.ReadRing(); ctx.Err() == nil; vr.MoveNext() {
+// 		vp := vr.Read(ctx)
+// 		var data net.Buffers
+// 		if vp.IFrame {
+// 			data = vt.GetAnnexB()
+// 		}
+// 		data = append(data, codec.NALU_Delimiter2)
+// 		for slice := vp.AUList.Head; slice != nil; slice = slice.Next {
+// 			data = append(data, slice.ToBuffers()...)
+// 			if slice.Next != nil {
+// 				data = append(data, codec.NALU_Delimiter1)
+// 			}
+// 		}
 
-		if err := onMedia(data); err != nil {
-			// TODO: log err
-			return err
-		}
-	}
-	return ctx.Err()
-}
+//			if err := onMedia(data); err != nil {
+//				// TODO: log err
+//				return err
+//			}
+//		}
+//		return ctx.Err()
+//	}
 func (vt *Video) computeGOP() {
-	vt.idrCount++
-	if vt.IDRing != nil {
+	if vt.HistoryRing == nil && vt.IDRing != nil {
 		vt.GOP = int(vt.Value.Sequence - vt.IDRing.Value.Sequence)
-		if l := vt.AVRing.Size - vt.GOP - 5; l > 5 {
-			vt.AVRing.Size -= l
-			vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.Size+l), zap.Int("after", vt.AVRing.Size), zap.String("name", vt.Name))
-			//缩小缓冲环节省内存
-			vt.Unlink(l).Do(func(v AVFrame) {
-				if v.IFrame {
-					vt.idrCount--
-				}
-				v.Reset()
-			})
-		}
+		vt.narrow(vt.GOP)
 	}
-	vt.IDRing = vt.AVRing.Ring
+	vt.IDRing = vt.Ring
 	// var n int
 	// for i := 0; i < len(vt.BytesPool); i++ {
 	// 	n += vt.BytesPool[i].Length
@@ -178,7 +167,7 @@ func (vt *Video) SetLostFlag() {
 }
 func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	mem := vt.BytesPool.Get(5)
-	b := mem.Bytes
+	b := mem.Value
 	if rv.IFrame {
 		b[0] = 0x10 | byte(vt.CodecID)
 	} else {
@@ -189,14 +178,16 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	// 写入CTS
 	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
 	rv.AVCC.Push(mem)
-	for p := vt.Value.AUList.Head; p != nil; p = p.Next {
+	vt.Value.AUList.Range(func(au *util.BLL) bool {
 		mem = vt.BytesPool.Get(4)
-		util.PutBE(mem.Bytes, uint32(p.ByteLength))
+		util.PutBE(mem.Value, uint32(au.ByteLength))
 		vt.Value.AVCC.Push(mem)
-		for pp := p.Head; pp != nil; pp = pp.Next {
-			vt.Value.AVCC.Push(vt.BytesPool.GetShell(pp.Bytes))
-		}
-	}
+		au.Range(func(slice util.BLI) bool {
+			vt.Value.AVCC.Push(vt.BytesPool.GetShell(slice))
+			return true
+		})
+		return true
+	})
 }
 
 func (vt *Video) Flush() {
@@ -207,8 +198,9 @@ func (vt *Video) Flush() {
 	}
 	if rv.IFrame {
 		vt.computeGOP()
+		vt.Stream.SetIDR(vt)
 	}
-	if vt.Attached == 0 && vt.IDRing != nil && vt.SequenceHeadSeq > 0 {
+	if !vt.Attached.Load() && vt.IDRing != nil && vt.SequenceHeadSeq > 0 {
 		defer vt.Attach()
 	}
 
@@ -220,18 +212,7 @@ func (vt *Video) Flush() {
 			return
 		}
 	}
-	// 下一帧为I帧，即将覆盖，需要扩环
-	if vt.Next().Value.IFrame {
-		// 仅存一枚I帧
-		if vt.idrCount == 1 {
-			if vt.AVRing.Size < 256 {
-				vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.Size), zap.Int("after", vt.AVRing.Size+5), zap.String("name", vt.Name))
-				vt.Link(util.NewRing[AVFrame](5)) // 扩大缓冲环
-			}
-		} else {
-			vt.idrCount--
-		}
-	}
+
 	vt.Media.Flush()
 	vt.dcChanged = false
 }
@@ -239,12 +220,6 @@ func (vt *Video) Flush() {
 func (vt *Video) updateSequeceHead() {
 	vt.dcChanged = true
 	vt.SequenceHeadSeq++
-}
-
-func (vt *Video) ReadRing() *AVRing {
-	vr := vt.Media.ReadRing()
-	vr.Ring = vt.IDRing
-	return vr
 }
 
 /*

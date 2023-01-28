@@ -20,7 +20,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
-	aac.SetStuff("aac", stream, int(32), byte(97), aac, time.Millisecond*10)
+	aac.SetStuff("aac", stream, int(256+128), byte(97), aac, time.Millisecond*10)
 	aac.SetStuff(stuff...)
 	aac.AVCCHead = []byte{0xAF, 1}
 	return
@@ -51,7 +51,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 	auHeaderLen := util.ReadBE[int](frame.Payload[:aac.Mode]) >> 3 //通常为2，即一个AU Header的长度
 	// auHeaderCount := auHeaderLen >> 1 // AU Header的个数, 通常为1
 	if auHeaderLen == 0 {
-		aac.Value.AUList.PushItem(aac.BytesPool.GetShell(frame.Payload))
+		aac.Value.AUList.Push(aac.BytesPool.GetShell(frame.Payload))
 	} else {
 		startOffset := aac.Mode + auHeaderLen // 实际数据开始的位置
 		if aac.lack > 0 {
@@ -59,16 +59,16 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 			if rawLen == 0 {
 				aac.Stream.Error("lack >0 but rawlen=0")
 			}
-			last := aac.Value.AUList.Tail
+			last := aac.Value.AUList.Pre
 			auLen := len(frame.Payload) - startOffset
 			if aac.lack > auLen {
-				last.Push(aac.BytesPool.GetShell(frame.Payload[startOffset:]))
+				last.Value.Push(aac.BytesPool.GetShell(frame.Payload[startOffset:]))
 				aac.lack -= auLen
 				return
 			} else if aac.lack < auLen {
 				aac.Stream.Warn("lack < auLen", zap.Int("lack", aac.lack), zap.Int("auLen", auLen))
 			}
-			last.Push(aac.BytesPool.GetShell(frame.Payload[startOffset : startOffset+aac.lack]))
+			last.Value.Push(aac.BytesPool.GetShell(frame.Payload[startOffset : startOffset+aac.lack]))
 			aac.lack = 0
 			return
 		}
@@ -121,7 +121,7 @@ func (aac *AAC) CompleteRTP(value *AVFrame) {
 	//AU_HEADER_LENGTH,因为单位是bit, 除以8就是auHeader的字节长度；又因为单个auheader字节长度2字节，所以再除以2就是auheader的个数。
 	auHeaderLen := []byte{0x00, 0x10, (byte)((l & 0x1fe0) >> 5), (byte)((l & 0x1f) << 3)} // 3 = 16-13, 5 = 8-3
 	var packets [][][]byte
-	r := value.AUList.Head.NewReader()
+	r := value.AUList.Next.Value.NewReader()
 	for bufs := r.ReadN(1200); len(bufs) > 0; bufs = r.ReadN(1200) {
 		packets = append(packets, append(net.Buffers{auHeaderLen}, bufs...))
 	}

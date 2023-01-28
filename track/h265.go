@@ -13,7 +13,7 @@ var _ SpesificTrack = (*H265)(nil)
 
 type H265 struct {
 	Video
-	VPS []byte
+	VPS []byte `json:"-"`
 }
 
 func NewH265(stream IStream, stuff ...any) (vt *H265) {
@@ -112,7 +112,7 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 		if naluType := fuHeader & 0b00111111; util.Bit1(fuHeader, 0) {
 			vt.WriteSliceByte(first3[0]&0b10000001|(naluType<<1), first3[1])
 		}
-		rv.AUList.PushItem(&util.BLI{Bytes: buffer})
+		rv.AUList.Push(vt.BytesPool.GetShell(buffer))
 		// if util.Bit1(fuHeader, 1) {
 		// 	complete := rv.Raw[lastIndex] //拼接完成
 		// 	rv.Raw = rv.Raw[:lastIndex]   // 缩短一个元素，因为后面的方法会加回去
@@ -136,12 +136,12 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 		if value.IFrame {
 			out = append(out, [][]byte{vt.VPS}, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 		}
-		for au := vt.Value.AUList.Head; au != nil; au = au.Next {
-			if au.ByteLength < 1200 {
-				out = append(out, au.ToBuffers())
+		for au := vt.Value.AUList.Next; au != nil && au != &vt.Value.AUList.ListItem; au = au.Next {
+			if au.Value.ByteLength < 1200 {
+				out = append(out, au.Value.ToBuffers())
 			} else {
 				var naluType codec.H265NALUType
-				r := au.NewReader()
+				r := au.Value.NewReader()
 				b0, _ := r.ReadByte()
 				b1, _ := r.ReadByte()
 				naluType = naluType.Parse(b0)

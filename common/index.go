@@ -1,6 +1,7 @@
 package common
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/rtp"
@@ -15,8 +16,8 @@ type TimelineData[T any] struct {
 // Base 基础Track类
 type Base struct {
 	Name     string
-	Stream   IStream `json:"-"`
-	Attached byte    // 0代表准备好后自动attach，1代表已经attach，2代表已经detach
+	Stream   IStream     `json:"-"`
+	Attached atomic.Bool `json:"-"`
 	ts       time.Time
 	bytes    int
 	frames   int
@@ -59,28 +60,30 @@ func (bt *Base) Flush(bf *BaseFrame) {
 	bt.ComputeBPS(bf.BytesIn)
 	bf.Timestamp = time.Now()
 }
+func (bt *Base) SetStuff(stuff ...any) {
+}
 
 type Track interface {
 	GetBase() *Base
 	LastWriteTime() time.Time
 	SnapForJson()
+	SetStuff(stuff ...any)
 }
 
 type AVTrack interface {
 	Track
+	PreFrame() *AVFrame
+	CurrentFrame() *AVFrame
 	Attach()
 	Detach()
 	WriteAVCC(ts uint32, frame util.BLL) //写入AVCC格式的数据
 	WriteRTP([]byte)
 	WriteRTPPack(*rtp.Packet)
 	Flush()
-	SetSpeedLimit(int)
-	SetStuff(stuff ...any)
+	SetSpeedLimit(time.Duration)
 }
 type VideoTrack interface {
 	AVTrack
-	CurrentFrame() *AVFrame
-	PreFrame() *AVFrame
 	WriteSliceBytes(slice []byte)
 	WriteAnnexB(uint32, uint32, AnnexBFrame)
 	SetLostFlag()
@@ -88,8 +91,6 @@ type VideoTrack interface {
 
 type AudioTrack interface {
 	AVTrack
-	CurrentFrame() *AVFrame
-	PreFrame() *AVFrame
 	WriteADTS([]byte)
 	WriteRaw(uint32, []byte)
 }

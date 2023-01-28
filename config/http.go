@@ -22,9 +22,9 @@ type HTTP struct {
 	CORS          bool //是否自动添加CORS头
 	UserName      string
 	Password      string
-	ReadTimeout   float64
-	WriteTimeout  float64
-	IdleTimeout   float64
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+	IdleTimeout   time.Duration
 	mux           *http.ServeMux
 	middlewares   []Middleware
 }
@@ -70,9 +70,9 @@ func (config *HTTP) Listen(ctx context.Context) error {
 			log.Info("🌐 https listen at ", Blink(config.ListenAddrTLS))
 			var server = http.Server{
 				Addr:         config.ListenAddrTLS,
-				ReadTimeout:  time.Duration(config.ReadTimeout) * time.Second,
-				WriteTimeout: time.Duration(config.WriteTimeout) * time.Second,
-				IdleTimeout:  time.Duration(config.IdleTimeout) * time.Second,
+				ReadTimeout:  config.ReadTimeout,
+				WriteTimeout: config.WriteTimeout,
+				IdleTimeout:  config.IdleTimeout,
 				Handler:      config.mux,
 			}
 			return server.ListenAndServeTLS(config.CertFile, config.KeyFile)
@@ -83,9 +83,9 @@ func (config *HTTP) Listen(ctx context.Context) error {
 			log.Info("🌐 http listen at ", Blink(config.ListenAddr))
 			var server = http.Server{
 				Addr:         config.ListenAddr,
-				ReadTimeout:  time.Duration(config.ReadTimeout) * time.Second,
-				WriteTimeout: time.Duration(config.WriteTimeout) * time.Second,
-				IdleTimeout:  time.Duration(config.IdleTimeout) * time.Second,
+				ReadTimeout:  config.ReadTimeout,
+				WriteTimeout: config.WriteTimeout,
+				IdleTimeout:  config.IdleTimeout,
 				Handler:      config.mux,
 			}
 			return server.ListenAndServe()

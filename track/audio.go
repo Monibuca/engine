@@ -15,27 +15,25 @@ type Audio struct {
 	codec.AudioSpecificConfig
 }
 
-func (a *Audio) IsAAC() bool {
-	return a.CodecID == codec.CodecID_AAC
+func (a *Audio) Attach() {
+	if a.Attached.CompareAndSwap(false, true) {
+		a.Stream.AddTrack(a)
+	}
 }
 
-func (a *Audio) Attach() {
-	a.Stream.AddTrack(a)
-	a.Attached = 1
-}
 func (a *Audio) Detach() {
-	a.Stream.RemoveTrack(a)
-	a.Attached = 2
+	if a.Attached.CompareAndSwap(true, false) {
+		a.Stream.RemoveTrack(a)
+	}
 }
+
 func (a *Audio) GetName() string {
 	if a.Name == "" {
 		return a.CodecID.String()
 	}
 	return a.Name
 }
-func (a *Audio) GetInfo() *Audio {
-	return a
-}
+
 func (av *Audio) WriteADTS(adts []byte) {
 
 }
@@ -45,7 +43,7 @@ func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	if len(av.AVCCHead) == 2 {
 		raw = raw[7:] //AAC 去掉7个字节的ADTS头
 	}
-	curValue.AUList.PushItem(av.BytesPool.GetShell(raw))
+	curValue.AUList.Push(av.BytesPool.GetShell(raw))
 	av.generateTimestamp(pts)
 	av.Flush()
 }
@@ -58,13 +56,22 @@ func (av *Audio) WriteAVCC(ts uint32, frame util.BLL) {
 
 func (a *Audio) CompleteAVCC(value *AVFrame) {
 	value.AVCC.Push(a.BytesPool.GetShell(a.AVCCHead))
-	for p := value.AUList.Head; p != nil; p = p.Next {
-		for pp := p.Head; pp != nil; pp = pp.Next {
-			value.AVCC.Push(a.BytesPool.GetShell(pp.Bytes))
-		}
-	}
+	value.AUList.Range(func(v *util.BLL) bool {
+		v.Range(func(v util.BLI) bool {
+			value.AVCC.Push(a.BytesPool.GetShell(v))
+			return true
+		})
+		return true
+	})
 }
 
 func (a *Audio) CompleteRTP(value *AVFrame) {
 	a.PacketizeRTP(value.AUList.ToList()...)
+}
+
+func (a *Audio) Narrow() {
+	if a.HistoryRing == nil && a.IDRing != nil {
+		a.narrow(int(a.Value.Sequence - a.IDRing.Value.Sequence))
+	}
+	a.AddIDR()
 }

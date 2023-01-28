@@ -72,7 +72,7 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 			packet.PayloadType = av.PayloadType
 			item := av.BytesPool.Get(1200)
 			av.Value.AppendMem(item)
-			packet.Payload = item.Bytes[:0]
+			packet.Payload = item.Value[:0]
 			packet.SSRC = av.SSRC
 		}
 		packet.Payload = packet.Payload[:0]
