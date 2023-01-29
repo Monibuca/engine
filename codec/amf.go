@@ -92,7 +92,12 @@ func (amf *AMF) ReadShortString() string {
 
 func (amf *AMF) ReadNumber() float64 {
 	value, _ := amf.Unmarshal()
-	return value.(float64)
+	rt, ok := value.(float64)
+	if ok {
+		return rt
+	} else {
+		return 0
+	}
 }
 
 func (amf *AMF) ReadObject() map[string]any {
@@ -105,7 +110,12 @@ func (amf *AMF) ReadObject() map[string]any {
 
 func (amf *AMF) ReadBool() bool {
 	value, _ := amf.Unmarshal()
-	return value.(bool)
+	rt, ok := value.(bool)
+	if ok {
+		return rt
+	} else {
+		return false
+	}
 }
 
 func (amf *AMF) readKey() (string, error) {

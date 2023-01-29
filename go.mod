@@ -1,6 +1,6 @@
 module m7s.live/engine/v4
 
-go 1.18
+go 1.19
 
 require (
 	github.com/cnotch/ipchub v1.1.0
