@@ -78,7 +78,7 @@ func (r *BLLsReader) CanRead() bool {
 	return r.ListItem != nil && !r.IsRoot()
 }
 
-func (r *BLLsReader) ReadByte() (b byte, err error)  {
+func (r *BLLsReader) ReadByte() (b byte, err error) {
 	if r.BLLReader.CanRead() {
 		b, err = r.BLLReader.ReadByte()
 		if err == nil {
@@ -92,6 +92,7 @@ func (r *BLLsReader) ReadByte() (b byte, err error)  {
 	r.BLLReader = *r.Value.NewReader()
 	return r.BLLReader.ReadByte()
 }
+
 type BLLs struct {
 	List[*BLL]
 	ByteLength int
@@ -257,6 +258,9 @@ type BytesPool []List[BLI]
 
 // 获取来自真实内存的切片的——假内存块，即只回收外壳
 func (p BytesPool) GetShell(b []byte) (item *ListItem[BLI]) {
+	if len(p) == 0 {
+		return &ListItem[BLI]{Value: b}
+	}
 	if p[0].Length > 0 {
 		item = p[0].Shift()
 	} else {
@@ -275,17 +279,19 @@ func (p BytesPool) Get(size int) (item *ListItem[BLI]) {
 				item = p[i].Shift()
 				item.Value = item.Value[:size]
 			} else {
-				item = &ListItem[BLI]{}
+				item = &ListItem[BLI]{
+					Value: make([]byte, size, level),
+				}
 			}
 			item.Pool = &p[i]
-			item.Value = make([]byte, size, level)
 			return
 		}
 	}
 	// Pool 中没有就无法回收
 	if item == nil {
-		item = &ListItem[BLI]{}
-		item.Value = make([]byte, size)
+		item = &ListItem[BLI]{
+			Value: make([]byte, size),
+		}
 	}
 	return
 }

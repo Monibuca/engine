@@ -25,24 +25,28 @@ func (d *DTSEstimator) Clone() *DTSEstimator {
 
 func (d *DTSEstimator) add(pts uint32) {
 	i := 0
-	if len(d.cache) >= 4 {
-		i = len(d.cache) - 3
+	l := len(d.cache)
+	if l >= 4 {
+		l--
+		// i = l - 3
+		d.cache = append(d.cache[:0], d.cache[1:]...)[:l]
 	}
 
-	var new_cache []uint32
-	for ; i < len(d.cache); i = i + 1 {
+	for ; i < l; i = i + 1 {
 		if d.cache[i] > pts {
 			break
 		}
-		new_cache = append(new_cache, d.cache[i])
 	}
-	new_cache = append(new_cache, pts)
-	new_cache = append(new_cache, d.cache[i:]...)
-	d.cache = new_cache
+	d.cache = append(d.cache, pts)
+	d.cache = append(d.cache[:i+1], d.cache[i:l]...)
+	d.cache[i] = pts
 }
 
 // Feed provides PTS to the estimator, and returns the estimated DTS.
 func (d *DTSEstimator) Feed(pts uint32) uint32 {
+	if pts < d.prevPTS && d.prevPTS-pts > 0x80000000 {
+		*d = *NewDTSEstimator()
+	}
 	d.add(pts)
 	dts := pts
 	if !d.hasB {

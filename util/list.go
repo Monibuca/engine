@@ -82,7 +82,7 @@ func (p *List[T]) Range(do func(value T) bool) {
 }
 
 func (p *List[T]) Recycle() {
-	for item := p.Next; item != nil && !item.IsRoot(); {
+	for item := p.Next; item != nil && item.list != nil && !item.IsRoot(); {
 		next := item.Next
 		item.Recycle()
 		item = next

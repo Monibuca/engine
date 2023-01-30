@@ -39,8 +39,7 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 		vt.ParamaterSets[1] = slice
 		lenSPS := len(vt.Video.SPS)
 		lenPPS := len(vt.Video.PPS)
-		b := util.Buffer(vt.SequenceHead)
-		b.Reset()
+		var b util.Buffer
 		if lenSPS > 3 {
 			b.Write(codec.RTMP_AVC_HEAD[:6])
 			b.Write(vt.Video.SPS[1:4])
@@ -51,8 +50,10 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 		b.WriteByte(0xE1)
 		b.WriteUint16(uint16(lenSPS))
 		b.Write(vt.Video.SPS)
+		b.WriteByte(0x01)
 		b.WriteUint16(uint16(lenPPS))
 		b.Write(vt.Video.PPS)
+		vt.SequenceHead = b
 		vt.updateSequeceHead()
 	case codec.NALU_IDR_Picture:
 		vt.Value.IFrame = true
@@ -119,7 +120,7 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 			if util.Bit1(frame.Payload[1], 0) {
 				vt.WriteSliceByte(naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60))
 			}
-			rv.AUList.Push(vt.BytesPool.GetShell(frame.Payload[naluType.Offset():]))
+			rv.AUList.Pre.Value.Push(vt.BytesPool.GetShell(frame.Payload[naluType.Offset():]))
 		}
 	}
 	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延

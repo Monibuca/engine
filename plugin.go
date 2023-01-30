@@ -286,8 +286,8 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int)
 				time.Sleep(time.Second * 5)
 			} else {
 				if err = opt.Publish(streamPath, puller); err != nil {
-					if puber := Streams.Get(streamPath).Publisher; puber != puller && puber != nil {
-						io := puber.GetPublisher()
+					if stream := Streams.Get(streamPath); stream != nil && stream.Publisher != puller && stream.Publisher != nil {
+						io := stream.Publisher.GetPublisher()
 						opt.Error("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
 						return
 					}

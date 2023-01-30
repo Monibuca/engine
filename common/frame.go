@@ -88,11 +88,6 @@ func (av *AVFrame) Reset() {
 	av.DeltaTime = 0
 }
 
-type SequenceHead struct {
-	AVCC []byte
-	Seq  int //收到第几个序列帧，用于变码率时让订阅者发送序列帧
-}
-
 type ParamaterSets [][]byte
 
 func (v ParamaterSets) GetAnnexB() (r net.Buffers) {

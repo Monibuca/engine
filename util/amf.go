@@ -83,7 +83,7 @@ type AMF struct {
 	Buffer
 }
 
-func ReadAMF[T any](amf *AMF) (result T) {
+func ReadAMF[T string | float64 | bool | map[string]any](amf *AMF) (result T) {
 	value, err := amf.Unmarshal()
 	if err != nil {
 		return

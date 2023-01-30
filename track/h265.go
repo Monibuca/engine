@@ -111,12 +111,7 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 		if naluType := fuHeader & 0b00111111; util.Bit1(fuHeader, 0) {
 			vt.WriteSliceByte(first3[0]&0b10000001|(naluType<<1), first3[1])
 		}
-		rv.AUList.Push(vt.BytesPool.GetShell(buffer))
-		// if util.Bit1(fuHeader, 1) {
-		// 	complete := rv.Raw[lastIndex] //拼接完成
-		// 	rv.Raw = rv.Raw[:lastIndex]   // 缩短一个元素，因为后面的方法会加回去
-		// 	vt.WriteSlice(complete)
-		// }
+		rv.AUList.Pre.Value.Push(vt.BytesPool.GetShell(buffer))
 	default:
 		vt.WriteSliceBytes(frame.Payload)
 	}

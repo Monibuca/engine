@@ -179,12 +179,12 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	// 写入CTS
 	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
 	rv.AVCC.Push(mem)
-	vt.Value.AUList.Range(func(au *util.BLL) bool {
+	rv.AUList.Range(func(au *util.BLL) bool {
 		mem = vt.BytesPool.Get(4)
 		util.PutBE(mem.Value, uint32(au.ByteLength))
-		vt.Value.AVCC.Push(mem)
+		rv.AVCC.Push(mem)
 		au.Range(func(slice util.BLI) bool {
-			vt.Value.AVCC.Push(vt.BytesPool.GetShell(slice))
+			rv.AVCC.Push(vt.BytesPool.GetShell(slice))
 			return true
 		})
 		return true
