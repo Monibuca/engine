@@ -83,27 +83,29 @@ type AMF struct {
 	Buffer
 }
 
-func (amf *AMF) ReadShortString() string {
-	value, _ := amf.Unmarshal()
-	return value.(string)
-}
-
-func (amf *AMF) ReadNumber() float64 {
-	value, _ := amf.Unmarshal()
-	return value.(float64)
-}
-
-func (amf *AMF) ReadObject() map[string]any {
-	value, _ := amf.Unmarshal()
-	if value == nil {
-		return nil
+func ReadAMF[T any](amf *AMF) (result T) {
+	value, err := amf.Unmarshal()
+	if err != nil {
+		return
 	}
-	return value.(map[string]any)
+	result, _ = value.(T)
+	return
 }
 
-func (amf *AMF) ReadBool() bool {
-	value, _ := amf.Unmarshal()
-	return value.(bool)
+func (amf *AMF) ReadShortString() (result string) {
+	return ReadAMF[string](amf)
+}
+
+func (amf *AMF) ReadNumber() (result float64) {
+	return ReadAMF[float64](amf)
+}
+
+func (amf *AMF) ReadObject() (result map[string]any) {
+	return ReadAMF[map[string]any](amf)
+}
+
+func (amf *AMF) ReadBool() (result bool) {
+	return ReadAMF[bool](amf)
 }
 
 func (amf *AMF) readKey() (string, error) {

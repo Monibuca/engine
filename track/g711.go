@@ -1,6 +1,7 @@
 package track
 
 import (
+	"io"
 	"time"
 
 	"go.uber.org/zap"
@@ -36,17 +37,18 @@ type G711 struct {
 	Audio
 }
 
-func (g711 *G711) WriteAVCC(ts uint32, frame util.BLL) {
+func (g711 *G711) WriteAVCC(ts uint32, frame util.BLL) error {
 	if l := frame.ByteLength; l < 2 {
 		g711.Stream.Error("AVCC data too short", zap.Int("len", l))
-		return
+		return io.ErrShortWrite
 	}
 	g711.Value.AUList.Push(g711.BytesPool.GetShell(frame.Next.Value[1:]))
-	frame.Next.Range(func(v util.BLI) bool {
+	frame.Range(func(v util.BLI) bool {
 		g711.Value.AUList.Push(g711.BytesPool.GetShell(v))
 		return true
 	})
 	g711.Audio.WriteAVCC(ts, frame)
+	return nil
 }
 
 func (g711 *G711) WriteRTPFrame(frame *RTPFrame) {

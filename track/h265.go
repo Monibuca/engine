@@ -1,6 +1,7 @@
 package track
 
 import (
+	"io"
 	"time"
 
 	"go.uber.org/zap"
@@ -62,27 +63,25 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 	}
 }
 
-func (vt *H265) WriteAVCC(ts uint32, frame util.BLL) {
+func (vt *H265) WriteAVCC(ts uint32, frame util.BLL) (err error) {
 	if l := frame.ByteLength; l < 6 {
 		vt.Stream.Error("AVCC data too short", zap.Int("len", l))
-		return
+		return io.ErrShortWrite
 	}
 	if frame.GetByte(1) == 0 {
 		vt.SequenceHead = frame.ToBytes()
 		frame.Recycle()
 		vt.updateSequeceHead()
-		if vps, sps, pps, err := codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(vt.SequenceHead); err == nil {
+		if vt.VPS, vt.SPS, vt.PPS, err = codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(vt.SequenceHead); err == nil {
 			vt.SPSInfo, _ = codec.ParseHevcSPS(vt.SequenceHead)
 			vt.nalulenSize = (int(vt.SequenceHead[26]) & 0x03) + 1
-			vt.VPS = vps
-			vt.SPS = sps
-			vt.PPS = pps
 		} else {
 			vt.Stream.Error("H265 ParseVpsSpsPps Error")
 			vt.Stream.Close()
 		}
+		return
 	} else {
-		vt.Video.WriteAVCC(ts, frame)
+		return vt.Video.WriteAVCC(ts, frame)
 	}
 }
 

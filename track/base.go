@@ -93,7 +93,7 @@ func (av *Media) SnapForJson() {
 		av.RawPart = av.RawPart[:0]
 	}
 	av.RawSize = v.AUList.ByteLength
-	r := v.AUList.Next.Value.NewReader()
+	r := v.AUList.NewReader()
 	for b, err := r.ReadByte(); err == nil && len(av.RawPart) < 10; b, err = r.ReadByte() {
 		av.RawPart = append(av.RawPart, int(b))
 	}

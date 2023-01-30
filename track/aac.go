@@ -1,6 +1,7 @@
 package track
 
 import (
+	"io"
 	"net"
 	"time"
 
@@ -100,10 +101,10 @@ func (aac *AAC) WriteAVCCSequenceHead(sh []byte) {
 	aac.WriteSequenceHead(append([]byte{0xAF, 0x00}, sh...))
 }
 
-func (aac *AAC) WriteAVCC(ts uint32, frame util.BLL) {
+func (aac *AAC) WriteAVCC(ts uint32, frame util.BLL) error {
 	if l := frame.ByteLength; l < 4 {
 		aac.Stream.Error("AVCC data too short", zap.Int("len", l))
-		return
+		return io.ErrShortWrite
 	}
 	if frame.GetByte(1) == 0 {
 		aac.WriteSequenceHead(frame.ToBytes())
@@ -114,6 +115,7 @@ func (aac *AAC) WriteAVCC(ts uint32, frame util.BLL) {
 		aac.AppendAuBytes(au...)
 		aac.Audio.WriteAVCC(ts, frame)
 	}
+	return nil
 }
 
 func (aac *AAC) CompleteRTP(value *AVFrame) {

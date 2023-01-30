@@ -69,6 +69,29 @@ func (r *BLLReader) ReadN(n int) (result net.Buffers) {
 	return
 }
 
+type BLLsReader struct {
+	*ListItem[*BLL]
+	BLLReader
+}
+
+func (r *BLLsReader) CanRead() bool {
+	return r.ListItem != nil && !r.IsRoot()
+}
+
+func (r *BLLsReader) ReadByte() (b byte, err error)  {
+	if r.BLLReader.CanRead() {
+		b, err = r.BLLReader.ReadByte()
+		if err == nil {
+			return
+		}
+	}
+	r.ListItem = r.Next
+	if !r.CanRead() {
+		return 0, io.EOF
+	}
+	r.BLLReader = *r.Value.NewReader()
+	return r.BLLReader.ReadByte()
+}
 type BLLs struct {
 	List[*BLL]
 	ByteLength int
@@ -119,6 +142,10 @@ func (list *BLLs) Recycle() {
 	})
 	list.Clear()
 	list.ByteLength = 0
+}
+
+func (list *BLLs) NewReader() *BLLsReader {
+	return &BLLsReader{list.Next, *list.Next.Value.NewReader()}
 }
 
 // ByteLinkList

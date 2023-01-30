@@ -27,12 +27,16 @@ const (
 	SUBSTATE_NORMAL
 )
 
+// AVCC 格式的序列帧
 type VideoDeConf []byte
+
+// AVCC 格式的序列帧
 type AudioDeConf []byte
 type AudioFrame struct {
 	*AVFrame
 	AbsTime uint32
 	PTS     uint32
+	DTS     uint32
 }
 type VideoFrame struct {
 	*AVFrame
@@ -168,13 +172,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
 	sendVideoDecConf := func() {
+		spesic.OnEvent(s.Video.ParamaterSets)
 		spesic.OnEvent(VideoDeConf(s.VideoReader.Track.SequenceHead))
 	}
 	sendAudioDecConf := func() {
 		spesic.OnEvent(AudioDeConf(s.AudioReader.Track.SequenceHead))
 	}
-	var sendVideoFrame func(*AVFrame)
-	var sendAudioFrame func(*AVFrame)
+	var sendAudioFrame, sendVideoFrame func(*AVFrame)
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
@@ -183,7 +187,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendAudioFrame = func(frame *AVFrame) {
 			// println("a", frame.Sequence, s.AudioReader.AbsTime)
-			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, frame.DTS - s.VideoReader.SkipTs*90})
+			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, s.AudioReader.AbsTime * 90, s.AudioReader.AbsTime * 90})
 		}
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16
@@ -201,7 +205,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				audioSeq++
 				vp := *p
 				vp.Header.SequenceNumber = audioSeq
-				vp.Header.Timestamp = vp.Header.Timestamp - s.VideoReader.SkipTs*90
+				vp.Header.Timestamp = vp.Header.Timestamp - s.AudioReader.SkipTs*90
 				spesic.OnEvent((AudioRTP)(vp))
 			}
 		}
@@ -225,10 +229,11 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
 		sendVideoFrame = func(frame *AVFrame) {
-			// println(frame.Sequence, frame.AbsTime, frame.DeltaTime, frame.IFrame)
+			// println(frame.Sequence, s.VideoReader.AbsTime, frame.DeltaTime, frame.IFrame)
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 		sendAudioFrame = func(frame *AVFrame) {
+			// println(frame.Sequence, s.AudioReader.AbsTime, frame.DeltaTime)
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 	}
@@ -237,15 +242,26 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	if s.Args.Has(s.Config.SubModeArgName) {
 		subMode, _ = strconv.Atoi(s.Args.Get(s.Config.SubModeArgName))
 	}
+	var videoFrame, audioFrame *AVFrame
 	for ctx.Err() == nil {
 		hasVideo, hasAudio := s.VideoReader.Track != nil && s.Config.SubVideo, s.AudioReader.Track != nil && s.Config.SubAudio
 		if hasVideo {
+			if videoFrame != nil {
+				sendVideoFrame(videoFrame)
+				videoFrame = nil
+			}
 			for ctx.Err() == nil {
 				s.VideoReader.Read(ctx, subMode)
 				frame := s.VideoReader.Frame
 				// println("video", frame.Sequence, frame.AbsTime)
-				if frame == nil {
+				if frame == nil || ctx.Err() != nil {
 					return
+				}
+				if audioFrame != nil {
+					if frame.AbsTime > audioFrame.AbsTime {
+						sendAudioFrame(audioFrame)
+						audioFrame = nil
+					}
 				}
 				if frame.IFrame && s.VideoReader.DecConfChanged() {
 					s.VideoReader.ConfSeq = s.VideoReader.Track.SequenceHeadSeq
@@ -253,16 +269,22 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					sendVideoDecConf()
 				}
 				if !s.Config.IFrameOnly || frame.IFrame {
-					sendVideoFrame(frame)
-				}
-				if frame.AbsTime > lastPlayAbsTime {
-					lastPlayAbsTime = frame.AbsTime
-					break
+					if frame.AbsTime > lastPlayAbsTime {
+						lastPlayAbsTime = frame.AbsTime
+						videoFrame = frame
+						break
+					} else {
+						sendVideoFrame(frame)
+					}
 				}
 			}
 		}
 		// 正常模式下或者纯音频模式下，音频开始播放
 		if hasAudio {
+			if audioFrame != nil {
+				sendAudioFrame(audioFrame)
+				audioFrame = nil
+			}
 			for ctx.Err() == nil {
 				switch s.AudioReader.State {
 				case track.READSTATE_INIT:
@@ -277,17 +299,25 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				s.AudioReader.Read(ctx, subMode)
 				frame := s.AudioReader.Frame
 				// println("audio", frame.Sequence, frame.AbsTime)
-				if frame == nil {
+				if frame == nil || ctx.Err() != nil {
 					return
+				}
+				if videoFrame != nil {
+					if frame.AbsTime > videoFrame.AbsTime {
+						sendVideoFrame(videoFrame)
+						videoFrame = nil
+					}
 				}
 				if s.AudioReader.DecConfChanged() {
 					s.AudioReader.ConfSeq = s.AudioReader.Track.SequenceHeadSeq
 					sendAudioDecConf()
 				}
-				sendAudioFrame(frame)
 				if frame.AbsTime > lastPlayAbsTime {
 					lastPlayAbsTime = frame.AbsTime
+					audioFrame = frame
 					break
+				} else {
+					sendAudioFrame(frame)
 				}
 			}
 		}

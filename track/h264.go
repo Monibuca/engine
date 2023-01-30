@@ -1,6 +1,7 @@
 package track
 
 import (
+	"io"
 	"time"
 
 	"go.uber.org/zap"
@@ -65,22 +66,23 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	case codec.NALU_SEI:
 		vt.AppendAuBytes(slice)
 	case codec.NALU_Access_Unit_Delimiter:
+	case codec.NALU_Filler_Data:
 	default:
 		vt.Stream.Error("H264 WriteSliceBytes naluType not support", zap.Int("naluType", int(naluType)))
 	}
 }
 
-func (vt *H264) WriteAVCC(ts uint32, frame util.BLL) {
+func (vt *H264) WriteAVCC(ts uint32, frame util.BLL) (err error) {
 	if l := frame.ByteLength; l < 6 {
 		vt.Stream.Error("AVCC data too short", zap.Int("len", l))
-		return
+		return io.ErrShortWrite
 	}
 	if frame.GetByte(1) == 0 {
 		vt.SequenceHead = frame.ToBytes()
 		frame.Recycle()
 		vt.updateSequeceHead()
 		var info codec.AVCDecoderConfigurationRecord
-		if _, err := info.Unmarshal(vt.SequenceHead[5:]); err == nil {
+		if _, err = info.Unmarshal(vt.SequenceHead[5:]); err == nil {
 			vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)
 			vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
 			vt.SPS = info.SequenceParameterSetNALUnit
@@ -91,8 +93,9 @@ func (vt *H264) WriteAVCC(ts uint32, frame util.BLL) {
 			vt.Stream.Error("H264 ParseSpsPps Error")
 			vt.Stream.Close()
 		}
+		return
 	} else {
-		vt.Video.WriteAVCC(ts, frame)
+		return vt.Video.WriteAVCC(ts, frame)
 	}
 }
 

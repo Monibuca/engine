@@ -101,11 +101,11 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	vt.Flush()
 }
 
-func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) {
+func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) error {
 	r := frame.NewReader()
 	b, err := r.ReadByte()
 	if err != nil {
-		return
+		return err
 	}
 	b = b >> 4
 	vt.Value.IFrame = b == 1 || b == 4
@@ -113,13 +113,14 @@ func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) {
 	vt.Value.WriteAVCC(ts, frame)
 	cts, err := r.ReadBE(3)
 	if err != nil {
-		return
+		return err
 	}
 	vt.Value.PTS = (ts + cts) * 90
 	for nalulen, err := r.ReadBE(vt.nalulenSize); err == nil; nalulen, err = r.ReadBE(vt.nalulenSize) {
 		vt.AppendAuBytes(r.ReadN(int(nalulen))...)
 	}
 	vt.Flush()
+	return nil
 }
 
 func (vt *Video) WriteSliceByte(b ...byte) {
