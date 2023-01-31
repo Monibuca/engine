@@ -63,11 +63,19 @@ type AVFrame struct {
 func (av *AVFrame) WriteAVCC(ts uint32, frame util.BLL) {
 	av.AbsTime = ts
 	av.BytesIn += frame.ByteLength
-	frame.Transfer(&av.AVCC)
+	for {
+		item := frame.Shift()
+		if item == nil {
+			break
+		}
+		av.AVCC.Push(item)
+	}
+	// frame.Transfer(&av.AVCC)
+	// frame.ByteLength = 0
 	av.DTS = ts * 90
 }
 
-func (av *AVFrame) AppendMem(item *util.ListItem[util.BLI]) {
+func (av *AVFrame) AppendMem(item *util.ListItem[util.Buffer]) {
 	av.mem.Push(item)
 }
 

@@ -8,6 +8,8 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
+const RTPMTU = 1400
+
 func (av *Media) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
 	if av.PayloadType != p.PayloadType {
 		av.Stream.Warn("RTP PayloadType error", zap.Uint8("want", av.PayloadType), zap.Uint8("got", p.PayloadType))
@@ -70,12 +72,12 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 			av.Value.RTP[i] = packet
 			packet.Version = 2
 			packet.PayloadType = av.PayloadType
-			item := av.BytesPool.Get(1200)
-			av.Value.AppendMem(item)
-			packet.Payload = item.Value[:0]
 			packet.SSRC = av.SSRC
 		}
-		packet.Payload = packet.Payload[:0]
+		item := av.BytesPool.Get(RTPMTU)
+		av.Value.AppendMem(item)
+		packet.Payload = item.Value[:0]
+		// packet.Payload = packet.Payload[:0]
 		packet.SequenceNumber = av.rtpSequence
 		packet.Timestamp = av.Value.PTS
 		packet.Marker = i == packetCount-1

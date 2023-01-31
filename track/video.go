@@ -110,15 +110,35 @@ func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) error {
 	b = b >> 4
 	vt.Value.IFrame = b == 1 || b == 4
 	r.ReadByte() //sequence frame flag
-	vt.Value.WriteAVCC(ts, frame)
 	cts, err := r.ReadBE(3)
 	if err != nil {
 		return err
 	}
 	vt.Value.PTS = (ts + cts) * 90
+	// println(":", vt.Value.Sequence)
 	for nalulen, err := r.ReadBE(vt.nalulenSize); err == nil; nalulen, err = r.ReadBE(vt.nalulenSize) {
+		// var au util.BLL
+		// for _, bb := range r.ReadN(int(nalulen)) {
+		// 	au.Push(vt.BytesPool.GetShell(bb))
+		// }
+		// println(":", nalulen, au.ByteLength)
+		// vt.Value.AUList.PushValue(&au)
 		vt.AppendAuBytes(r.ReadN(int(nalulen))...)
 	}
+	vt.Value.WriteAVCC(ts, frame)
+	// {
+	// 	b := util.Buffer(vt.Value.AVCC.ToBytes()[5:])
+	// 	println(vt.Value.Sequence)
+	// 	for b.CanRead() {
+	// 		nalulen := int(b.ReadUint32())
+	// 		if b.CanReadN(nalulen) {
+	// 			bb := b.ReadN(int(nalulen))
+	// 			println(nalulen, codec.ParseH264NALUType(bb[0]))
+	// 		} else {
+	// 			println("error")
+	// 		}
+	// 	}
+	// }
 	vt.Flush()
 	return nil
 }
@@ -183,7 +203,7 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 		mem = vt.BytesPool.Get(4)
 		util.PutBE(mem.Value, uint32(au.ByteLength))
 		rv.AVCC.Push(mem)
-		au.Range(func(slice util.BLI) bool {
+		au.Range(func(slice util.Buffer) bool {
 			rv.AVCC.Push(vt.BytesPool.GetShell(slice))
 			return true
 		})

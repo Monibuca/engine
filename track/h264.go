@@ -138,7 +138,7 @@ func (vt *H264) CompleteRTP(value *AVFrame) {
 			out = append(out, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 		}
 		vt.Value.AUList.Range(func(au *util.BLL) bool {
-			if au.ByteLength < 1200 {
+			if au.ByteLength < RTPMTU {
 				out = append(out, au.ToBuffers())
 			} else {
 				var naluType codec.H264NALUType
@@ -147,9 +147,9 @@ func (vt *H264) CompleteRTP(value *AVFrame) {
 				naluType = naluType.Parse(b0)
 				b0 = codec.NALU_FUA.Or(b0 & 0x60)
 				buf := [][]byte{{b0, naluType.Or(1 << 7)}}
-				buf = append(buf, r.ReadN(1200-2)...)
+				buf = append(buf, r.ReadN(RTPMTU-2)...)
 				out = append(out, buf)
-				for bufs := r.ReadN(1200); len(bufs) > 0; bufs = r.ReadN(1200) {
+				for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
 					buf = append([][]byte{{b0, naluType.Byte()}}, bufs...)
 					out = append(out, buf)
 				}

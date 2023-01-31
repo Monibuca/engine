@@ -43,7 +43,7 @@ func (g711 *G711) WriteAVCC(ts uint32, frame util.BLL) error {
 		return io.ErrShortWrite
 	}
 	g711.Value.AUList.Push(g711.BytesPool.GetShell(frame.Next.Value[1:]))
-	frame.Range(func(v util.BLI) bool {
+	frame.Range(func(v util.Buffer) bool {
 		g711.Value.AUList.Push(g711.BytesPool.GetShell(v))
 		return true
 	})

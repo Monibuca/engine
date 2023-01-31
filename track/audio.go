@@ -57,7 +57,7 @@ func (av *Audio) WriteAVCC(ts uint32, frame util.BLL) {
 func (a *Audio) CompleteAVCC(value *AVFrame) {
 	value.AVCC.Push(a.BytesPool.GetShell(a.AVCCHead))
 	value.AUList.Range(func(v *util.BLL) bool {
-		v.Range(func(v util.BLI) bool {
+		v.Range(func(v util.Buffer) bool {
 			value.AVCC.Push(a.BytesPool.GetShell(v))
 			return true
 		})

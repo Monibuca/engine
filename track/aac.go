@@ -125,7 +125,7 @@ func (aac *AAC) CompleteRTP(value *AVFrame) {
 	auHeaderLen := []byte{0x00, 0x10, (byte)((l & 0x1fe0) >> 5), (byte)((l & 0x1f) << 3)} // 3 = 16-13, 5 = 8-3
 	var packets [][][]byte
 	r := value.AUList.Next.Value.NewReader()
-	for bufs := r.ReadN(1200); len(bufs) > 0; bufs = r.ReadN(1200) {
+	for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
 		packets = append(packets, append(net.Buffers{auHeaderLen}, bufs...))
 	}
 	aac.PacketizeRTP(packets...)

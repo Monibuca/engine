@@ -26,7 +26,12 @@ func (item *ListItem[T]) Recycle() {
 }
 
 func (item *ListItem[T]) Range(do func(value T) bool) {
-	for ; item != nil && item != &item.list.ListItem && do(item.Value); item = item.Next {
+	for ; item != nil && !item.IsRoot() && do(item.Value); item = item.Next {
+	}
+}
+
+func (item *ListItem[T]) RangeItem(do func(*ListItem[T]) bool) {
+	for ; item != nil && !item.IsRoot() && do(item); item = item.Next {
 	}
 }
 
@@ -40,6 +45,9 @@ func (p *List[T]) PushValue(value T) {
 }
 
 func (p *List[T]) Push(item *ListItem[T]) {
+	if item.list != nil {
+		panic("item already in list")
+	}
 	if p.Length == 0 {
 		p.Next = &p.ListItem
 		p.Pre = &p.ListItem
@@ -58,17 +66,24 @@ func (p *List[T]) ShiftValue() T {
 	return p.Shift().Value
 }
 
-func (p *List[T]) Shift() (item *ListItem[T]) {
-	if p.Length == 0 {
-		return nil
+func (p *List[T]) PoolShift() (head *ListItem[T]) {
+	if head = p.Shift(); head == nil {
+		head = &ListItem[T]{Pool: p}
 	}
-	head := p.Next
+	return
+}
+
+func (p *List[T]) Shift() (head *ListItem[T]) {
+	if p.Length == 0 {
+		return
+	}
+	head = p.Next
 	p.Next = head.Next
 	head.Pre = nil
 	head.Next = nil
 	head.list = nil
 	p.Length--
-	return head
+	return
 }
 
 func (p *List[T]) Clear() {
@@ -81,26 +96,31 @@ func (p *List[T]) Range(do func(value T) bool) {
 	p.Next.Range(do)
 }
 
+func (p *List[T]) RangeItem(do func(*ListItem[T]) bool) {
+	p.Next.RangeItem(do)
+}
+
 func (p *List[T]) Recycle() {
-	for item := p.Next; item != nil && item.list != nil && !item.IsRoot(); {
-		next := item.Next
+	for item := p.Shift(); item != nil; item = p.Shift() {
 		item.Recycle()
-		item = next
 	}
-	p.Clear()
+	if p.Length != 0 {
+		panic("recycle list error")
+	}
+	// for item := p.Next; item != nil && item.list != nil && !item.IsRoot(); {
+	// 	next := item.Next
+	// 	item.Recycle()
+	// 	item = next
+	// }
+	// p.Clear()
 }
 
 // Transfer 把链表中的所有元素转移到另一个链表中
 func (p *List[T]) Transfer(target IList[T]) {
-	if p.Length == 0 {
-		return
-	}
-	for {
-		item := p.Shift()
-		if item == nil {
-			break
-		}
+	for item := p.Shift(); item != nil; item = p.Shift() {
 		target.Push(item)
 	}
-	p.Clear()
+	if p.Length != 0 {
+		panic("transfer list error")
+	}
 }

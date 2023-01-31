@@ -230,6 +230,17 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendVideoFrame = func(frame *AVFrame) {
 			// println(frame.Sequence, s.VideoReader.AbsTime, frame.DeltaTime, frame.IFrame)
+			// b := util.Buffer(frame.AVCC.ToBytes()[5:])
+			// println(frame.Sequence)
+			// for b.CanRead() {
+			// 	nalulen := int(b.ReadUint32())
+			// 	if b.CanReadN(nalulen) {
+			// 		bb := b.ReadN(int(nalulen))
+			// 		println(nalulen, codec.ParseH264NALUType(bb[0]))
+			// 	} else {
+			// 		println("error")
+			// 	}
+			// }
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 		sendAudioFrame = func(frame *AVFrame) {

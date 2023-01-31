@@ -6,7 +6,7 @@ import (
 )
 
 type BLLReader struct {
-	*ListItem[BLI]
+	*ListItem[Buffer]
 	pos int
 }
 
@@ -106,7 +106,7 @@ func (list *BLLs) PushValue(item *BLL) {
 	list.ByteLength += item.ByteLength
 }
 
-func (list *BLLs) Push(item *ListItem[BLI]) {
+func (list *BLLs) Push(item *ListItem[Buffer]) {
 	if list == nil {
 		return
 	}
@@ -151,7 +151,7 @@ func (list *BLLs) NewReader() *BLLsReader {
 
 // ByteLinkList
 type BLL struct {
-	List[BLI]
+	List[Buffer]
 	ByteLength int
 }
 
@@ -166,7 +166,7 @@ func (list *BLL) NewReader() *BLLReader {
 // 	list.ByteLength += list2.ByteLength
 // }
 
-func (list *BLL) Push(item *ListItem[BLI]) {
+func (list *BLL) Push(item *ListItem[Buffer]) {
 	if list == nil {
 		return
 	}
@@ -174,7 +174,7 @@ func (list *BLL) Push(item *ListItem[BLI]) {
 	list.ByteLength += item.Value.Len()
 }
 
-func (list *BLL) Shift() (item *ListItem[BLI]) {
+func (list *BLL) Shift() (item *ListItem[Buffer]) {
 	if list == nil || list.Length == 0 {
 		return
 	}
@@ -189,7 +189,7 @@ func (list *BLL) Clear() {
 }
 
 func (list *BLL) ToBuffers() (result net.Buffers) {
-	list.Range(func(item BLI) bool {
+	list.Range(func(item Buffer) bool {
 		result = append(result, item)
 		return true
 	})
@@ -203,7 +203,7 @@ func (list *BLL) WriteTo(w io.Writer) (int64, error) {
 
 func (list *BLL) ToBytes() (b []byte) {
 	b = make([]byte, 0, list.ByteLength)
-	list.Range(func(item BLI) bool {
+	list.Range(func(item Buffer) bool {
 		b = append(b, item...)
 		return true
 	})
@@ -217,7 +217,7 @@ func (list *BLL) Recycle() {
 }
 
 func (list *BLL) GetByte(index int) (b byte) {
-	list.Range(func(item BLI) bool {
+	list.Range(func(item Buffer) bool {
 		l := item.Len()
 		if index < l {
 			b = item[index]
@@ -240,57 +240,40 @@ func (list *BLL) GetUintN(index int, n int) (result uint32) {
 	return
 }
 
-// ByteLinkItem
-type BLI []byte
-
-func (b BLI) Len() int {
-	return len(b)
-}
-
-// func (b *BLI) ToBuffers() (result net.Buffers) {
+// func (b *Buffer) ToBuffers() (result net.Buffers) {
 // 	for p := b.Next; p != &b.ListItem; p = p.Next {
 // 		result = append(result, p.Value)
 // 	}
 // 	return
 // }
 
-type BytesPool []List[BLI]
+type BytesPool []List[Buffer]
 
 // 获取来自真实内存的切片的——假内存块，即只回收外壳
-func (p BytesPool) GetShell(b []byte) (item *ListItem[BLI]) {
+func (p BytesPool) GetShell(b []byte) (item *ListItem[Buffer]) {
 	if len(p) == 0 {
-		return &ListItem[BLI]{Value: b}
+		return &ListItem[Buffer]{Value: b}
 	}
-	if p[0].Length > 0 {
-		item = p[0].Shift()
-	} else {
-		item = &ListItem[BLI]{}
-	}
-	item.Pool = &p[0]
+	item = p[0].PoolShift()
 	item.Value = b
 	return
 }
 
-func (p BytesPool) Get(size int) (item *ListItem[BLI]) {
+func (p BytesPool) Get(size int) (item *ListItem[Buffer]) {
 	for i := 1; i < len(p); i++ {
-		level := 1 << i
-		if level >= size {
-			if p[i].Length > 0 {
-				item = p[i].Shift()
-				item.Value = item.Value[:size]
+		if level := 1 << i; level >= size {
+			if item = p[i].PoolShift(); cap(item.Value) > 0 {
+				item.Value = item.Value.SubBuf(0, size)
 			} else {
-				item = &ListItem[BLI]{
-					Value: make([]byte, size, level),
-				}
+				item.Value = make(Buffer, size, level)
 			}
-			item.Pool = &p[i]
 			return
 		}
 	}
 	// Pool 中没有就无法回收
 	if item == nil {
-		item = &ListItem[BLI]{
-			Value: make([]byte, size),
+		item = &ListItem[Buffer]{
+			Value: make(Buffer, size),
 		}
 	}
 	return
