@@ -90,6 +90,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 
 func (aac *AAC) WriteSequenceHead(sh []byte) {
 	aac.SequenceHead = sh
+	aac.SequenceHeadSeq++
 	config1, config2 := aac.SequenceHead[2], aac.SequenceHead[3]
 	aac.Channels = ((config2 >> 3) & 0x0F) //声道
 	aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
