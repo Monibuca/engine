@@ -71,7 +71,7 @@ func (vt *Video) computeGOP() {
 		vt.GOP = int(vt.Value.Sequence - vt.IDRing.Value.Sequence)
 		vt.narrow(vt.GOP)
 	}
-	vt.IDRing = vt.Ring
+	vt.AddIDR()
 	// var n int
 	// for i := 0; i < len(vt.BytesPool); i++ {
 	// 	n += vt.BytesPool[i].Length
@@ -149,33 +149,24 @@ func (vt *Video) WriteSliceByte(b ...byte) {
 
 // 在I帧前面插入sps pps webrtc需要
 func (av *Video) insertDCRtp() {
-	seq := av.Value.RTP[0].SequenceNumber
-	l1, l2 := len(av.ParamaterSets), len(av.Value.RTP)
-	afterLen := l1 + l2
-	if cap(av.Value.RTP) < afterLen {
-		rtps := make([]*RTPFrame, l1, afterLen)
-		av.Value.RTP = append(rtps, av.Value.RTP...)
-	} else {
-		av.Value.RTP = av.Value.RTP[:afterLen]
-		copy(av.Value.RTP[l1:], av.Value.RTP[:l2])
-	}
-	for i, nalu := range av.ParamaterSets {
-		packet := &RTPFrame{}
+	head := av.Value.RTP.Next
+	seq := head.Value.SequenceNumber
+	for _, nalu := range av.ParamaterSets {
+		var packet RTPFrame
 		packet.Version = 2
 		packet.PayloadType = av.PayloadType
 		packet.Payload = nalu
 		packet.SSRC = av.SSRC
-		packet.SequenceNumber = seq
 		packet.Timestamp = av.Value.PTS
 		packet.Marker = false
-		seq++
+		head.InsertBeforeValue(packet)
 		av.rtpSequence++
-		av.Value.RTP[i] = packet
 	}
-	for i := l1; i < afterLen; i++ {
-		av.Value.RTP[i].SequenceNumber = seq
+	av.Value.RTP.RangeItem(func(item *util.ListItem[RTPFrame]) bool {
+		item.Value.SequenceNumber = seq
 		seq++
-	}
+		return true
+	})
 }
 
 func (av *Video) generateTimestamp(ts uint32) {

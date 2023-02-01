@@ -278,3 +278,13 @@ func (p BytesPool) Get(size int) (item *ListItem[Buffer]) {
 	}
 	return
 }
+
+type Pool[T any] List[T]
+
+func (p *Pool[T]) Get() (item *ListItem[T]) {
+	item = (*List[T])(p).PoolShift()
+	if item == nil {
+		item = &ListItem[T]{}
+	}
+	return
+}

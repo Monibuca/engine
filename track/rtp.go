@@ -33,7 +33,7 @@ func (av *Media) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 }
 
 func (av *Media) writeRTPFrame(frame *RTPFrame) {
-	av.Value.AppendRTP(frame)
+	av.Value.RTP.PushValue(*frame)
 	av.WriteRTPFrame(frame)
 	if frame.Marker {
 		av.SpesificTrack.generateTimestamp(frame.Timestamp)
@@ -59,31 +59,24 @@ func (av *Media) WriteRTP(raw []byte) {
 // Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
 func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 	packetCount := len(payloads)
-	if cap(av.Value.RTP) < packetCount {
-		av.Value.RTP = make([]*RTPFrame, packetCount)
-	} else {
-		av.Value.RTP = av.Value.RTP[:packetCount]
-	}
 	for i, pp := range payloads {
 		av.rtpSequence++
-		packet := av.Value.RTP[i]
-		if packet == nil {
-			packet = &RTPFrame{}
-			av.Value.RTP[i] = packet
+		rtpItem := av.rtpPool.Get()
+		packet := &rtpItem.Value
+		if packet.Payload == nil {
+			packet.Payload = make([]byte, 0, RTPMTU)
 			packet.Version = 2
 			packet.PayloadType = av.PayloadType
 			packet.SSRC = av.SSRC
 		}
-		item := av.BytesPool.Get(RTPMTU)
-		av.Value.AppendMem(item)
-		packet.Payload = item.Value[:0]
-		// packet.Payload = packet.Payload[:0]
+		packet.Payload = packet.Payload[:0]
 		packet.SequenceNumber = av.rtpSequence
 		packet.Timestamp = av.Value.PTS
 		packet.Marker = i == packetCount-1
 		for _, p := range pp {
 			packet.Payload = append(packet.Payload, p...)
 		}
+		av.Value.RTP.Push(rtpItem)
 	}
 }
 

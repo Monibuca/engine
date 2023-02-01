@@ -120,7 +120,7 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 
 // RTP格式补完
 func (vt *H265) CompleteRTP(value *AVFrame) {
-	if len(value.RTP) > 0 {
+	if value.RTP.Length > 0 {
 		if !vt.dcChanged && value.IFrame {
 			vt.insertDCRtp()
 		}

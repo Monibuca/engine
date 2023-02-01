@@ -15,6 +15,40 @@ type ListItem[T any] struct {
 	list      *List[T]
 }
 
+func (item *ListItem[T]) InsertBefore(insert *ListItem[T]) {
+	if insert.list != nil {
+		panic("item already in list")
+	}
+	insert.list = item.list
+	insert.Pre = item.Pre
+	insert.Next = item
+	item.Pre.Next = insert
+	item.Pre = insert
+	item.list.Length++
+}
+func (item *ListItem[T]) InsertBeforeValue(value T) (result *ListItem[T]) {
+	result = &ListItem[T]{Value: value}
+	item.InsertBefore(result)
+	return
+}
+func (item *ListItem[T]) InsertAfter(insert *ListItem[T]) {
+	if insert.list != nil {
+		panic("item already in list")
+	}
+	insert.list = item.list
+	insert.Next = item.Next
+	insert.Pre = item
+	item.Next.Pre = insert
+	item.Next = insert
+	item.list.Length++
+}
+
+func (item *ListItem[T]) InsertAfterValue(value T) (result *ListItem[T]) {
+	result = &ListItem[T]{Value: value}
+	item.InsertAfter(result)
+	return
+}
+
 func (item *ListItem[T]) IsRoot() bool {
 	return &item.list.ListItem == item
 }
@@ -53,13 +87,37 @@ func (p *List[T]) Push(item *ListItem[T]) {
 		p.Pre = &p.ListItem
 		p.ListItem.list = p
 	}
-	item.list = p
-	item.Next = &p.ListItem
-	item.Pre = p.Pre
-	// p.Value = item.Value
-	p.Pre.Next = item
-	p.Pre = p.Pre.Next
-	p.Length++
+	p.Pre.InsertAfter(item)
+	// item.list = p
+	// item.Next = &p.ListItem
+	// item.Pre = p.Pre
+	// // p.Value = item.Value
+	// p.Pre.Next = item
+	// p.Pre = p.Pre.Next
+	// p.Length++
+}
+
+func (p *List[T]) UnshiftValue(value T) {
+	p.Unshift(&ListItem[T]{Value: value})
+}
+
+func (p *List[T]) Unshift(item *ListItem[T]) {
+	if item.list != nil {
+		panic("item already in list")
+	}
+	if p.Length == 0 {
+		p.Next = &p.ListItem
+		p.Pre = &p.ListItem
+		p.ListItem.list = p
+	}
+	p.Next.InsertBefore(item)
+	// item.list = p
+	// item.Next = p.Next
+	// item.Pre = &p.ListItem
+	// // p.Value = item.Value
+	// p.Next.Pre = item
+	// p.Next = p.Next.Pre
+	// p.Length++
 }
 
 func (p *List[T]) ShiftValue() T {

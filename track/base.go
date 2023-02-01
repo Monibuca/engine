@@ -4,7 +4,6 @@ import (
 	"time"
 	"unsafe"
 
-	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
@@ -65,8 +64,8 @@ func (p *IDRingList) AddIDR(IDRing *util.Ring[AVFrame]) {
 }
 
 func (p *IDRingList) ShiftIDR() {
-	p.HistoryRing = p.Next.Next.Value
 	p.Shift()
+	p.HistoryRing = p.Next.Value
 }
 
 // Media 基础媒体Track类
@@ -78,7 +77,8 @@ type Media struct {
 	SSRC            uint32
 	PayloadType     byte
 	BytesPool       util.BytesPool `json:"-"`
-	SequenceHead    []byte         `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	rtpPool         util.Pool[RTPFrame]
+	SequenceHead    []byte `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	SequenceHeadSeq int
 	RTPMuxer
 	RTPDemuxer
@@ -163,7 +163,7 @@ func (av *Media) AppendAuBytes(b ...[]byte) {
 
 func (av *Media) narrow(gop int) {
 	if l := av.Size - gop - 5; l > 5 {
-		av.Stream.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-l), zap.String("name", av.Name))
+		// av.Stream.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-l), zap.String("name", av.Name))
 		//缩小缓冲环节省内存
 		av.Reduce(l).Do(func(v AVFrame) {
 			v.Reset()
@@ -174,6 +174,9 @@ func (av *Media) narrow(gop int) {
 func (av *Media) AddIDR() {
 	if av.Stream.GetPublisherConfig().BufferTime > 0 {
 		av.IDRingList.AddIDR(av.Ring)
+		if av.HistoryRing == nil {
+			av.HistoryRing = av.IDRing
+		}
 	} else {
 		av.IDRing = av.Ring
 	}
@@ -189,14 +192,14 @@ func (av *Media) Flush() {
 	// 下一帧为订阅起始帧，即将覆盖，需要扩环
 	if nextValue == av.IDRing || nextValue == av.HistoryRing {
 		// if av.AVRing.Size < 512 {
-		av.Stream.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size+5), zap.String("name", av.Name))
+		// av.Stream.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size+5), zap.String("name", av.Name))
 		av.Glow(5)
 		// } else {
 		// 	av.Stream.Error("sub ring overflow", zap.Int("size", av.AVRing.Size), zap.String("name", av.Name))
 		// }
 	}
 	// 补完RTP
-	if config.Global.EnableRTP && len(curValue.RTP) == 0 {
+	if config.Global.EnableRTP && curValue.RTP.Length == 0 {
 		av.CompleteRTP(curValue)
 	}
 	// 补完AVCC

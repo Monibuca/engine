@@ -192,22 +192,22 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16
 		sendVideoFrame = func(frame *AVFrame) {
-			for _, p := range frame.RTP {
+			frame.RTP.Range(func(vp RTPFrame) bool {
 				videoSeq++
-				vp := *p
 				vp.Header.Timestamp = vp.Header.Timestamp - s.VideoReader.SkipTs*90
 				vp.Header.SequenceNumber = videoSeq
 				spesic.OnEvent((VideoRTP)(vp))
-			}
+				return true
+			})
 		}
 		sendAudioFrame = func(frame *AVFrame) {
-			for _, p := range frame.RTP {
+			frame.RTP.Range(func(ap RTPFrame) bool {
 				audioSeq++
-				vp := *p
-				vp.Header.SequenceNumber = audioSeq
-				vp.Header.Timestamp = vp.Header.Timestamp - s.AudioReader.SkipTs*90
-				spesic.OnEvent((AudioRTP)(vp))
-			}
+				ap.Header.SequenceNumber = audioSeq
+				ap.Header.Timestamp = ap.Header.Timestamp - s.AudioReader.SkipTs*90
+				spesic.OnEvent((AudioRTP)(ap))
+				return true
+			})
 		}
 	case SUBTYPE_FLV:
 		flvHeadCache := make([]byte, 15) //内存复用
@@ -258,7 +258,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		hasVideo, hasAudio := s.VideoReader.Track != nil && s.Config.SubVideo, s.AudioReader.Track != nil && s.Config.SubAudio
 		if hasVideo {
 			if videoFrame != nil {
-				sendVideoFrame(videoFrame)
+				if videoFrame.CanRead {
+					sendVideoFrame(videoFrame)
+				}
 				videoFrame = nil
 			}
 			for ctx.Err() == nil {
@@ -270,7 +272,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				if audioFrame != nil {
 					if frame.AbsTime > audioFrame.AbsTime {
-						sendAudioFrame(audioFrame)
+						if audioFrame.CanRead {
+							sendAudioFrame(audioFrame)
+						}
 						audioFrame = nil
 					}
 				}
@@ -293,7 +297,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		// 正常模式下或者纯音频模式下，音频开始播放
 		if hasAudio {
 			if audioFrame != nil {
-				sendAudioFrame(audioFrame)
+				if audioFrame.CanRead {
+					sendAudioFrame(audioFrame)
+				}
 				audioFrame = nil
 			}
 			for ctx.Err() == nil {
@@ -315,7 +321,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				if videoFrame != nil {
 					if frame.AbsTime > videoFrame.AbsTime {
-						sendVideoFrame(videoFrame)
+						if videoFrame.CanRead {
+							sendVideoFrame(videoFrame)
+						}
 						videoFrame = nil
 					}
 				}
