@@ -2,59 +2,40 @@ package track
 
 import (
 	"bytes"
-	"context"
-	"net"
 
 	// . "github.com/logrusorgru/aurora"
-	"go.uber.org/zap"
+
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
 
 type Video struct {
-	Media[NALUSlice]
+	Media
 	CodecID     codec.VideoCodecID
-	IDRing      *util.Ring[AVFrame[NALUSlice]] `json:"-"` //最近的关键帧位置，首屏渲染
-	SPSInfo     codec.SPSInfo
 	GOP         int  //关键帧间隔
 	nalulenSize int  //avcc格式中表示nalu长度的字节数，通常为4
-	idrCount    int  //缓存中包含的idr数量
 	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
 	dtsEst      *DTSEstimator
 	lostFlag    bool // 是否丢帧
+	codec.SPSInfo
+	ParamaterSets `json:"-"`
+	SPS           []byte `json:"-"`
+	PPS           []byte `json:"-"`
 }
 
-func (vt *Video) SnapForJson() {
-	v := vt.LastValue
-	if vt.RawPart != nil {
-		vt.RawPart = vt.RawPart[:0]
+func (v *Video) Attach() {
+	if v.Attached.CompareAndSwap(false, true) {
+		v.Stream.AddTrack(v)
 	}
-	size := 0
-	for i := 0; i < len(v.Raw); i++ {
-		for j := 0; j < len(v.Raw[i]); j++ {
-			l := len(v.Raw[i][j])
-			size += l
-			if sl := len(vt.RawPart); sl < 10 {
-				for k := 0; k < l && k < 10-sl; k++ {
-					vt.RawPart = append(vt.RawPart, int(v.Raw[i][j][k]))
-				}
-			}
-		}
+}
+
+func (v *Video) Detach() {
+	if v.Attached.CompareAndSwap(true, false) {
+		v.Stream.RemoveTrack(v)
 	}
-	vt.RawSize = size
 }
-func (vt *Video) GetDecConfSeq() int {
-	return vt.DecoderConfiguration.Seq
-}
-func (vt *Video) Attach() {
-	vt.Stream.AddTrack(vt)
-	vt.Attached = 1
-}
-func (vt *Video) Detach() {
-	vt.Stream.RemoveTrack(vt)
-	vt.Attached = 2
-}
+
 func (vt *Video) GetName() string {
 	if vt.Name == "" {
 		return vt.CodecID.String()
@@ -63,46 +44,39 @@ func (vt *Video) GetName() string {
 }
 
 // PlayFullAnnexB 订阅annex-b格式的流数据，每一个I帧增加sps、pps头
-func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) error) error {
-	for vr := vt.ReadRing(); ctx.Err() == nil; vr.MoveNext() {
-		vp := vr.Read(ctx)
-		var data net.Buffers
-		if vp.IFrame {
-			for _, nalu := range vt.DecoderConfiguration.Raw {
-				data = append(data, codec.NALU_Delimiter2, nalu)
-			}
-		}
-		data = append(data, codec.NALU_Delimiter2)
-		for i, nalu := range vp.Raw {
-			if i > 0 {
-				data = append(data, codec.NALU_Delimiter1)
-			}
-			data = append(data, nalu...)
-		}
-		if err := onMedia(data); err != nil {
-			// TODO: log err
-			return err
-		}
-	}
-	return ctx.Err()
-}
+// func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) error) error {
+// 	for vr := vt.ReadRing(); ctx.Err() == nil; vr.MoveNext() {
+// 		vp := vr.Read(ctx)
+// 		var data net.Buffers
+// 		if vp.IFrame {
+// 			data = vt.GetAnnexB()
+// 		}
+// 		data = append(data, codec.NALU_Delimiter2)
+// 		for slice := vp.AUList.Head; slice != nil; slice = slice.Next {
+// 			data = append(data, slice.ToBuffers()...)
+// 			if slice.Next != nil {
+// 				data = append(data, codec.NALU_Delimiter1)
+// 			}
+// 		}
+
+//			if err := onMedia(data); err != nil {
+//				// TODO: log err
+//				return err
+//			}
+//		}
+//		return ctx.Err()
+//	}
 func (vt *Video) computeGOP() {
-	vt.idrCount++
-	if vt.IDRing != nil {
-		vt.GOP = int(vt.AVRing.RingBuffer.Value.Sequence - vt.IDRing.Value.Sequence)
-		if l := vt.AVRing.RingBuffer.Size - vt.GOP - 5; l > 5 {
-			vt.AVRing.RingBuffer.Size -= l
-			vt.Stream.Debug("resize", zap.Int("before", vt.AVRing.RingBuffer.Size+l), zap.Int("after", vt.AVRing.RingBuffer.Size), zap.String("name", vt.Name))
-			//缩小缓冲环节省内存
-			vt.Unlink(l).Do(func(v AVFrame[NALUSlice]) {
-				if v.IFrame {
-					vt.idrCount--
-				}
-				v.Clear()
-			})
-		}
+	if vt.HistoryRing == nil && vt.IDRing != nil {
+		vt.GOP = int(vt.Value.Sequence - vt.IDRing.Value.Sequence)
+		vt.narrow(vt.GOP)
 	}
-	vt.IDRing = vt.AVRing.RingBuffer.Ring
+	vt.AddIDR()
+	// var n int
+	// for i := 0; i < len(vt.BytesPool); i++ {
+	// 	n += vt.BytesPool[i].Length
+	// }
+	// println(n)
 }
 
 func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
@@ -124,74 +98,75 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 		frame, after, found = bytes.Cut(frame, codec.NALU_Delimiter2)
 		vt.writeAnnexBSlice(frame)
 	}
-	if len(vt.Value.Raw) > 0 {
-		vt.Flush()
-	}
+	vt.Flush()
 }
 
-func (vt *Video) WriteAVCC(ts uint32, frame AVCCFrame) {
-	vt.Value.IFrame = frame.IsIDR()
-	vt.Media.WriteAVCC(ts, frame)
-	vt.Value.DTS = ts * 90
-	vt.Value.PTS = (ts + frame.CTS()) * 90
-	for nalus := frame[5:]; len(nalus) > vt.nalulenSize; {
-		nalulen := util.ReadBE[int](nalus[:vt.nalulenSize])
-		if nalulen == 0 {
-			vt.Stream.Warn("WriteAVCC with nalulen=0", zap.Int("len", len(nalus)))
-			return
-		}
-		if end := nalulen + vt.nalulenSize; len(nalus) >= end {
-			vt.WriteRawBytes(nalus[vt.nalulenSize:end])
-			nalus = nalus[end:]
-		} else {
-			vt.Stream.Error("WriteAVCC", zap.Int("len", len(nalus)), zap.Int("naluLenSize", vt.nalulenSize), zap.Int("end", end))
-			break
-		}
+func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) error {
+	r := frame.NewReader()
+	b, err := r.ReadByte()
+	if err != nil {
+		return err
 	}
+	b = b >> 4
+	vt.Value.IFrame = b == 1 || b == 4
+	r.ReadByte() //sequence frame flag
+	cts, err := r.ReadBE(3)
+	if err != nil {
+		return err
+	}
+	vt.Value.PTS = (ts + cts) * 90
+	// println(":", vt.Value.Sequence)
+	for nalulen, err := r.ReadBE(vt.nalulenSize); err == nil; nalulen, err = r.ReadBE(vt.nalulenSize) {
+		// var au util.BLL
+		// for _, bb := range r.ReadN(int(nalulen)) {
+		// 	au.Push(vt.BytesPool.GetShell(bb))
+		// }
+		// println(":", nalulen, au.ByteLength)
+		// vt.Value.AUList.PushValue(&au)
+		vt.AppendAuBytes(r.ReadN(int(nalulen))...)
+	}
+	vt.Value.WriteAVCC(ts, frame)
+	// {
+	// 	b := util.Buffer(vt.Value.AVCC.ToBytes()[5:])
+	// 	println(vt.Value.Sequence)
+	// 	for b.CanRead() {
+	// 		nalulen := int(b.ReadUint32())
+	// 		if b.CanReadN(nalulen) {
+	// 			bb := b.ReadN(int(nalulen))
+	// 			println(nalulen, codec.ParseH264NALUType(bb[0]))
+	// 		} else {
+	// 			println("error")
+	// 		}
+	// 	}
+	// }
 	vt.Flush()
+	return nil
 }
 
 func (vt *Video) WriteSliceByte(b ...byte) {
 	vt.WriteSliceBytes(b)
 }
 
-func (vt *Video) WriteRawBytes(slice []byte) {
-	if naluSlice := util.MallocSlice(&vt.AVRing.Value.Raw); naluSlice == nil {
-		vt.Value.AppendRaw(NALUSlice{slice})
-	} else {
-		naluSlice.Reset(slice)
-	}
-}
-
 // 在I帧前面插入sps pps webrtc需要
 func (av *Video) insertDCRtp() {
-	seq := av.Value.RTP[0].SequenceNumber
-	l1, l2 := len(av.DecoderConfiguration.Raw), len(av.Value.RTP)
-	afterLen := l1 + l2
-	if cap(av.Value.RTP) < afterLen {
-		rtps := make([]*RTPFrame, l1, afterLen)
-		av.Value.RTP = append(rtps, av.Value.RTP...)
-	} else {
-		av.Value.RTP = av.Value.RTP[:afterLen]
-		copy(av.Value.RTP[l1:], av.Value.RTP[:l2])
-	}
-	for i, nalu := range av.DecoderConfiguration.Raw {
-		packet := &RTPFrame{}
+	head := av.Value.RTP.Next
+	seq := head.Value.SequenceNumber
+	for _, nalu := range av.ParamaterSets {
+		var packet RTPFrame
 		packet.Version = 2
-		packet.PayloadType = av.DecoderConfiguration.PayloadType
+		packet.PayloadType = av.PayloadType
 		packet.Payload = nalu
 		packet.SSRC = av.SSRC
-		packet.SequenceNumber = seq
 		packet.Timestamp = av.Value.PTS
 		packet.Marker = false
-		seq++
+		head.InsertBeforeValue(packet)
 		av.rtpSequence++
-		av.Value.RTP[i] = packet
 	}
-	for i := l1; i < afterLen; i++ {
-		av.Value.RTP[i].SequenceNumber = seq
+	av.Value.RTP.RangeItem(func(item *util.ListItem[RTPFrame]) bool {
+		item.Value.SequenceNumber = seq
 		seq++
-	}
+		return true
+	})
 }
 
 func (av *Video) generateTimestamp(ts uint32) {
@@ -202,44 +177,39 @@ func (av *Video) generateTimestamp(ts uint32) {
 func (vt *Video) SetLostFlag() {
 	vt.lostFlag = true
 }
-func (vt *Video) CompleteAVCC(rv *AVFrame[NALUSlice]) {
-	var b util.Buffer
-	if cap(rv.AVCC) > 0 {
-		if avcc := rv.AVCC[:1]; len(avcc[0]) == 5 {
-			b = util.Buffer(avcc[0])
-		}
-	}
-	if b == nil {
-		b = util.Buffer([]byte{0, 1, 0, 0, 0})
-	}
+func (vt *Video) CompleteAVCC(rv *AVFrame) {
+	mem := vt.BytesPool.Get(5)
+	b := mem.Value
 	if rv.IFrame {
 		b[0] = 0x10 | byte(vt.CodecID)
 	} else {
 		b[0] = 0x20 | byte(vt.CodecID)
 	}
+	b[1] = 1
 	// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
 	// 写入CTS
 	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
-	lengths := b.Malloc(len(rv.Raw) * 4) //每个slice的长度内存复用
-	rv.AppendAVCC(b.SubBuf(0, 5))
-	for i, nalu := range rv.Raw {
-		rv.AppendAVCC(util.PutBE(lengths.SubBuf(i*4, 4), util.SizeOfBuffers(nalu)))
-		rv.AppendAVCC(nalu...)
-	}
+	rv.AVCC.Push(mem)
+	rv.AUList.Range(func(au *util.BLL) bool {
+		mem = vt.BytesPool.Get(4)
+		util.PutBE(mem.Value, uint32(au.ByteLength))
+		rv.AVCC.Push(mem)
+		au.Range(func(slice util.Buffer) bool {
+			rv.AVCC.Push(vt.BytesPool.GetShell(slice))
+			return true
+		})
+		return true
+	})
 }
 
 func (vt *Video) Flush() {
 	rv := &vt.Value
 	if rv.IFrame {
 		vt.computeGOP()
+		vt.Stream.SetIDR(vt)
 	}
-	if vt.Attached == 0 && vt.IDRing != nil && vt.DecoderConfiguration.Seq > 0 {
+	if !vt.Attached.Load() && vt.IDRing != nil && vt.SequenceHeadSeq > 0 {
 		defer vt.Attach()
-	}
-	// 没有实际媒体数据
-	if len(rv.Raw) == 0 {
-		rv.Reset()
-		return
 	}
 
 	if vt.lostFlag {
@@ -250,24 +220,13 @@ func (vt *Video) Flush() {
 			return
 		}
 	}
-	if vt.Next().Value.IFrame {
-		// 仅存一枚I帧，需要扩环
-		if vt.idrCount == 1 {
-			if vt.AVRing.RingBuffer.Size < 256 {
-				vt.Link(util.NewRing[AVFrame[NALUSlice]](5)) // 扩大缓冲环
-			}
-		} else {
-			vt.idrCount--
-		}
-	}
 	vt.Media.Flush()
 	vt.dcChanged = false
 }
 
-func (vt *Video) ReadRing() *AVRing[NALUSlice] {
-	vr := vt.Media.ReadRing()
-	vr.Ring = vt.IDRing
-	return vr
+func (vt *Video) WriteSequenceHead(sh []byte) {
+	vt.Media.WriteSequenceHead(sh)
+	vt.dcChanged = true
 }
 
 /*

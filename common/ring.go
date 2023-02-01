@@ -27,3 +27,15 @@ func (rb *RingBuffer[T]) MoveNext() *T {
 	rb.MoveCount++
 	return &rb.Value
 }
+
+func (rb *RingBuffer[T]) Glow(size int) (newItem *util.Ring[T]) {
+	newItem = rb.Link(util.NewRing[T](size))
+	rb.Size += size
+	return
+}
+
+func (rb *RingBuffer[T]) Reduce(size int) (newItem *util.Ring[T]) {
+	newItem = rb.Unlink(size)
+	rb.Size -= size
+	return
+}

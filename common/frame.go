@@ -1,67 +1,16 @@
 package common
 
 import (
+	"io"
 	"net"
 	"time"
 
 	"github.com/pion/rtp"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/log"
+	"m7s.live/engine/v4/util"
 )
 
-type NALUSlice net.Buffers
-// 裸数据片段
-type RawSlice interface {
-	~[][]byte | ~[]byte
-}
-
-func (nalu NALUSlice) H264Type() (naluType codec.H264NALUType) {
-	return naluType.Parse(nalu[0][0])
-}
-func (nalu NALUSlice) RefIdc() byte {
-	return nalu[0][0] & 0x60
-}
-func (nalu NALUSlice) H265Type() (naluType codec.H265NALUType) {
-	return naluType.Parse(nalu[0][0])
-}
-func (nalu NALUSlice) Bytes() (b []byte) {
-	for _, slice := range nalu {
-		b = append(b, slice...)
-	}
-	return
-}
-
-func (nalu *NALUSlice) Reset(b ...[]byte) *NALUSlice {
-	if len(*nalu) > 0 {
-		*nalu = (*nalu)[:0]
-	}
-	if len(b) > 0 {
-		*nalu = append(*nalu, b...)
-	}
-	return nalu
-}
-
-func (nalu *NALUSlice) Append(b ...[]byte) {
-	*nalu = append(*nalu, b...)
-}
-
-// func (nalu *H265NALU) Append(slice ...NALUSlice) {
-// 	*nalu = append(*nalu, slice...)
-// }
-// func (nalu H265NALU) IFrame() bool {
-// 	switch H265Slice(nalu[0]).Type() {
-// 	case codec.NAL_UNIT_CODED_SLICE_BLA,
-// 		codec.NAL_UNIT_CODED_SLICE_BLANT,
-// 		codec.NAL_UNIT_CODED_SLICE_BLA_N_LP,
-// 		codec.NAL_UNIT_CODED_SLICE_IDR,
-// 		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
-// 		codec.NAL_UNIT_CODED_SLICE_CRA:
-// 		return true
-// 	}
-// 	return false
-// }
-
-type AVCCFrame []byte   // 一帧AVCC格式的数据
 type AnnexBFrame []byte // 一帧AnnexB格式数据
 type RTPFrame struct {
 	rtp.Packet
@@ -99,100 +48,68 @@ type DataFrame[T any] struct {
 	Value T
 }
 
-type AVFrame[T RawSlice] struct {
+type AVFrame struct {
 	BaseFrame
 	IFrame  bool
 	PTS     uint32
 	DTS     uint32
-	AVCC    net.Buffers `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
-	RTP     []*RTPFrame `json:"-"`
-	Raw     []T         `json:"-"` // 裸数据,通常代表Access Unit
-	canRead bool
+	AVCC    util.BLL            `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
+	RTP     util.List[RTPFrame] `json:"-"`
+	AUList  util.BLLs           `json:"-"` // 裸数据
+	mem     util.BLL
+	CanRead bool `json:"-"`
 }
 
-func (av *AVFrame[T]) AppendRaw(raw ...T) {
-	av.Raw = append(av.Raw, raw...)
+func (av *AVFrame) WriteAVCC(ts uint32, frame util.BLL) {
+	av.AbsTime = ts
+	av.BytesIn += frame.ByteLength
+	for {
+		item := frame.Shift()
+		if item == nil {
+			break
+		}
+		av.AVCC.Push(item)
+	}
+	// frame.Transfer(&av.AVCC)
+	// frame.ByteLength = 0
+	av.DTS = ts * 90
 }
 
-func (av *AVFrame[T]) AppendAVCC(avcc ...[]byte) {
-	av.AVCC = append(av.AVCC, avcc...)
-}
-
-func (av *AVFrame[T]) AppendRTP(rtp ...*RTPFrame) {
-	av.RTP = append(av.RTP, rtp...)
-}
-
-// Clear 清空数据 gc
-func (av *AVFrame[T]) Clear() {
-	av.AVCC = nil
-	av.RTP = nil
-	av.Raw = nil
-	av.BytesIn = 0
+func (av *AVFrame) AppendMem(item *util.ListItem[util.Buffer]) {
+	av.mem.Push(item)
 }
 
 // Reset 重置数据,复用内存
-func (av *AVFrame[T]) Reset() {
-	if av.AVCC != nil {
-		av.AVCC = av.AVCC[:0]
-	}
-	if av.RTP != nil {
-		av.RTP = av.RTP[:0]
-	}
-	if av.Raw != nil {
-		av.Raw = av.Raw[:0]
-	}
+func (av *AVFrame) Reset() {
+	av.RTP.Recycle()
+	av.mem.Recycle()
+	av.AVCC.Recycle()
+	av.AUList.Recycle()
 	av.BytesIn = 0
 	av.AbsTime = 0
 	av.DeltaTime = 0
 }
 
-func (avcc AVCCFrame) IsIDR() bool {
-	v := avcc[0] >> 4
-	return v == 1 || v == 4 //generated keyframe
-}
-func (avcc AVCCFrame) IsSequence() bool {
-	return avcc[1] == 0
-}
-func (avcc AVCCFrame) CTS() uint32 {
-	return uint32(avcc[2])<<24 | uint32(avcc[3])<<8 | uint32(avcc[4])
-}
-func (avcc AVCCFrame) VideoCodecID() codec.VideoCodecID {
-	return codec.VideoCodecID(avcc[0] & 0x0F)
-}
-func (avcc AVCCFrame) AudioCodecID() codec.AudioCodecID {
-	return codec.AudioCodecID(avcc[0] >> 4)
+type ParamaterSets [][]byte
+
+func (v ParamaterSets) GetAnnexB() (r net.Buffers) {
+	for _, v := range v {
+		r = append(r, codec.NALU_Delimiter2, v)
+	}
+	return
 }
 
-//	func (annexb AnnexBFrame) ToSlices() (ret []NALUSlice) {
-//		for len(annexb) > 0 {
-//			before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
-//			if !found {
-//				return append(ret, NALUSlice{annexb})
-//			}
-//			if len(before) > 0 {
-//				ret = append(ret, NALUSlice{before})
-//			}
-//			annexb = after
-//		}
-//		return
-//	}
-//
-//	func (annexb AnnexBFrame) ToNALUs() (ret [][]NALUSlice) {
-//		for len(annexb) > 0 {
-//			before, after, found := bytes.Cut(annexb, codec.NALU_Delimiter1)
-//			if !found {
-//				return append(ret, annexb.ToSlices())
-//			}
-//			if len(before) > 0 {
-//				ret = append(ret, AnnexBFrame(before).ToSlices())
-//			}
-//			annexb = after
-//		}
-//		return
-//	}
-type DecoderConfiguration[T RawSlice] struct {
-	PayloadType byte
-	AVCC        net.Buffers
-	Raw         T
-	Seq         int //收到第几个序列帧，用于变码率时让订阅者发送序列帧
+func (v ParamaterSets) WriteAnnexBTo(w io.Writer) (n int, err error) {
+	var n1, n2 int
+	for _, v := range v {
+		if n1, err = w.Write(codec.NALU_Delimiter2); err != nil {
+			return
+		}
+		n += n1
+		if n2, err = w.Write(v); err != nil {
+			return
+		}
+		n += n2
+	}
+	return
 }

@@ -1,11 +1,9 @@
-package codec
+package util
 
 import (
 	"fmt"
 	"io"
 	"reflect"
-
-	"m7s.live/engine/v4/util"
 )
 
 // Action Message Format -- AMF 0
@@ -82,30 +80,32 @@ var (
 type EcmaArray map[string]any
 
 type AMF struct {
-	util.Buffer
+	Buffer
 }
 
-func (amf *AMF) ReadShortString() string {
-	value, _ := amf.Unmarshal()
-	return value.(string)
-}
-
-func (amf *AMF) ReadNumber() float64 {
-	value, _ := amf.Unmarshal()
-	return value.(float64)
-}
-
-func (amf *AMF) ReadObject() map[string]any {
-	value, _ := amf.Unmarshal()
-	if value == nil {
-		return nil
+func ReadAMF[T string | float64 | bool | map[string]any](amf *AMF) (result T) {
+	value, err := amf.Unmarshal()
+	if err != nil {
+		return
 	}
-	return value.(map[string]any)
+	result, _ = value.(T)
+	return
 }
 
-func (amf *AMF) ReadBool() bool {
-	value, _ := amf.Unmarshal()
-	return value.(bool)
+func (amf *AMF) ReadShortString() (result string) {
+	return ReadAMF[string](amf)
+}
+
+func (amf *AMF) ReadNumber() (result float64) {
+	return ReadAMF[float64](amf)
+}
+
+func (amf *AMF) ReadObject() (result map[string]any) {
+	return ReadAMF[map[string]any](amf)
+}
+
+func (amf *AMF) ReadBool() (result bool) {
+	return ReadAMF[bool](amf)
 }
 
 func (amf *AMF) readKey() (string, error) {
@@ -136,7 +136,7 @@ func (amf *AMF) Unmarshal() (obj any, err error) {
 	if !amf.CanRead() {
 		return nil, io.ErrUnexpectedEOF
 	}
-	defer func(b util.Buffer) {
+	defer func(b Buffer) {
 		if err != nil {
 			amf.Buffer = b
 		}
@@ -239,7 +239,7 @@ func (amf *AMF) Marshal(v any) []byte {
 		amf.WriteString(vv)
 	case float64, uint, float32, int, int16, int32, int64, uint16, uint32, uint64, uint8, int8:
 		amf.WriteByte(AMF0_NUMBER)
-		amf.WriteFloat64(util.ToFloat64(vv))
+		amf.WriteFloat64(ToFloat64(vv))
 	case bool:
 		amf.WriteByte(AMF0_BOOLEAN)
 		if vv {

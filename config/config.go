@@ -5,11 +5,14 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
 
 	"m7s.live/engine/v4/log"
 )
 
 type Config map[string]any
+
+var durationType = reflect.TypeOf(time.Duration(0))
 
 type Plugin interface {
 	// 可能的入参类型：FirstConfig 第一次初始化配置，Config 后续配置更新，SE系列（StateEvent）流状态变化事件
@@ -96,6 +99,16 @@ func (config Config) Unmarshal(s any) {
 			}
 			child.Unmarshal(fv)
 		} else {
+			if ft == durationType && fv.CanSet() {
+				if value.Type() == durationType {
+					fv.Set(value)
+				} else if value.IsZero() || !value.IsValid() {
+					fv.SetInt(0)
+				} else if d, err := time.ParseDuration(value.String()); err == nil {
+					fv.SetInt(int64(d))
+				}
+				continue
+			}
 			switch fvKind {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				fv.SetUint(uint64(value.Int()))

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mcuadros/go-defaults"
 	"golang.org/x/net/websocket"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -27,12 +28,13 @@ type PushConfig interface {
 }
 
 type Publish struct {
-	PubAudio          bool
-	PubVideo          bool
-	KickExist         bool // 是否踢掉已经存在的发布者
-	PublishTimeout    int  // 发布无数据超时
-	WaitCloseTimeout  int  // 延迟自动关闭（等待重连）
-	DelayCloseTimeout int  // 延迟自动关闭（无订阅时）
+	PubAudio          bool          `default:"true"`
+	PubVideo          bool          `default:"true"`
+	KickExist         bool          // 是否踢掉已经存在的发布者
+	PublishTimeout    time.Duration `default:"10s"` // 发布无数据超时
+	WaitCloseTimeout  time.Duration `default:"0s"`  // 延迟自动关闭（等待重连）
+	DelayCloseTimeout time.Duration `default:"0s"`  // 延迟自动关闭（无订阅时）
+	BufferTime        time.Duration `default:"0s"`  // 缓冲长度(单位：秒)，0代表取最近关键帧
 }
 
 func (c *Publish) GetPublishConfig() *Publish {
@@ -40,17 +42,19 @@ func (c *Publish) GetPublishConfig() *Publish {
 }
 
 type Subscribe struct {
-	SubAudio        bool
-	SubVideo        bool
-	SubVideoArgName string   // 指定订阅的视频轨道参数名
-	SubAudioArgName string   // 指定订阅的音频轨道参数名
-	SubDataArgName  string   // 指定订阅的数据轨道参数名
-	SubAudioTracks  []string // 指定订阅的音频轨道
-	SubVideoTracks  []string // 指定订阅的视频轨道
-	LiveMode        bool     // 实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后调到该帧。
-	FirstScreen     bool     // 首屏渲染，如果为false就需要等待下一个关键帧
-	IFrameOnly      bool     // 只要关键帧
-	WaitTimeout     int      // 等待流超时
+	SubAudio        bool          `default:"true"`
+	SubVideo        bool          `default:"true"`
+	SubVideoArgName string        `default:"vts"`  // 指定订阅的视频轨道参数名
+	SubAudioArgName string        `default:"ats"`  // 指定订阅的音频轨道参数名
+	SubDataArgName  string        `default:"dts"`  // 指定订阅的数据轨道参数名
+	SubModeArgName  string        `default:"mode"` // 指定订阅的模式参数名
+	SubAudioTracks  []string      // 指定订阅的音频轨道
+	SubVideoTracks  []string      // 指定订阅的视频轨道
+	SubDataTracks   []string      // 指定订阅的数据轨道
+	SubMode         int           // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
+	IFrameOnly      bool          // 只要关键帧
+	WaitTimeout     time.Duration `default:"10s"`  // 等待流超时
+	Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {
@@ -98,7 +102,7 @@ func (p *Push) AddPush(url string, streamPath string) {
 }
 
 type Console struct {
-	Server        string //远程控制台地址
+	Server        string `default:"console.monibuca.com:4242"` //远程控制台地址
 	Secret        string //远程控制台密钥
 	PublicAddr    string //公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
 	PublicAddrTLS string
@@ -108,46 +112,49 @@ type Engine struct {
 	Publish
 	Subscribe
 	HTTP
-	RTPReorder     bool
-	EnableAVCC     bool //启用AVCC格式，rtmp协议使用
-	EnableRTP      bool //启用RTP格式，rtsp、gb18181等协议使用
-	EnableSubEvent bool //启用订阅事件,禁用可以提高性能
-	EnableAuth     bool //启用鉴权
+	RTPReorder     bool `default:"true"`
+	EnableAVCC     bool `default:"true"` //启用AVCC格式，rtmp协议使用
+	EnableRTP      bool `default:"true"` //启用RTP格式，rtsp、gb18181等协议使用
+	EnableSubEvent bool `default:"true"` //启用订阅事件,禁用可以提高性能
+	EnableAuth     bool `default:"true"` //启用鉴权
 	Console
-	LogLevel            string
-	RTPReorderBufferLen int //RTP重排序缓冲长度
-	SpeedLimit          int //速度限制最大等待时间
-	EventBusSize        int //事件总线大小
+	LogLevel            string        `default:"info"`
+	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
+	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
+	EventBusSize        int           `default:"10"`    //事件总线大小
 }
 
 var Global = &Engine{
-	Publish: Publish{true, true, false, 10, 0, 0},
-	Subscribe: Subscribe{
-		SubAudio:        true,
-		SubVideo:        true,
-		SubVideoArgName: "vts",
-		SubAudioArgName: "ats",
-		SubDataArgName:  "dts",
-		SubAudioTracks:  nil,
-		SubVideoTracks:  nil,
-		LiveMode:        true,
-		FirstScreen:     true,
-		IFrameOnly:      false,
-		WaitTimeout:     10,
-	},
-	HTTP:           HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	RTPReorder:     true,
-	EnableAVCC:     true,
-	EnableRTP:      true,
-	EnableSubEvent: true,
-	EnableAuth:     true,
-	Console: Console{
-		"console.monibuca.com:4242", "", "", "",
-	},
-	LogLevel:            "info",
-	RTPReorderBufferLen: 50,
-	SpeedLimit:          500,
-	EventBusSize:        10,
+	// Publish: Publish{true, true, false, 10, 0, 0, 0},
+	// Subscribe: Subscribe{
+	// 	SubAudio:        true,
+	// 	SubVideo:        true,
+	// 	SubVideoArgName: "vts",
+	// 	SubAudioArgName: "ats",
+	// 	SubDataArgName:  "dts",
+	// 	SubAudioTracks:  nil,
+	// 	SubVideoTracks:  nil,
+	// 	SubMode:         0,
+	// 	IFrameOnly:      false,
+	// 	WaitTimeout:     10,
+	// },
+	HTTP: HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
+	// RTPReorder:     true,
+	// EnableAVCC:     true,
+	// EnableRTP:      true,
+	// EnableSubEvent: true,
+	// EnableAuth:     true,
+	// Console: Console{
+	// 	"console.monibuca.com:4242", "", "", "",
+	// },
+	// LogLevel:            "info",
+	// RTPReorderBufferLen: 50,
+	// SpeedLimit:          500,
+	// EventBusSize:        10,
+}
+
+func init() {
+	defaults.SetDefaults(Global)
 }
 
 type myResponseWriter struct {
