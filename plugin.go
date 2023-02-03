@@ -350,6 +350,10 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 				time.Sleep(time.Second * 5)
 			} else {
 				if err = pusher.Connect(); err != nil {
+					if err == io.EOF {
+						opt.Info("push complete", zp, zu)
+						return
+					}
 					opt.Error("push connect", zp, zu, zap.Error(err))
 					time.Sleep(time.Second * 5)
 				} else {

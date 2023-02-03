@@ -65,10 +65,12 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 	switch r.State {
 	case READSTATE_INIT:
 		startRing := r.Track.Ring
+		if r.Track.IDRing != nil {
+			startRing = r.Track.IDRing
+		}
 		switch mode {
 		case 0:
 			if r.Track.IDRing != nil {
-				startRing = r.Track.IDRing
 				r.State = READSTATE_FIRST
 			} else {
 				r.State = READSTATE_NORMAL

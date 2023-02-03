@@ -367,6 +367,8 @@ type Pusher struct {
 }
 
 // 是否需要重连
-func (pub *Pusher) Reconnect() bool {
-	return pub.Config.RePush == -1 || pub.ReConnectCount <= pub.Config.RePush
+func (pub *Pusher) Reconnect() (result bool) {
+	result = pub.Config.RePush == -1 || pub.ReConnectCount <= pub.Config.RePush
+	pub.ReConnectCount++
+	return
 }

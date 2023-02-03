@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lucas-clemente/quic-go"
+	"github.com/quic-go/quic-go"
 	"m7s.live/engine/v4/log"
 )
 

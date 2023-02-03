@@ -39,7 +39,7 @@ type Summary struct {
 	NetWork     []NetWorkInfo
 	Streams     []StreamSummay
 	lastNetWork []net.IOCountersStat
-	ref         int32
+	ref         atomic.Int32
 }
 
 // NetWorkInfo 网速信息
@@ -54,7 +54,7 @@ type NetWorkInfo struct {
 // StartSummary 开始定时采集数据，每秒一次
 func (s *Summary) Start() {
 	for range time.Tick(time.Second) {
-		if s.ref > 0 {
+		if s.Running() {
 			summary.collect()
 		}
 	}
@@ -65,12 +65,12 @@ func (s *Summary) Point() *Summary {
 
 // Running 是否正在采集数据
 func (s *Summary) Running() bool {
-	return s.ref > 0
+	return s.ref.Load() > 0
 }
 
 // Add 增加订阅者
 func (s *Summary) Add() {
-	if count := atomic.AddInt32(&s.ref, 1); count == 1 {
+	if count := s.ref.Add(1); count == 1 {
 		log.Info("start report summary")
 	} else {
 		log.Info("summary count", count)
@@ -79,7 +79,7 @@ func (s *Summary) Add() {
 
 // Done 删除订阅者
 func (s *Summary) Done() {
-	if count := atomic.AddInt32(&s.ref, -1); count == 0 {
+	if count := s.ref.Add(-1); count == 0 {
 		log.Info("stop report summary")
 		s.lastNetWork = nil
 	} else {

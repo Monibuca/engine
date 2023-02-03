@@ -15,7 +15,7 @@ var _ SpesificTrack = (*AAC)(nil)
 
 func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac = &AAC{
-		sizeLength: 13,
+		SizeLength: 13,
 		Mode:       2,
 	}
 	aac.CodecID = codec.CodecID_AAC
@@ -29,7 +29,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 
 type AAC struct {
 	Audio
-	sizeLength int // 通常为13
+	SizeLength int // 通常为13
 	Mode       int // 1为lbr，2为hbr
 	lack       int // 用于处理不完整的AU,缺少的字节数
 }
@@ -42,7 +42,7 @@ func (aac *AAC) WriteADTS(adts []byte) {
 	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
 	aac.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
 	aac.Channels = channel
-	aac.SequenceHead = []byte{0xAF, 0x00, config1, config2}
+	aac.WriteSequenceHead([]byte{0xAF, 0x00, config1, config2})
 	aac.Parse(aac.SequenceHead[2:])
 	aac.Attach()
 }
@@ -74,7 +74,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 			return
 		}
 		for iIndex := aac.Mode; iIndex <= auHeaderLen; iIndex += aac.Mode {
-			auLen := util.ReadBE[int](frame.Payload[iIndex:iIndex+aac.Mode]) >> (8*aac.Mode - aac.sizeLength) //取高13bit代表AU的长度
+			auLen := util.ReadBE[int](frame.Payload[iIndex:iIndex+aac.Mode]) >> (8*aac.Mode - aac.SizeLength) //取高13bit代表AU的长度
 			nextPos := startOffset + auLen
 			if len(frame.Payload) < nextPos {
 				aac.lack = nextPos - len(frame.Payload)

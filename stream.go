@@ -38,6 +38,11 @@ type SEwaitPublish struct {
 type SEpublish struct {
 	StateEvent
 }
+
+type SErepublish struct {
+	StateEvent
+}
+
 type SEwaitClose struct {
 	StateEvent
 }
@@ -189,8 +194,8 @@ type Stream struct {
 	Path        string
 	Publisher   IPublisher
 	State       StreamState
-	StateEvent  StateEvent  // 进入当前状态的事件
-	Subscribers Subscribers // 订阅者
+	SEHistory   []StateEvent // 事件历史
+	Subscribers Subscribers  // 订阅者
 	Tracks      Tracks
 	AppName     string
 	StreamName  string
@@ -266,7 +271,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 	var next StreamState
 	if next, ok = event.Next(); ok {
 		r.State = next
-		r.StateEvent = event
+		r.SEHistory = append(r.SEHistory, event)
 		// 给Publisher状态变更的回调，方便进行远程拉流等操作
 		var stateEvent any
 		r.Info(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[next]), zap.String("action", ActionNames[action]))
@@ -289,7 +294,11 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			}
 			r.timeout.Reset(waitTime)
 		case STATE_PUBLISHING:
-			stateEvent = SEpublish{event}
+			if len(r.SEHistory) > 1 {
+				stateEvent = SErepublish{event}
+			} else {
+				stateEvent = SEpublish{event}
+			}
 			r.Subscribers.Broadcast(stateEvent)
 			r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
 		case STATE_WAITCLOSE:
@@ -316,7 +325,20 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 }
 
 func (r *Stream) IsShutdown() bool {
-	return r.StateEvent.Action == ACTION_CLOSE || (r.StateEvent.Action == ACTION_TIMEOUT && r.StateEvent.From == STATE_WAITCLOSE)
+	switch l := len(r.SEHistory); l {
+	case 0:
+		return false
+	case 1:
+		return r.SEHistory[0].Action == ACTION_CLOSE
+	default:
+		switch r.SEHistory[l-1].Action {
+		case ACTION_CLOSE:
+			return true
+		case ACTION_TIMEOUT:
+			return r.SEHistory[l-1].From == STATE_WAITCLOSE
+		}
+	}
+	return false
 }
 
 func (r *Stream) IsClosed() bool {
