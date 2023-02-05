@@ -161,8 +161,16 @@ type Tracks struct {
 }
 
 func (tracks *Tracks) Add(name string, t Track) bool {
-	if v, ok := t.(*track.Video); ok && tracks.MainVideo == nil {
-		tracks.MainVideo = v
+	switch v := t.(type) {
+	case *track.Video:
+		if tracks.MainVideo == nil {
+			tracks.MainVideo = v
+			tracks.SetIDR(v)
+		}
+	case *track.Audio:
+		if tracks.MainVideo != nil {
+			v.Narrow()
+		}
 	}
 	return tracks.Map.Add(name, t)
 }
@@ -281,16 +289,18 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			waitTime := time.Duration(0)
 			if r.Publisher != nil {
 				waitTime = r.Publisher.GetPublisher().Config.WaitCloseTimeout
+				r.Tracks.Range(func(name string, t Track) {
+					t.SetStuff(TrackStateOffline)
+				})
 			}
 			r.Subscribers.OnPublisherLost(event)
-			suber := r.Subscribers.Pick()
-			if suber != nil {
+			if suber := r.Subscribers.Pick(); suber != nil {
 				r.Subscribers.Broadcast(stateEvent)
 				if waitTime == 0 {
 					waitTime = suber.GetSubscriber().Config.WaitTimeout
 				}
 			} else if waitTime == 0 {
-				waitTime = time.Second //没有订阅者也没有配置发布者等待重连时间，默认1秒后关闭流
+				waitTime = time.Millisecond * 10 //没有订阅者也没有配置发布者等待重连时间，默认10ms后关闭流
 			}
 			r.timeout.Reset(waitTime)
 		case STATE_PUBLISHING:

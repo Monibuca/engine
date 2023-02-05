@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"time"
 
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -64,9 +65,12 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 	r.ctx = ctx
 	switch r.State {
 	case READSTATE_INIT:
+		r.Track.Info("start read", zap.Int("mode", mode))
 		startRing := r.Track.Ring
 		if r.Track.IDRing != nil {
 			startRing = r.Track.IDRing
+		} else {
+			r.Track.Warn("no IDRring")
 		}
 		switch mode {
 		case 0:
@@ -94,6 +98,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 		}
 		r.SkipTs = r.FirstTs
 		r.FirstSeq = r.Frame.Sequence
+		r.Track.Info("first frame read", zap.Uint32("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
 	case READSTATE_FIRST:
 		if r.Track.IDRing.Value.Sequence != r.FirstSeq {
 			r.Ring = r.Track.IDRing
@@ -102,6 +107,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 				return
 			}
 			r.SkipTs = frame.AbsTime - r.beforeJump
+			r.Track.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Uint32("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {
 			r.MoveNext()
@@ -117,5 +123,6 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 		r.ReadFrame()
 	}
 	r.AbsTime = r.Frame.AbsTime - r.SkipTs
+	// println(r.Track.Name, r.State, r.Frame.AbsTime, r.SkipTs, r.AbsTime)
 	return
 }

@@ -68,13 +68,13 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	case codec.NALU_Access_Unit_Delimiter:
 	case codec.NALU_Filler_Data:
 	default:
-		vt.Stream.Error("H264 WriteSliceBytes naluType not support", zap.Int("naluType", int(naluType)))
+		vt.Error("WriteSliceBytes naluType not support", zap.Int("naluType", int(naluType)))
 	}
 }
 
 func (vt *H264) WriteAVCC(ts uint32, frame util.BLL) (err error) {
 	if l := frame.ByteLength; l < 6 {
-		vt.Stream.Error("AVCC data too short", zap.Int("len", l))
+		vt.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite
 	}
 	if frame.GetByte(1) == 0 {
@@ -110,7 +110,7 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 				if buffer.Len() >= nextSize {
 					vt.WriteSliceBytes(buffer.ReadN(nextSize))
 				} else {
-					vt.Stream.Error("invalid nalu size", zap.Int("naluType", int(naluType)))
+					vt.Error("invalid nalu size", zap.Int("naluType", int(naluType)))
 					return
 				}
 			}

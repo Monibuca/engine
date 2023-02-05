@@ -12,7 +12,7 @@ const RTPMTU = 1400
 
 func (av *Media) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
 	if av.PayloadType != p.PayloadType {
-		av.Stream.Warn("RTP PayloadType error", zap.Uint8("want", av.PayloadType), zap.Uint8("got", p.PayloadType))
+		av.Warn("RTP PayloadType error", zap.Uint8("want", av.PayloadType), zap.Uint8("got", p.PayloadType))
 		return
 	}
 	frame = &RTPFrame{
@@ -26,7 +26,7 @@ func (av *Media) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 	var p rtp.Packet
 	err := p.Unmarshal(raw)
 	if err != nil {
-		av.Stream.Warn("RTP Unmarshal error", zap.Error(err))
+		av.Warn("RTP Unmarshal error", zap.Error(err))
 		return
 	}
 	return av.UnmarshalRTPPacket(&p)

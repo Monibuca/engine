@@ -58,13 +58,13 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 	case codec.NAL_UNIT_SEI:
 		vt.AppendAuBytes(slice)
 	default:
-		vt.Video.Stream.Warn("h265 slice type not supported", zap.Uint("type", uint(t)))
+		vt.Warn("h265 slice type not supported", zap.Uint("type", uint(t)))
 	}
 }
 
 func (vt *H265) WriteAVCC(ts uint32, frame util.BLL) (err error) {
 	if l := frame.ByteLength; l < 6 {
-		vt.Stream.Error("AVCC data too short", zap.Int("len", l))
+		vt.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite
 	}
 	if frame.GetByte(1) == 0 {
@@ -74,7 +74,7 @@ func (vt *H265) WriteAVCC(ts uint32, frame util.BLL) (err error) {
 			vt.SPSInfo, _ = codec.ParseHevcSPS(vt.SequenceHead)
 			vt.nalulenSize = (int(vt.SequenceHead[26]) & 0x03) + 1
 		} else {
-			vt.Stream.Error("H265 ParseVpsSpsPps Error")
+			vt.Error("H265 ParseVpsSpsPps Error")
 			vt.Stream.Close()
 		}
 		return

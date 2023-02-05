@@ -58,7 +58,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 		if aac.lack > 0 {
 			rawLen := aac.Value.AUList.ByteLength
 			if rawLen == 0 {
-				aac.Stream.Error("lack >0 but rawlen=0")
+				aac.Error("lack >0 but rawlen=0")
 			}
 			last := aac.Value.AUList.Pre
 			auLen := len(frame.Payload) - startOffset
@@ -67,7 +67,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 				aac.lack -= auLen
 				return
 			} else if aac.lack < auLen {
-				aac.Stream.Warn("lack < auLen", zap.Int("lack", aac.lack), zap.Int("auLen", auLen))
+				aac.Warn("lack < auLen", zap.Int("lack", aac.lack), zap.Int("auLen", auLen))
 			}
 			last.Value.Push(aac.BytesPool.GetShell(frame.Payload[startOffset : startOffset+aac.lack]))
 			aac.lack = 0
@@ -99,7 +99,7 @@ func (aac *AAC) WriteSequenceHead(sh []byte) {
 
 func (aac *AAC) WriteAVCC(ts uint32, frame util.BLL) error {
 	if l := frame.ByteLength; l < 4 {
-		aac.Stream.Error("AVCC data too short", zap.Int("len", l))
+		aac.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite
 	}
 	if frame.GetByte(1) == 0 {

@@ -39,7 +39,7 @@ type G711 struct {
 
 func (g711 *G711) WriteAVCC(ts uint32, frame util.BLL) error {
 	if l := frame.ByteLength; l < 2 {
-		g711.Stream.Error("AVCC data too short", zap.Int("len", l))
+		g711.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite
 	}
 	g711.Value.AUList.Push(g711.BytesPool.GetShell(frame.Next.Value[1:]))

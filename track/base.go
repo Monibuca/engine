@@ -84,6 +84,7 @@ type Media struct {
 	RTPMuxer
 	RTPDemuxer
 	SpesificTrack `json:"-"`
+	deltaTs       int64 //用于接续发布后时间戳连续
 	流速控制
 }
 
@@ -106,10 +107,9 @@ func (av *Media) SetSpeedLimit(value time.Duration) {
 }
 
 func (av *Media) SetStuff(stuff ...any) {
+	// 代表发布者已经离线，该Track成为遗留Track，等待下一任发布者接续发布
 	for _, s := range stuff {
 		switch v := s.(type) {
-		case string:
-			av.Name = v
 		case int:
 			av.Init(v)
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
@@ -118,12 +118,12 @@ func (av *Media) SetStuff(stuff ...any) {
 			av.SampleRate = v
 		case byte:
 			av.PayloadType = v
-		case IStream:
-			av.Stream = v
 		case util.BytesPool:
 			av.BytesPool = v
 		case SpesificTrack:
 			av.SpesificTrack = v
+		default:
+			av.Base.SetStuff(v)
 		}
 	}
 }
@@ -189,6 +189,16 @@ func (av *Media) AddIDR() {
 
 func (av *Media) Flush() {
 	curValue, preValue, nextValue := &av.Value, av.LastValue, av.Next()
+	if av.State == TrackStateOffline {
+		av.State = TrackStateOnline
+		av.deltaTs = int64(preValue.AbsTime) - int64(curValue.AbsTime) + int64(preValue.DeltaTime)
+		av.Info("track back online")
+	}
+	if av.deltaTs != 0 {
+		curValue.DTS = uint32(int64(curValue.DTS) + av.deltaTs*90)
+		curValue.PTS = uint32(int64(curValue.PTS) + av.deltaTs*90)
+		curValue.AbsTime = 0
+	}
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
 	if bufferTime > 0 && av.IDRingList.Length > 1 && time.Duration(curValue.AbsTime-av.IDRingList.Next.Next.Value.Value.AbsTime)*time.Millisecond > bufferTime {
 		av.ShiftIDR()
