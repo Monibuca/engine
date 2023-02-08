@@ -102,10 +102,9 @@ const (
 //
 
 type MpegTsStream struct {
-	PAT         MpegTsPAT // PAT表信息
-	PMT         MpegTsPMT // PMT表信息
-	tsPktBuffer [][]byte  // TS包缓存
-	PESChan     chan *MpegTsPESPacket
+	PAT     MpegTsPAT // PAT表信息
+	PMT     MpegTsPMT // PMT表信息
+	PESChan chan *MpegTsPESPacket
 }
 
 // ios13818-1-CN.pdf 33/165
@@ -518,64 +517,60 @@ func (s *MpegTsStream) ReadPMT(packet *MpegTsPacket, pr io.Reader) (err error) {
 	}
 	return
 }
-func (s *MpegTsStream) Feed(ts io.Reader) error {
-	var frame int64
-	var tsPktArr []MpegTsPacket
-	var reader, pr bytes.Reader
-	defer func() {
-		s.tsPktBuffer = s.tsPktBuffer[:0]
-	}()
+func (s *MpegTsStream) Feed(ts io.Reader) (err error) {
+	var reader bytes.Reader
+	var lr io.LimitedReader
+	lr.R = &reader
+	var pesPkt *MpegTsPESPacket
+	var tsHeader MpegTsHeader
+	tsData := make([]byte, TS_PACKET_SIZE)
 	for {
-		var tsData []byte
-		if tsDataP := util.MallocSlice(&s.tsPktBuffer); tsDataP == nil {
-			tsData = make([]byte, TS_PACKET_SIZE)
-			s.tsPktBuffer = append(s.tsPktBuffer, tsData)
-		} else {
-			tsData = *tsDataP
-		}
-		_, err := io.ReadFull(ts, tsData)
-		reader.Reset(tsData)
+		_, err = io.ReadFull(ts, tsData)
 		if err == io.EOF {
 			// 文件结尾 把最后面的数据发出去
-			pesPkt, err := TsToPES(tsPktArr)
-			if err != nil {
-				return err
+			if pesPkt != nil {
+				s.PESChan <- pesPkt
 			}
-			s.PESChan <- &pesPkt
 			return nil
 		} else if err != nil {
-			return err
+			return
 		}
-		packet, err := ReadTsPacket(&reader)
-		if err != nil {
-			return err
+		reader.Reset(tsData)
+		lr.N = TS_PACKET_SIZE
+		if tsHeader, err = ReadTsHeader(&lr); err != nil {
+			return
 		}
-		pr.Reset(packet.Payload)
-		err = s.ReadPAT(&packet, &pr)
-		if err != nil {
-			return err
+		if tsHeader.SyncByte != 0x47 {
+			return errors.New("sync byte error")
 		}
-		err = s.ReadPMT(&packet, &pr)
-		if err != nil {
-			return err
+		if tsHeader.Pid == PID_PAT {
+			if s.PAT, err = ReadPAT(&lr); err != nil {
+				return
+			}
+			continue
 		}
-		// 在读取PMT中已经将所有的音视频PES的索引信息全部保存了起来
-		// 接着读取所有TS包里面的PID,找出PID==elementaryPID的TS包,就是音视频数据
-		for _, v := range s.PMT.Stream {
-			if v.ElementaryPID == packet.Header.Pid {
-				if packet.Header.PayloadUnitStartIndicator == 1 {
-					if frame != 0 {
-						pesPkt, err := TsToPES(tsPktArr)
-						if err != nil {
-							return err
-						}
-						s.PESChan <- &pesPkt
-						s.tsPktBuffer = s.tsPktBuffer[:0]
-						tsPktArr = tsPktArr[:0]
+		if len(s.PMT.Stream) == 0 {
+			for _, v := range s.PAT.Program {
+				if v.ProgramMapPID == tsHeader.Pid {
+					if s.PMT, err = ReadPMT(&lr); err != nil {
+						return
 					}
-					frame++
 				}
-				tsPktArr = append(tsPktArr, packet)
+				continue
+			}
+		}
+		for _, v := range s.PMT.Stream {
+			if v.ElementaryPID == tsHeader.Pid {
+				if tsHeader.PayloadUnitStartIndicator == 1 {
+					if pesPkt != nil {
+						s.PESChan <- pesPkt
+					}
+					pesPkt = &MpegTsPESPacket{}
+					if pesPkt.Header, err = ReadPESHeader(&lr); err != nil {
+						return
+					}
+				}
+				io.Copy(&pesPkt.Payload, &lr)
 			}
 		}
 	}

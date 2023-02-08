@@ -2,6 +2,7 @@ package engine
 
 import (
 	"os"
+	"time"
 
 	"github.com/pion/webrtc/v3/pkg/media/rtpdump"
 	"go.uber.org/zap"
@@ -47,8 +48,8 @@ func (t *RTPDumpPublisher) OnEvent(event any) {
 		case codec.CodecID_PCMU:
 			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
 		}
-		t.VideoTrack.SetSpeedLimit(500)
-		t.AudioTrack.SetSpeedLimit(500)
+		t.VideoTrack.SetSpeedLimit(500 * time.Millisecond)
+		t.AudioTrack.SetSpeedLimit(500 * time.Millisecond)
 		for {
 			packet, err := r.Next()
 			if err != nil {

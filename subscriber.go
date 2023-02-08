@@ -183,28 +183,37 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
 			// println("v", frame.Sequence, frame.AbsTime, s.VideoReader.AbsTime, frame.IFrame)
-			spesic.OnEvent(VideoFrame{frame, s.VideoReader.AbsTime, frame.PTS - s.VideoReader.SkipTs*90, frame.DTS - s.VideoReader.SkipTs*90})
+			spesic.OnEvent(VideoFrame{frame, s.VideoReader.AbsTime, frame.PTS - s.VideoReader.SkipRTPTs, frame.DTS - s.VideoReader.SkipRTPTs})
 		}
 		sendAudioFrame = func(frame *AVFrame) {
 			// println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
-			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, s.AudioReader.AbsTime * 90, s.AudioReader.AbsTime * 90})
+			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, s.AudioReader.Track.Ms2RTPTs(s.AudioReader.AbsTime), s.AudioReader.Track.Ms2RTPTs(s.AudioReader.AbsTime)})
 		}
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16
 		sendVideoFrame = func(frame *AVFrame) {
 			frame.RTP.Range(func(vp RTPFrame) bool {
 				videoSeq++
-				vp.Header.Timestamp = vp.Header.Timestamp - s.VideoReader.SkipTs*90
+				vp.Header.Timestamp = vp.Header.Timestamp - s.VideoReader.SkipRTPTs
 				vp.Header.SequenceNumber = videoSeq
 				spesic.OnEvent((VideoRTP)(vp))
 				return true
 			})
 		}
+		createTimestamp := func(ts uint32) uint32 {
+			return ts - s.AudioReader.SkipRTPTs
+		}
+		// RTP需要转换时间戳调整为采样率
+		if s.Audio.SampleRate != s.Audio.ClockRate {
+			createTimestamp = func(ts uint32) uint32 {
+				return uint32(uint64(ts-s.AudioReader.SkipRTPTs) * uint64(s.Audio.SampleRate) / uint64(s.Audio.ClockRate))
+			}
+		}
 		sendAudioFrame = func(frame *AVFrame) {
 			frame.RTP.Range(func(ap RTPFrame) bool {
 				audioSeq++
 				ap.Header.SequenceNumber = audioSeq
-				ap.Header.Timestamp = ap.Header.Timestamp - s.AudioReader.SkipTs*90
+				ap.Header.Timestamp = createTimestamp(ap.Header.Timestamp)
 				spesic.OnEvent((AudioRTP)(ap))
 				return true
 			})
@@ -221,11 +230,11 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			spesic.OnEvent(append(result, util.PutBE(flvHeadCache[11:15], dataSize+11)))
 		}
 		sendVideoDecConf = func() {
-			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, 0, s.VideoReader.Track.SequenceHead)
+			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, s.VideoReader.Track.SequenceHead)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
 		}
 		sendAudioDecConf = func() {
-			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, 0, s.AudioReader.Track.SequenceHead)
+			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, s.AudioReader.Track.SequenceHead)
 			// spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
 		sendVideoFrame = func(frame *AVFrame) {
@@ -299,10 +308,12 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				case track.READSTATE_INIT:
 					if s.Video != nil {
 						s.AudioReader.FirstTs = s.VideoReader.FirstTs
+
 					}
 				case track.READSTATE_NORMAL:
 					if s.Video != nil {
 						s.AudioReader.SkipTs = s.VideoReader.SkipTs
+						s.AudioReader.SkipRTPTs = s.AudioReader.Track.Ms2RTPTs(s.AudioReader.SkipTs)
 					}
 				}
 				s.AudioReader.Read(ctx, subMode)

@@ -3,6 +3,7 @@ package engine
 import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec/mpegts"
+	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/track"
 )
 
@@ -38,15 +39,15 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 		}
 	case mpegts.STREAM_TYPE_AAC:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewAAC(t.Publisher.Stream)
+			t.AudioTrack = track.NewAAC(t.Publisher.Stream, uint32(90000))
 		}
 	case mpegts.STREAM_TYPE_G711A:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, true)
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, true, uint32(90000))
 		}
 	case mpegts.STREAM_TYPE_G711U:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, false, uint32(90000))
 		}
 	default:
 		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))
@@ -72,11 +73,7 @@ func (t *TSPublisher) ReadPES() {
 						t.adts = append(t.adts, pes.Payload[:7]...)
 						t.AudioTrack.WriteADTS(t.adts)
 					}
-					current := t.AudioTrack.CurrentFrame()
-					current.PTS = uint32(pes.Header.Pts)
-					current.DTS = uint32(pes.Header.Dts)
 					remainLen := len(pes.Payload)
-					current.BytesIn += remainLen
 					for remainLen > 0 {
 						// AACFrameLength(13)
 						// xx xxxxxxxx xxx
@@ -88,12 +85,9 @@ func (t *TSPublisher) ReadPES() {
 						pes.Payload = pes.Payload[frameLen:remainLen]
 						remainLen -= frameLen
 					}
-					t.AudioTrack.Flush()
 				case *track.G711:
 					t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload)
-					t.AudioTrack.Flush()
 				}
-
 			}
 		case mpegts.STREAM_ID_VIDEO:
 			if t.VideoTrack == nil {
@@ -102,7 +96,7 @@ func (t *TSPublisher) ReadPES() {
 				}
 			}
 			if t.VideoTrack != nil {
-				t.VideoTrack.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), pes.Payload)
+				t.VideoTrack.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), common.AnnexBFrame(pes.Payload))
 			}
 		}
 	}

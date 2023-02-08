@@ -114,7 +114,8 @@ func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) error {
 	if err != nil {
 		return err
 	}
-	vt.Value.PTS = (ts + cts) * 90
+	vt.Value.PTS = vt.Ms2RTPTs(ts + cts)
+	vt.Value.DTS = vt.Ms2RTPTs(ts)
 	// println(":", vt.Value.Sequence)
 	for nalulen, err := r.ReadBE(vt.nalulenSize); err == nil; nalulen, err = r.ReadBE(vt.nalulenSize) {
 		// var au util.BLL
@@ -148,30 +149,30 @@ func (vt *Video) WriteSliceByte(b ...byte) {
 }
 
 // 在I帧前面插入sps pps webrtc需要
-func (av *Video) insertDCRtp() {
-	head := av.Value.RTP.Next
+func (vt *Video) insertDCRtp() {
+	head := vt.Value.RTP.Next
 	seq := head.Value.SequenceNumber
-	for _, nalu := range av.ParamaterSets {
+	for _, nalu := range vt.ParamaterSets {
 		var packet RTPFrame
 		packet.Version = 2
-		packet.PayloadType = av.PayloadType
+		packet.PayloadType = vt.PayloadType
 		packet.Payload = nalu
-		packet.SSRC = av.SSRC
-		packet.Timestamp = av.Value.PTS
+		packet.SSRC = vt.SSRC
+		packet.Timestamp = vt.Value.PTS
 		packet.Marker = false
 		head.InsertBeforeValue(packet)
-		av.rtpSequence++
+		vt.rtpSequence++
 	}
-	av.Value.RTP.RangeItem(func(item *util.ListItem[RTPFrame]) bool {
+	vt.Value.RTP.RangeItem(func(item *util.ListItem[RTPFrame]) bool {
 		item.Value.SequenceNumber = seq
 		seq++
 		return true
 	})
 }
 
-func (av *Video) generateTimestamp(ts uint32) {
-	av.Value.PTS = ts
-	av.Value.DTS = av.dtsEst.Feed(ts)
+func (vt *Video) generateTimestamp(ts uint32) {
+	vt.Value.PTS = ts
+	vt.Value.DTS = vt.dtsEst.Feed(ts)
 }
 
 func (vt *Video) SetLostFlag() {
@@ -188,7 +189,7 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	b[1] = 1
 	// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
 	// 写入CTS
-	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
+	util.PutBE(b[2:5], vt.RTPTs2Ms(rv.PTS-rv.DTS))
 	rv.AVCC.Push(mem)
 	rv.AUList.Range(func(au *util.BLL) bool {
 		mem = vt.BytesPool.Get(4)

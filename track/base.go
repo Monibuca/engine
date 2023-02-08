@@ -31,15 +31,15 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// 	return
 	// }
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
-	if 过快毫秒 := (数据时间差 - 实际时间差) / time.Millisecond; 过快毫秒 > 100 {
-		// println("过快毫秒", 过快毫秒)
-		if 过快毫秒 > p.等待上限 {
-			time.Sleep(time.Millisecond * p.等待上限)
+	if 过快 := (数据时间差 - 实际时间差); 过快 > 100*time.Millisecond {
+		// println("过快毫秒", 过快)
+		if 过快 > p.等待上限 {
+			time.Sleep(p.等待上限)
 		} else {
-			time.Sleep(过快毫秒 * time.Millisecond)
+			time.Sleep(过快)
 		}
-	} else if 过快毫秒 < -100 {
-		// println("过慢毫秒", 过快毫秒)
+	} else if 过快 < -100*time.Millisecond {
+		// println("过慢毫秒", 过快)
 	}
 }
 
@@ -74,7 +74,7 @@ type Media struct {
 	Base
 	RingBuffer[AVFrame]
 	IDRingList      `json:"-"` //最近的关键帧位置，首屏渲染
-	SampleRate      uint32
+	ClockRate       uint32     //时钟频率,mpeg中均为90000，rtsp中音频根据sample_rate
 	SSRC            uint32
 	PayloadType     byte
 	BytesPool       util.BytesPool `json:"-"`
@@ -86,6 +86,16 @@ type Media struct {
 	SpesificTrack `json:"-"`
 	deltaTs       int64 //用于接续发布后时间戳连续
 	流速控制
+}
+
+// 毫秒转换为RTP时间戳
+func (av *Media) Ms2RTPTs(ms uint32) uint32 {
+	return uint32(uint64(ms) * uint64(av.ClockRate) / 1000)
+}
+
+// RTP时间戳转换为毫秒
+func (av *Media) RTPTs2Ms(rtpts uint32) uint32 {
+	return uint32(uint64(rtpts) * 1000 / uint64(av.ClockRate))
 }
 
 // 为json序列化而计算的数据
@@ -103,7 +113,7 @@ func (av *Media) SnapForJson() {
 }
 
 func (av *Media) SetSpeedLimit(value time.Duration) {
-	av.等待上限 = value * time.Millisecond
+	av.等待上限 = value
 }
 
 func (av *Media) SetStuff(stuff ...any) {
@@ -115,7 +125,7 @@ func (av *Media) SetStuff(stuff ...any) {
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
 			av.等待上限 = config.Global.SpeedLimit
 		case uint32:
-			av.SampleRate = v
+			av.ClockRate = v
 		case byte:
 			av.PayloadType = v
 		case util.BytesPool:
@@ -195,8 +205,9 @@ func (av *Media) Flush() {
 		av.Info("track back online")
 	}
 	if av.deltaTs != 0 {
-		curValue.DTS = uint32(int64(curValue.DTS) + av.deltaTs*90)
-		curValue.PTS = uint32(int64(curValue.PTS) + av.deltaTs*90)
+		rtpts := int64(av.deltaTs) * int64(av.ClockRate) / 1000
+		curValue.DTS = uint32(int64(curValue.DTS) + rtpts)
+		curValue.PTS = uint32(int64(curValue.PTS) + rtpts)
 		curValue.AbsTime = 0
 	}
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
@@ -213,6 +224,15 @@ func (av *Media) Flush() {
 		// 	av.Stream.Error("sub ring overflow", zap.Int("size", av.AVRing.Size), zap.String("name", av.Name))
 		// }
 	}
+	if av.起始时间.IsZero() {
+		curValue.DeltaTime = 0
+		av.重置(curValue.AbsTime)
+	} else if curValue.AbsTime == 0 {
+		curValue.DeltaTime = (curValue.DTS - preValue.DTS) * 1000 / av.ClockRate
+		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
+	} else {
+		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime
+	}
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {
@@ -222,15 +242,6 @@ func (av *Media) Flush() {
 		if config.Global.EnableAVCC && curValue.AVCC.ByteLength == 0 {
 			av.CompleteAVCC(curValue)
 		}
-	}
-	if av.起始时间.IsZero() {
-		curValue.DeltaTime = 0
-		av.重置(curValue.AbsTime)
-	} else if curValue.AbsTime == 0 {
-		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
-		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
-	} else {
-		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime
 	}
 	av.Base.Flush(&curValue.BaseFrame)
 	if av.等待上限 > 0 {

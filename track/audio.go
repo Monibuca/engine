@@ -11,6 +11,7 @@ type Audio struct {
 	CodecID    codec.AudioCodecID
 	Channels   byte
 	SampleSize byte
+	SampleRate uint32
 	AVCCHead   []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
 	codec.AudioSpecificConfig
 }
@@ -50,7 +51,7 @@ func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 
 func (av *Audio) WriteAVCC(ts uint32, frame util.BLL) {
 	av.Value.WriteAVCC(ts, frame)
-	av.generateTimestamp(ts * 90)
+	av.generateTimestamp(ts * av.ClockRate / 1000)
 	av.Flush()
 }
 

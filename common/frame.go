@@ -72,7 +72,6 @@ func (av *AVFrame) WriteAVCC(ts uint32, frame util.BLL) {
 	}
 	// frame.Transfer(&av.AVCC)
 	// frame.ByteLength = 0
-	av.DTS = ts * 90
 }
 
 func (av *AVFrame) AppendMem(item *util.ListItem[util.Buffer]) {

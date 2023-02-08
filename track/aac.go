@@ -40,9 +40,9 @@ func (aac *AAC) WriteADTS(adts []byte) {
 	channel := ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
 	config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
 	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
+	aac.Media.WriteSequenceHead([]byte{0xAF, 0x00, config1, config2})
 	aac.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
 	aac.Channels = channel
-	aac.WriteSequenceHead([]byte{0xAF, 0x00, config1, config2})
 	aac.Parse(aac.SequenceHead[2:])
 	aac.Attach()
 }
@@ -93,6 +93,7 @@ func (aac *AAC) WriteSequenceHead(sh []byte) {
 	config1, config2 := aac.SequenceHead[2], aac.SequenceHead[3]
 	aac.Channels = ((config2 >> 3) & 0x0F) //声道
 	aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
+	aac.ClockRate = aac.SampleRate
 	aac.Parse(aac.SequenceHead[2:])
 	aac.Attach()
 }

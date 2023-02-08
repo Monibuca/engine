@@ -25,7 +25,7 @@ type MpegTsPesStream struct {
 // 110x xxxx 为音频流(0xC0)
 type MpegTsPESPacket struct {
 	Header  MpegTsPESHeader
-	Payload []byte
+	Payload util.Buffer
 }
 
 type MpegTsPESHeader struct {
