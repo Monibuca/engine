@@ -49,7 +49,7 @@ func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	av.Flush()
 }
 
-func (av *Audio) WriteAVCC(ts uint32, frame util.BLL) {
+func (av *Audio) WriteAVCC(ts uint32, frame *util.BLL) {
 	av.Value.WriteAVCC(ts, frame)
 	av.generateTimestamp(ts * av.ClockRate / 1000)
 	av.Flush()

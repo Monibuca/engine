@@ -72,7 +72,7 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	}
 }
 
-func (vt *H264) WriteAVCC(ts uint32, frame util.BLL) (err error) {
+func (vt *H264) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 	if l := frame.ByteLength; l < 6 {
 		vt.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite

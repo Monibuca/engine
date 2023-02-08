@@ -169,6 +169,12 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	s.Info("playblock")
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
 	ctx := s.TrackPlayer.Context
+	conf := s.Config
+	hasVideo, hasAudio := s.Video != nil && conf.SubVideo, s.Audio != nil && conf.SubAudio
+	if !hasAudio && !hasVideo {
+		s.Error("play neither video nor audio")
+		return
+	}
 	sendVideoDecConf := func() {
 		s.Debug("sendVideoDecConf")
 		spesic.OnEvent(s.Video.ParamaterSets)
@@ -204,7 +210,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			return ts - s.AudioReader.SkipRTPTs
 		}
 		// RTP需要转换时间戳调整为采样率
-		if s.Audio.SampleRate != s.Audio.ClockRate {
+		if hasAudio && s.Audio.SampleRate != s.Audio.ClockRate {
 			createTimestamp = func(ts uint32) uint32 {
 				return uint32(uint64(ts-s.AudioReader.SkipRTPTs) * uint64(s.Audio.SampleRate) / uint64(s.Audio.ClockRate))
 			}
@@ -258,17 +264,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 	}
 	defer s.onStop()
-	var subMode = s.Config.SubMode //订阅模式
-	if s.Args.Has(s.Config.SubModeArgName) {
-		subMode, _ = strconv.Atoi(s.Args.Get(s.Config.SubModeArgName))
+	var subMode = conf.SubMode //订阅模式
+	if s.Args.Has(conf.SubModeArgName) {
+		subMode, _ = strconv.Atoi(s.Args.Get(conf.SubModeArgName))
 	}
 	var videoFrame, audioFrame *AVFrame
 	var lastAbsTime uint32
-	hasVideo, hasAudio := s.VideoReader.Track != nil && s.Config.SubVideo, s.AudioReader.Track != nil && s.Config.SubAudio
-	if !hasAudio && !hasVideo {
-		s.Error("play neither video nor audio")
-		return
-	}
+
 	for ctx.Err() == nil {
 		if hasVideo {
 			for ctx.Err() == nil {
@@ -296,7 +298,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 						break
 					}
 				}
-				if !s.Config.IFrameOnly || frame.IFrame {
+				if !conf.IFrameOnly || frame.IFrame {
 					sendVideoFrame(frame)
 				}
 			}

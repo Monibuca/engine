@@ -98,7 +98,7 @@ func (aac *AAC) WriteSequenceHead(sh []byte) {
 	aac.Attach()
 }
 
-func (aac *AAC) WriteAVCC(ts uint32, frame util.BLL) error {
+func (aac *AAC) WriteAVCC(ts uint32, frame *util.BLL) error {
 	if l := frame.ByteLength; l < 4 {
 		aac.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite

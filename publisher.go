@@ -54,7 +54,7 @@ func (p *Publisher) OnEvent(event any) {
 	}
 }
 
-func (p *Publisher) WriteAVCCVideo(ts uint32, frame util.BLL) {
+func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL) {
 	if frame.ByteLength < 6 {
 		return
 	}
@@ -79,7 +79,7 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame util.BLL) {
 	}
 }
 
-func (p *Publisher) WriteAVCCAudio(ts uint32, frame util.BLL) {
+func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL) {
 	if frame.ByteLength < 4 {
 		return
 	}

@@ -60,7 +60,7 @@ type AVFrame struct {
 	CanRead bool `json:"-"`
 }
 
-func (av *AVFrame) WriteAVCC(ts uint32, frame util.BLL) {
+func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {
 	av.AbsTime = ts
 	av.BytesIn += frame.ByteLength
 	for {

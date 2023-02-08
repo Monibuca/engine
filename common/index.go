@@ -97,7 +97,7 @@ type AVTrack interface {
 	CurrentFrame() *AVFrame
 	Attach()
 	Detach()
-	WriteAVCC(ts uint32, frame util.BLL) error //写入AVCC格式的数据
+	WriteAVCC(ts uint32, frame *util.BLL) error //写入AVCC格式的数据
 	WriteRTP([]byte)
 	WriteRTPPack(*rtp.Packet)
 	Flush()

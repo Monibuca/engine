@@ -37,7 +37,7 @@ type G711 struct {
 	Audio
 }
 
-func (g711 *G711) WriteAVCC(ts uint32, frame util.BLL) error {
+func (g711 *G711) WriteAVCC(ts uint32, frame *util.BLL) error {
 	if l := frame.ByteLength; l < 2 {
 		g711.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite

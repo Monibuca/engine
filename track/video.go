@@ -101,7 +101,7 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 	vt.Flush()
 }
 
-func (vt *Video) WriteAVCC(ts uint32, frame util.BLL) error {
+func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) error {
 	r := frame.NewReader()
 	b, err := r.ReadByte()
 	if err != nil {
