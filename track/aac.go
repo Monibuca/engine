@@ -21,7 +21,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
-	aac.SetStuff("aac", stream, int(256+128), byte(97), aac, time.Millisecond*10)
+	aac.SetStuff("aac", uint32(90000), stream, int(256+128), byte(97), aac, time.Millisecond*10)
 	aac.SetStuff(stuff...)
 	aac.AVCCHead = []byte{0xAF, 1}
 	return

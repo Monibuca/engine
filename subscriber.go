@@ -127,6 +127,7 @@ func (s *Subscriber) AddTrack(t Track) bool {
 		}
 		s.VideoReader.Poll = s.Config.Poll
 		s.VideoReader.Track = &v.Media
+		s.VideoReader.Logger = s.With(zap.String("track", v.Name))
 		s.Video = v
 	case *track.Audio:
 		if s.AudioReader.Track != nil || !s.Config.SubAudio {
@@ -134,6 +135,7 @@ func (s *Subscriber) AddTrack(t Track) bool {
 		}
 		s.AudioReader.Poll = s.Config.Poll
 		s.AudioReader.Track = &v.Media
+		s.AudioReader.Logger = s.With(zap.String("track", v.Name))
 		s.Audio = v
 	case *track.Data:
 	default:

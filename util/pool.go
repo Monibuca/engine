@@ -128,6 +128,14 @@ func (list *BLLs) ToList() (result [][][]byte) {
 	return
 }
 
+func (list *BLLs) ToBuffers() (result net.Buffers) {
+	list.Range(func(bll *BLL) bool {
+		result = append(result, bll.ToBuffers()...)
+		return true
+	})
+	return
+}
+
 func (list *BLLs) ToBytes() (result []byte) {
 	list.Range(func(bll *BLL) bool {
 		result = append(result, bll.ToBytes()...)

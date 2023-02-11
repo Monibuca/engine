@@ -51,13 +51,13 @@ type DataFrame[T any] struct {
 type AVFrame struct {
 	BaseFrame
 	IFrame  bool
+	CanRead bool `json:"-"`
 	PTS     uint32
 	DTS     uint32
 	AVCC    util.BLL            `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
 	RTP     util.List[RTPFrame] `json:"-"`
 	AUList  util.BLLs           `json:"-"` // 裸数据
 	mem     util.BLL
-	CanRead bool `json:"-"`
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {

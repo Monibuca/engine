@@ -31,6 +31,7 @@ type AVRingReader struct {
 	startTime  time.Time
 	Frame      *common.AVFrame
 	AbsTime    uint32
+	*zap.Logger
 }
 
 func (r *AVRingReader) DecConfChanged() bool {
@@ -66,12 +67,12 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 	r.ctx = ctx
 	switch r.State {
 	case READSTATE_INIT:
-		r.Track.Info("start read", zap.Int("mode", mode))
+		r.Info("start read", zap.Int("mode", mode))
 		startRing := r.Track.Ring
 		if r.Track.IDRing != nil {
 			startRing = r.Track.IDRing
 		} else {
-			r.Track.Warn("no IDRring")
+			r.Warn("no IDRring")
 		}
 		switch mode {
 		case 0:
@@ -100,7 +101,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 		r.SkipTs = r.FirstTs
 		r.SkipRTPTs = r.Track.Ms2RTPTs(r.SkipTs)
 		r.FirstSeq = r.Frame.Sequence
-		r.Track.Info("first frame read", zap.Uint32("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
+		r.Info("first frame read", zap.Uint32("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
 	case READSTATE_FIRST:
 		if r.Track.IDRing.Value.Sequence != r.FirstSeq {
 			r.Ring = r.Track.IDRing
@@ -110,7 +111,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 			}
 			r.SkipTs = frame.AbsTime - r.beforeJump
 			r.SkipRTPTs = r.Track.Ms2RTPTs(r.SkipTs)
-			r.Track.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Uint32("skipTs", r.SkipTs))
+			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Uint32("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {
 			r.MoveNext()

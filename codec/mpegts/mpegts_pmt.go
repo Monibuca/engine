@@ -22,11 +22,11 @@ var (
 	aac      = []byte{STREAM_TYPE_AAC, 0xe0 | (PID_AUDIO >> 8), PID_AUDIO & 0xff, 0xf0, 0x00}
 	pcma     = []byte{STREAM_TYPE_G711A, 0xe0 | (PID_AUDIO >> 8), PID_AUDIO & 0xff, 0xf0, 0x00}
 	pcmu     = []byte{STREAM_TYPE_G711U, 0xe0 | (PID_AUDIO >> 8), PID_AUDIO & 0xff, 0xf0, 0x00}
-	stuffing []byte
+	Stuffing []byte
 )
 
 func init() {
-	stuffing = util.GetFillBytes(0xff, TS_PACKET_SIZE)
+	Stuffing = util.GetFillBytes(0xff, TS_PACKET_SIZE)
 }
 
 // TS Header :
@@ -363,6 +363,6 @@ func WritePMTPacket(w io.Writer, videoCodec codec.VideoCodecID, audioCodec codec
 		paddingSize += 5
 	}
 	util.PutBE(crc, GetCRC32_2(pmt))
-	pmt = append(pmt, crc, stuffing[:paddingSize])
+	pmt = append(pmt, crc, Stuffing[:paddingSize])
 	pmt.WriteTo(w)
 }

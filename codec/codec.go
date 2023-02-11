@@ -59,8 +59,8 @@ func (asc *AudioSpecificConfig) Parse(data []byte) {
 	asc.ExtensionFlag = data[1] & 0x01
 }
 
-func (asc *AudioSpecificConfig) ToADTS(rawDataLength int) (adts ADTS, adtsByte []byte, err error) {
-	return AudioSpecificConfigToADTS(asc, rawDataLength)
+func (asc *AudioSpecificConfig) ToADTS(rawDataLength int, adtsByte []byte) (adts ADTS, err error) {
+	return AudioSpecificConfigToADTS(asc, rawDataLength, adtsByte)
 }
 
 type GASpecificConfig struct {
@@ -172,7 +172,7 @@ type ADTSVariableHeader struct {
 
 // 所以说number_of_raw_data_blocks_in_frame == 0 表示说ADTS帧中有一个AAC数据块并不是说没有。(一个AAC原始帧包含一段时间内1024个采样及相关数据)
 
-func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int) (adts ADTS, adtsByte []byte, err error) {
+func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int, adtsByte []byte) (adts ADTS, err error) {
 	if asc.ChannelConfiguration > 8 || asc.FrameLengthFlag > 13 {
 		err = errors.New("Reserved field.")
 		return
@@ -185,9 +185,8 @@ func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int) (adt
 	adts.ProtectionAbsent = 1
 
 	// SyncWord(12) + ID(1) + Layer(2) + ProtectionAbsent(1)
-	adtsByte = append(adtsByte, 0xff)
-	adtsByte = append(adtsByte, 0xf1)
-
+	adtsByte[0] = 0xFF
+	adtsByte[1] = 0xF1
 	if asc.AudioObjectType >= 3 || asc.AudioObjectType == 0 {
 		adts.Profile = 1
 	} else {
@@ -201,9 +200,7 @@ func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int) (adt
 	adts.Home = 0
 
 	// Profile(2) + SamplingFrequencyIndex(4) + PrivateBit(1) + ChannelConfiguration(3)(取高1位)
-	byte3 := uint8(adts.Profile<<6) + uint8(adts.SamplingFrequencyIndex<<2) + uint8(adts.PrivateBit<<1) + uint8((adts.ChannelConfiguration&0x7)>>2)
-	adtsByte = append(adtsByte, byte3)
-
+	adtsByte[2] = uint8(adts.Profile<<6) + uint8(adts.SamplingFrequencyIndex<<2) + uint8(adts.PrivateBit<<1) + uint8((adts.ChannelConfiguration&0x7)>>2)
 	// ADTSVariableHeader
 	adts.CopyrightIdentificationBit = 0
 	adts.CopyrightIdentificationStart = 0
@@ -212,21 +209,17 @@ func AudioSpecificConfigToADTS(asc *AudioSpecificConfig, rawDataLength int) (adt
 	adts.NumberOfRawDataBlockInFrame = 0
 
 	// ChannelConfiguration(3)(取低2位) + OriginalCopy(1) + Home(1) + CopyrightIdentificationBit(1) + CopyrightIdentificationStart(1) +  AACFrameLength(13)(取高2位)
-	byte4 := uint8((adts.ChannelConfiguration&0x3)<<6) + uint8((adts.AACFrameLength&0x1fff)>>11)
-	adtsByte = append(adtsByte, byte4)
+	adtsByte[3] = uint8((adts.ChannelConfiguration&0x3)<<6) + uint8((adts.AACFrameLength&0x1fff)>>11)
 
 	// AACFrameLength(13)
 	// xx xxxxxxxx xxx
 	// 取中间的部分
-	byte5 := uint8(((adts.AACFrameLength & 0x1fff) >> 3) & 0x0ff)
-	adtsByte = append(adtsByte, byte5)
+	adtsByte[4] = uint8(((adts.AACFrameLength & 0x1fff) >> 3) & 0x0ff)
 
 	// AACFrameLength(13)(取低3位) + ADTSBufferFullness(11)(取高5位)
-	byte6 := uint8((adts.AACFrameLength&0x0007)<<5) + 0x1f
-	adtsByte = append(adtsByte, byte6)
+	adtsByte[5] = uint8((adts.AACFrameLength&0x0007)<<5) + 0x1f
 
 	// ADTSBufferFullness(11)(取低6位) + NumberOfRawDataBlockInFrame(2)
-	adtsByte = append(adtsByte, 0xfc)
-
+	adtsByte[6] = 0xfc
 	return
 }
