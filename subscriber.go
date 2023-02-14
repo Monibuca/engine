@@ -63,15 +63,11 @@ func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 	return t.WriteTo(w)
 }
 
-//	func copyBuffers(b net.Buffers) (r net.Buffers) {
-//		return append(r, b...)
-//	}
 func (v VideoFrame) GetAnnexB() (r net.Buffers) {
 	v.AUList.Range(func(au *util.BLL) bool {
-		r = append(append(r, codec.NALU_Delimiter1), au.ToBuffers()...)
+		r = append(append(r, codec.NALU_Delimiter2), au.ToBuffers()...)
 		return true
 	})
-	r[0] = codec.NALU_Delimiter2
 	return
 }
 
@@ -178,12 +174,12 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		return
 	}
 	sendVideoDecConf := func() {
-		s.Debug("sendVideoDecConf")
+		// s.Debug("sendVideoDecConf")
 		spesic.OnEvent(s.Video.ParamaterSets)
 		spesic.OnEvent(VideoDeConf(s.VideoReader.Track.SequenceHead))
 	}
 	sendAudioDecConf := func() {
-		s.Debug("sendAudioDecConf")
+		// s.Debug("sendAudioDecConf")
 		spesic.OnEvent(AudioDeConf(s.AudioReader.Track.SequenceHead))
 	}
 	var sendAudioFrame, sendVideoFrame func(*AVFrame)
@@ -248,7 +244,6 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		sendVideoFrame = func(frame *AVFrame) {
 			// println(frame.Sequence, s.VideoReader.AbsTime, frame.DeltaTime, frame.IFrame)
 			// b := util.Buffer(frame.AVCC.ToBytes()[5:])
-			// println(frame.Sequence)
 			// for b.CanRead() {
 			// 	nalulen := int(b.ReadUint32())
 			// 	if b.CanReadN(nalulen) {
@@ -278,6 +273,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			for ctx.Err() == nil {
 				s.VideoReader.Read(ctx, subMode)
 				frame := s.VideoReader.Frame
+				// println("video", s.VideoReader.Track.PreFrame().Sequence-frame.Sequence)
 				if frame == nil || ctx.Err() != nil {
 					return
 				}
@@ -322,7 +318,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				s.AudioReader.Read(ctx, subMode)
 				frame := s.AudioReader.Frame
-				// println("audio", frame.Sequence, frame.AbsTime)
+				// println("audio", s.AudioReader.Track.PreFrame().Sequence-frame.Sequence)
 				if frame == nil || ctx.Err() != nil {
 					return
 				}

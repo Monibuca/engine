@@ -106,12 +106,12 @@ type AVTrack interface {
 type VideoTrack interface {
 	AVTrack
 	WriteSliceBytes(slice []byte)
-	WriteAnnexB(uint32, uint32, AnnexBFrame)
+	WriteAnnexB(uint32, uint32, []byte)
 	SetLostFlag()
 }
 
 type AudioTrack interface {
 	AVTrack
-	WriteADTS([]byte)
+	WriteADTS(uint32, []byte)
 	WriteRaw(uint32, []byte)
 }

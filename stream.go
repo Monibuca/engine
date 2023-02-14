@@ -432,7 +432,7 @@ func (s *Stream) run() {
 					if s.action(ACTION_PUBLISH) || republish {
 						v.Resolve()
 					} else {
-						v.Reject(ErrBadName)
+						v.Reject(ErrBadStreamName)
 					}
 				case *util.Promise[ISubscriber]:
 					if s.IsClosed() {
@@ -494,14 +494,16 @@ func (s *Stream) run() {
 							dt.Dispose()
 						}
 					}
-				case Track:
+				case *util.Promise[Track]:
 					if s.State == STATE_WAITPUBLISH {
 						s.action(ACTION_PUBLISH)
 					}
-					name := v.GetBase().Name
-					if s.Tracks.Add(name, v) {
-						s.Info("track +1", zap.String("name", name))
-						s.Subscribers.OnTrack(v)
+					name := v.Value.GetBase().Name
+					if s.Tracks.Add(name, v.Value) {
+						v.Resolve()
+						s.Subscribers.OnTrack(v.Value)
+					} else {
+						v.Reject(ErrBadTrackName)
 					}
 				case StreamAction:
 					s.action(v)
@@ -521,7 +523,7 @@ func (s *Stream) run() {
 	}
 }
 
-func (s *Stream) AddTrack(t Track) {
+func (s *Stream) AddTrack(t *util.Promise[Track]) {
 	s.Receive(t)
 }
 
@@ -533,11 +535,11 @@ func (s *Stream) RemoveTrack(t Track) {
 	s.Receive(TrackRemoved{t})
 }
 
-func (r *Stream) NewDataTrack(locker sync.Locker) (dt *track.Data) {
+func (r *Stream) NewDataTrack(name string, locker sync.Locker) (dt *track.Data) {
 	dt = &track.Data{
 		Locker: locker,
 	}
 	dt.Init(10)
-	dt.Stream = r
+	dt.SetStuff(name, r)
 	return
 }

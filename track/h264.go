@@ -22,6 +22,7 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 	vt.SetStuff("h264", int(256), byte(96), uint32(90000), stream, vt, time.Millisecond*10)
 	vt.SetStuff(stuff...)
 	vt.ParamaterSets = make(ParamaterSets, 2)
+	vt.nalulenSize = 4
 	vt.dtsEst = NewDTSEstimator()
 	return
 }

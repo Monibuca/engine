@@ -32,14 +32,14 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// }
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
 	if 过快 := (数据时间差 - 实际时间差); 过快 > 100*time.Millisecond {
-		// println("过快毫秒", 过快)
+		// println("过快毫秒", p.name, 过快.Milliseconds())
 		if 过快 > p.等待上限 {
 			time.Sleep(p.等待上限)
 		} else {
 			time.Sleep(过快)
 		}
 	} else if 过快 < -100*time.Millisecond {
-		// println("过慢毫秒", 过快)
+		// println("过慢毫秒", p.name, 过快.Milliseconds())
 	}
 }
 

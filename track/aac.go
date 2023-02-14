@@ -34,17 +34,31 @@ type AAC struct {
 	lack       int // 用于处理不完整的AU,缺少的字节数
 }
 
-func (aac *AAC) WriteADTS(adts []byte) {
-	profile := ((adts[2] & 0xc0) >> 6) + 1
-	sampleRate := (adts[2] & 0x3c) >> 2
-	channel := ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
-	config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
-	config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
-	aac.Media.WriteSequenceHead([]byte{0xAF, 0x00, config1, config2})
-	aac.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
-	aac.Channels = channel
-	aac.Parse(aac.SequenceHead[2:])
-	aac.Attach()
+func (aac *AAC) WriteADTS(ts uint32,adts []byte) {
+	if aac.SequenceHead == nil {
+		profile := ((adts[2] & 0xc0) >> 6) + 1
+		sampleRate := (adts[2] & 0x3c) >> 2
+		channel := ((adts[2] & 0x1) << 2) | ((adts[3] & 0xc0) >> 6)
+		config1 := (profile << 3) | ((sampleRate & 0xe) >> 1)
+		config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
+		aac.Media.WriteSequenceHead([]byte{0xAF, 0x00, config1, config2})
+		aac.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
+		// aac.ClockRate = aac.SampleRate
+		aac.Channels = channel
+		aac.Parse(aac.SequenceHead[2:])
+		aac.Attach()
+	}
+	
+	frameLen := (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
+	for len(adts) >= frameLen {
+		aac.Value.AUList.Push(aac.BytesPool.GetShell(adts[7:frameLen]))
+		adts = adts[frameLen:]
+		if len(adts) < 7 {
+			break
+		}
+		frameLen = (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
+	}
+	aac.Flush()
 }
 
 // https://datatracker.ietf.org/doc/html/rfc3640#section-3.2.1

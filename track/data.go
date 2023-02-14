@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -42,4 +44,14 @@ func (d *Data) Play(ctx context.Context, onData func(any) error) error {
 		}
 	}
 	return ctx.Err()
+}
+
+func (d *Data) Attach() {
+	promise := util.NewPromise(common.Track(d))
+	d.Stream.AddTrack(promise)
+	if err := promise.Await(); err != nil {
+		d.Error("attach data track failed", zap.Error(err))
+	} else {
+		d.Info("data track attached")
+	}
 }

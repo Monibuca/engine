@@ -29,23 +29,22 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 		err = errors.New("packetStartCodePrefix != 0x000001")
 		return
 	}
-
-	var pesBuffers net.Buffers = packet.Buffers
+	pesHeadItem := ts.Get(32)
+	pesHeadItem.Value.Reset()
+	_, err = mpegts.WritePESHeader(&pesHeadItem.Value, packet.Header)
+	if err != nil {
+		return
+	}
+	pesBuffers := append(net.Buffers{pesHeadItem.Value}, packet.Buffers...)
+	defer pesHeadItem.Recycle()
 	var pesPktLength int
 	var tsHeaderLength int
 	for i := 0; len(pesBuffers) > 0; i++ {
 		headerItem := ts.Get(mpegts.TS_PACKET_SIZE)
 		ts.BLL.Push(headerItem)
-		bwTsHeader := headerItem.Value
-		tsHeaderBuffer := bwTsHeader.SubBuf(0, 0)
-		copy(bwTsHeader, mpegts.Stuffing)
-		if i == 0 {
-			_, err = mpegts.WritePESHeader(&tsHeaderBuffer, packet.Header)
-			if err != nil {
-				return
-			}
-			pesPktLength = len(tsHeaderBuffer) + util.SizeOfBuffers(pesBuffers)
-		}
+		bwTsHeader := &headerItem.Value
+		bwTsHeader.Reset()
+		pesPktLength = util.SizeOfBuffers(pesBuffers)
 		tsHeader := mpegts.MpegTsHeader{
 			SyncByte:                   0x47,
 			TransportErrorIndicator:    0,
@@ -89,14 +88,19 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 				tsStuffingLength = 0
 			}
 			// error
-			tsHeaderLength, err = mpegts.WriteTsHeader(&tsHeaderBuffer, tsHeader)
+			tsHeaderLength, err = mpegts.WriteTsHeader(bwTsHeader, tsHeader)
 			if err != nil {
 				return
+			}
+			if tsStuffingLength > 0 {
+				if _, err = bwTsHeader.Write(mpegts.Stuffing[:tsStuffingLength]); err != nil {
+					return
+				}
 			}
 			tsHeaderLength += int(tsStuffingLength)
 		} else {
 
-			tsHeaderLength, err = mpegts.WriteTsHeader(&tsHeaderBuffer, tsHeader)
+			tsHeaderLength, err = mpegts.WriteTsHeader(bwTsHeader, tsHeader)
 			if err != nil {
 				return
 			}
@@ -107,13 +111,13 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 		//fmt.Println("tsPayloadLength :", tsPayloadLength)
 
 		// 这里不断的减少PES包
-		io.CopyN(&tsHeaderBuffer, &pesBuffers, int64(tsPayloadLength))
+		io.CopyN(bwTsHeader, &pesBuffers, int64(tsPayloadLength))
 		// tmp := tsHeaderByte[3] << 2
 		// tmp = tmp >> 6
 		// if tmp == 2 {
 		// 	fmt.Println("fuck you mother.")
 		// }
-		tsPktByteLen := len(tsHeaderBuffer)
+		tsPktByteLen := bwTsHeader.Len()
 
 		if tsPktByteLen != mpegts.TS_PACKET_SIZE {
 			err = errors.New(fmt.Sprintf("%s, packet size=%d", "TS_PACKET_SIZE != 188,", tsPktByteLen))

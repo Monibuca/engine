@@ -1,6 +1,7 @@
 package common
 
 import (
+	"bytes"
 	"io"
 	"net"
 	"time"
@@ -11,7 +12,13 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
-type AnnexBFrame []byte // 一帧AnnexB格式数据
+func SplitAnnexB[T ~[]byte](frame T, process func(T), delimiter []byte) {
+	for found, after := true, frame; len(frame) > 0 && found; frame = after {
+		frame, after, found = bytes.Cut(frame, delimiter)
+		process(frame)
+	}
+}
+
 type RTPFrame struct {
 	rtp.Packet
 }

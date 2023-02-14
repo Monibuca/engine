@@ -1,7 +1,9 @@
 package track
 
 import (
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -18,7 +20,13 @@ type Audio struct {
 
 func (a *Audio) Attach() {
 	if a.Attached.CompareAndSwap(false, true) {
-		a.Stream.AddTrack(a)
+		promise := util.NewPromise(common.Track(a))
+		a.Stream.AddTrack(promise)
+		if err := promise.Await(); err != nil {
+			a.Error("attach audio track failed", zap.Error(err))
+		} else {
+			a.Info("audio track attached", zap.Uint32("sample rate", a.SampleRate))
+		}
 	}
 }
 
@@ -35,15 +43,12 @@ func (a *Audio) GetName() string {
 	return a.Name
 }
 
-func (av *Audio) WriteADTS(adts []byte) {
+func (av *Audio) WriteADTS(pts uint32, adts []byte) {
 
 }
 func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	curValue := &av.Value
 	curValue.BytesIn += len(raw)
-	if len(av.AVCCHead) == 2 {
-		raw = raw[7:] //AAC 去掉7个字节的ADTS头
-	}
 	curValue.AUList.Push(av.BytesPool.GetShell(raw))
 	av.generateTimestamp(pts)
 	av.Flush()

@@ -1,11 +1,12 @@
 package track
 
 import (
-	"bytes"
 
 	// . "github.com/logrusorgru/aurora"
 
+	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -26,7 +27,13 @@ type Video struct {
 
 func (v *Video) Attach() {
 	if v.Attached.CompareAndSwap(false, true) {
-		v.Stream.AddTrack(v)
+		promise := util.NewPromise(common.Track(v))
+		v.Stream.AddTrack(promise)
+		if err := promise.Await(); err != nil {
+			v.Error("attach video track failed", zap.Error(err))
+		} else {
+			v.Info("video track attached", zap.Uint("width", v.Width), zap.Uint("height", v.Height))
+		}
 	}
 }
 
@@ -67,9 +74,11 @@ func (vt *Video) GetName() string {
 //		return ctx.Err()
 //	}
 func (vt *Video) computeGOP() {
-	if vt.HistoryRing == nil && vt.IDRing != nil {
+	if vt.IDRing != nil {
 		vt.GOP = int(vt.Value.Sequence - vt.IDRing.Value.Sequence)
-		vt.narrow(vt.GOP)
+		if vt.HistoryRing == nil {
+			vt.narrow(vt.GOP)
+		}
 	}
 	vt.AddIDR()
 	// var n int
@@ -79,14 +88,12 @@ func (vt *Video) computeGOP() {
 	// println(n)
 }
 
-func (vt *Video) writeAnnexBSlice(annexb AnnexBFrame) {
-	for found, after := true, annexb; len(annexb) > 0 && found; annexb = after {
-		annexb, after, found = bytes.Cut(annexb, codec.NALU_Delimiter1)
-		vt.WriteSliceBytes(annexb)
-	}
+func (vt *Video) writeAnnexBSlice(nalu []byte) {
+	common.SplitAnnexB(nalu, vt.WriteSliceBytes, codec.NALU_Delimiter1)
 }
 
-func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
+func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame []byte) {
+	// println("write annexb", len(frame), pts, dts)
 	if dts == 0 {
 		vt.generateTimestamp(pts)
 	} else {
@@ -94,10 +101,7 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame AnnexBFrame) {
 		vt.Value.DTS = dts
 	}
 	vt.Value.BytesIn += len(frame)
-	for found, after := true, frame; len(frame) > 0 && found; frame = after {
-		frame, after, found = bytes.Cut(frame, codec.NALU_Delimiter2)
-		vt.writeAnnexBSlice(frame)
-	}
+	common.SplitAnnexB(frame, vt.writeAnnexBSlice, codec.NALU_Delimiter2)
 	vt.Flush()
 }
 
@@ -191,14 +195,23 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	// 写入CTS
 	util.PutBE(b[2:5], vt.RTPTs2Ms(rv.PTS-rv.DTS))
 	rv.AVCC.Push(mem)
+	// if rv.AVCC.ByteLength != 5 {
+	// 	panic("error")
+	// }
+	// var tmp = 0
 	rv.AUList.Range(func(au *util.BLL) bool {
 		mem = vt.BytesPool.Get(4)
+		// println(au.ByteLength)
 		util.PutBE(mem.Value, uint32(au.ByteLength))
 		rv.AVCC.Push(mem)
 		au.Range(func(slice util.Buffer) bool {
 			rv.AVCC.Push(vt.BytesPool.GetShell(slice))
 			return true
 		})
+		// tmp += 4 + au.ByteLength
+		// if rv.AVCC.ByteLength != 5+tmp {
+		// 	panic("error")
+		// }
 		return true
 	})
 }

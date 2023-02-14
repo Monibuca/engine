@@ -3,7 +3,6 @@ package engine
 import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec/mpegts"
-	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/track"
 )
 
@@ -69,22 +68,7 @@ func (t *TSPublisher) ReadPES() {
 			if t.AudioTrack != nil {
 				switch t.AudioTrack.(type) {
 				case *track.AAC:
-					if t.adts == nil {
-						t.adts = append(t.adts, pes.Payload[:7]...)
-						t.AudioTrack.WriteADTS(t.adts)
-					}
-					remainLen := len(pes.Payload)
-					for remainLen > 0 {
-						// AACFrameLength(13)
-						// xx xxxxxxxx xxx
-						frameLen := (int(pes.Payload[3]&3) << 11) | (int(pes.Payload[4]) << 3) | (int(pes.Payload[5]) >> 5)
-						if frameLen > remainLen {
-							break
-						}
-						t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload[:frameLen])
-						pes.Payload = pes.Payload[frameLen:remainLen]
-						remainLen -= frameLen
-					}
+					t.AudioTrack.WriteADTS(uint32(pes.Header.Pts), pes.Payload)
 				case *track.G711:
 					t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload)
 				}
@@ -96,7 +80,7 @@ func (t *TSPublisher) ReadPES() {
 				}
 			}
 			if t.VideoTrack != nil {
-				t.VideoTrack.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), common.AnnexBFrame(pes.Payload))
+				t.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), pes.Payload)
 			}
 		}
 	}
