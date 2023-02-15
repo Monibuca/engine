@@ -93,7 +93,6 @@ func (vt *Video) writeAnnexBSlice(nalu []byte) {
 }
 
 func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame []byte) {
-	// println("write annexb", len(frame), pts, dts)
 	if dts == 0 {
 		vt.generateTimestamp(pts)
 	} else {

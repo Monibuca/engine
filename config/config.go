@@ -143,7 +143,9 @@ func (config Config) Unmarshal(s any) {
 				}
 				fv.Set(s)
 			default:
-				fv.Set(value)
+				if value.IsValid() {
+					fv.Set(value)
+				}
 			}
 		}
 	}

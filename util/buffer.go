@@ -2,11 +2,22 @@ package util
 
 import (
 	"encoding/binary"
+	"io"
 	"math"
 	"net"
 )
 
 type Buffer []byte
+
+func (b *Buffer) Read(buf []byte) (n int, err error) {
+	if !b.CanReadN(len(buf)) {
+		copy(buf, *b)
+		return b.Len(), io.EOF
+	}
+	ret := b.ReadN(len(buf))
+	copy(buf, ret)
+	return len(ret), err
+}
 
 func (b *Buffer) ReadN(n int) Buffer {
 	l := b.Len()

@@ -32,6 +32,7 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 	// }
 	// 如果收到的帧的时间戳超过实际消耗的时间100ms就休息一下，100ms作为一个弹性区间防止频繁调用sleep
 	if 过快 := (数据时间差 - 实际时间差); 过快 > 100*time.Millisecond {
+		// fmt.Println("过快毫秒", 过快.Milliseconds())
 		// println("过快毫秒", p.name, 过快.Milliseconds())
 		if 过快 > p.等待上限 {
 			time.Sleep(p.等待上限)
@@ -224,6 +225,7 @@ func (av *Media) Flush() {
 		// 	av.Stream.Error("sub ring overflow", zap.Int("size", av.AVRing.Size), zap.String("name", av.Name))
 		// }
 	}
+
 	if av.起始时间.IsZero() {
 		curValue.DeltaTime = 0
 		av.重置(curValue.AbsTime)
@@ -233,6 +235,7 @@ func (av *Media) Flush() {
 	} else {
 		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime
 	}
+	// fmt.Println(av.Name,curValue.DTS, curValue.AbsTime, curValue.DeltaTime)
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {

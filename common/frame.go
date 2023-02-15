@@ -13,9 +13,10 @@ import (
 )
 
 func SplitAnnexB[T ~[]byte](frame T, process func(T), delimiter []byte) {
-	for found, after := true, frame; len(frame) > 0 && found; frame = after {
-		frame, after, found = bytes.Cut(frame, delimiter)
-		process(frame)
+	for after := frame; len(frame) > 0; frame = after {
+		if frame, after, _ = bytes.Cut(frame, delimiter); len(frame) > 0 {
+			process(frame)
+		}
 	}
 }
 
