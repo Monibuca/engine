@@ -220,7 +220,7 @@ var ErrStreamNotExist = errors.New("stream not exist")
 
 // SubscribeExist 订阅已经存在的流
 func (opt *Plugin) SubscribeExist(streamPath string, sub ISubscriber) error {
-	opt.Info("subscribe exit", zap.String("path", streamPath))
+	opt.Info("subscribe exsit", zap.String("path", streamPath))
 	path, _, _ := strings.Cut(streamPath, "?")
 	if !Streams.Has(path) {
 		opt.Warn("stream not exist", zap.String("path", streamPath))

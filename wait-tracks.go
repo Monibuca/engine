@@ -76,9 +76,8 @@ func (w *waitTracks) Accept(t Track) bool {
 			suber.OnEvent(t)
 		}
 	case *track.Data:
-		if w.data.Accept(t.GetBase().Name) {
-			suber.OnEvent(t)
-		}
+		w.data.Accept(t.GetBase().Name)
+		suber.OnEvent(t)
 	}
 	if w.NeedWait() {
 		return false

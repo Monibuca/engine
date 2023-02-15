@@ -169,6 +169,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	ctx := s.TrackPlayer.Context
 	conf := s.Config
 	hasVideo, hasAudio := s.Video != nil && conf.SubVideo, s.Audio != nil && conf.SubAudio
+	defer s.onStop()
 	if !hasAudio && !hasVideo {
 		s.Error("play neither video nor audio")
 		return
@@ -260,7 +261,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 	}
-	defer s.onStop()
+	
 	var subMode = conf.SubMode //订阅模式
 	if s.Args.Has(conf.SubModeArgName) {
 		subMode, _ = strconv.Atoi(s.Args.Get(conf.SubModeArgName))
