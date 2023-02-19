@@ -36,7 +36,11 @@ func (av *Media) writeRTPFrame(frame *RTPFrame) {
 	av.Value.RTP.PushValue(*frame)
 	av.WriteRTPFrame(frame)
 	if frame.Marker {
-		av.SpesificTrack.generateTimestamp(frame.Timestamp)
+		if av.SampleRate != 90000 {
+			av.SpesificTrack.generateTimestamp(uint32(uint64(frame.Timestamp) * 90000 / uint64(av.SampleRate)))
+		} else {
+			av.SpesificTrack.generateTimestamp(frame.Timestamp)
+		}
 		av.SpesificTrack.Flush()
 	}
 }
@@ -71,7 +75,11 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 		}
 		packet.Payload = packet.Payload[:0]
 		packet.SequenceNumber = av.rtpSequence
-		packet.Timestamp = av.Value.PTS
+		if av.SampleRate != 90000 {
+			packet.Timestamp = uint32(uint64(av.SampleRate) * uint64(av.Value.PTS) / 90000)
+		} else {
+			packet.Timestamp = av.Value.PTS
+		}
 		packet.Marker = i == packetCount-1
 		for _, p := range pp {
 			packet.Payload = append(packet.Payload, p...)

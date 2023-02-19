@@ -74,10 +74,10 @@ func (p *IDRingList) ShiftIDR() {
 type Media struct {
 	Base
 	RingBuffer[AVFrame]
-	IDRingList      `json:"-"` //最近的关键帧位置，首屏渲染
-	ClockRate       uint32     //时钟频率,mpeg中均为90000，rtsp中音频根据sample_rate
-	SSRC            uint32
 	PayloadType     byte
+	IDRingList      `json:"-"` //最近的关键帧位置，首屏渲染
+	SSRC            uint32
+	SampleRate      uint32
 	BytesPool       util.BytesPool `json:"-"`
 	rtpPool         util.Pool[RTPFrame]
 	SequenceHead    []byte `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
@@ -89,14 +89,18 @@ type Media struct {
 	流速控制
 }
 
-// 毫秒转换为RTP时间戳
-func (av *Media) Ms2RTPTs(ms uint32) uint32 {
-	return uint32(uint64(ms) * uint64(av.ClockRate) / 1000)
+// 毫秒转换为Mpeg时间戳
+func (av *Media) Ms2MpegTs(ms uint32) uint32 {
+	return uint32(uint64(ms) * 90)
 }
 
-// RTP时间戳转换为毫秒
-func (av *Media) RTPTs2Ms(rtpts uint32) uint32 {
-	return uint32(uint64(rtpts) * 1000 / uint64(av.ClockRate))
+// Mpeg时间戳转换为毫秒
+func (av *Media) MpegTs2Ms(mpegTs uint32) uint32 {
+	return uint32(uint64(mpegTs) / 90)
+}
+
+func (av *Media) MpegTs2RTPTs(mpegTs uint32) uint32 {
+	return uint32(uint64(mpegTs) * uint64(av.SampleRate) / 90000)
 }
 
 // 为json序列化而计算的数据
@@ -126,7 +130,7 @@ func (av *Media) SetStuff(stuff ...any) {
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
 			av.等待上限 = config.Global.SpeedLimit
 		case uint32:
-			av.ClockRate = v
+			av.SampleRate = v
 		case byte:
 			av.PayloadType = v
 		case util.BytesPool:
@@ -165,6 +169,7 @@ func (av *Media) generateTimestamp(ts uint32) {
 	av.Value.PTS = ts
 	av.Value.DTS = ts
 }
+
 func (av *Media) WriteSequenceHead(sh []byte) {
 	av.SequenceHead = sh
 	av.SequenceHeadSeq++
@@ -206,7 +211,7 @@ func (av *Media) Flush() {
 		av.Info("track back online")
 	}
 	if av.deltaTs != 0 {
-		rtpts := int64(av.deltaTs) * int64(av.ClockRate) / 1000
+		rtpts := int64(av.deltaTs) * 90
 		curValue.DTS = uint32(int64(curValue.DTS) + rtpts)
 		curValue.PTS = uint32(int64(curValue.PTS) + rtpts)
 		curValue.AbsTime = 0
@@ -230,7 +235,7 @@ func (av *Media) Flush() {
 		curValue.DeltaTime = 0
 		av.重置(curValue.AbsTime)
 	} else if curValue.AbsTime == 0 {
-		curValue.DeltaTime = (curValue.DTS - preValue.DTS) * 1000 / av.ClockRate
+		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
 		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
 	} else {
 		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime

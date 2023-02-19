@@ -117,8 +117,8 @@ func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) error {
 	if err != nil {
 		return err
 	}
-	vt.Value.PTS = vt.Ms2RTPTs(ts + cts)
-	vt.Value.DTS = vt.Ms2RTPTs(ts)
+	vt.Value.PTS = vt.Ms2MpegTs(ts + cts)
+	vt.Value.DTS = vt.Ms2MpegTs(ts)
 	// println(":", vt.Value.Sequence)
 	for nalulen, err := r.ReadBE(vt.nalulenSize); err == nil; nalulen, err = r.ReadBE(vt.nalulenSize) {
 		// var au util.BLL
@@ -192,7 +192,7 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	b[1] = 1
 	// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
 	// 写入CTS
-	util.PutBE(b[2:5], vt.RTPTs2Ms(rv.PTS-rv.DTS))
+	util.PutBE(b[2:5], vt.MpegTs2Ms(rv.PTS-rv.DTS))
 	rv.AVCC.Push(mem)
 	// if rv.AVCC.ByteLength != 5 {
 	// 	panic("error")

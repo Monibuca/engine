@@ -38,15 +38,15 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 		}
 	case mpegts.STREAM_TYPE_AAC:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewAAC(t.Publisher.Stream, uint32(90000))
+			t.AudioTrack = track.NewAAC(t.Publisher.Stream)
 		}
 	case mpegts.STREAM_TYPE_G711A:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, true, uint32(90000))
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, true)
 		}
 	case mpegts.STREAM_TYPE_G711U:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, false, uint32(90000))
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
 		}
 	default:
 		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))

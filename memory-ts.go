@@ -18,6 +18,11 @@ type MemoryTs struct {
 	util.BLL
 }
 
+func (ts *MemoryTs) WritePMTPacket(audio codec.AudioCodecID, video codec.VideoCodecID) {
+	ts.PMT.Reset()
+	mpegts.WritePMTPacket(&ts.PMT, video, audio)
+}
+
 func (ts *MemoryTs) WriteTo(w io.Writer) (int64, error) {
 	w.Write(mpegts.DefaultPATPacket)
 	w.Write(ts.PMT)
@@ -37,13 +42,21 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 	}
 	pesBuffers := append(net.Buffers{pesHeadItem.Value}, packet.Buffers...)
 	defer pesHeadItem.Recycle()
-	var pesPktLength int
+	pesPktLength := util.SizeOfBuffers(pesBuffers)
+	buffer := ts.Get((pesPktLength/mpegts.TS_PACKET_SIZE+1)*6 + pesPktLength)
+	bwTsHeader := &buffer.Value
+	bigLen := bwTsHeader.Len()
+	bwTsHeader.Reset()
+	ts.BLL.Push(buffer)
 	var tsHeaderLength int
 	for i := 0; len(pesBuffers) > 0; i++ {
-		headerItem := ts.Get(mpegts.TS_PACKET_SIZE)
-		ts.BLL.Push(headerItem)
-		bwTsHeader := &headerItem.Value
-		bwTsHeader.Reset()
+		if bigLen < mpegts.TS_PACKET_SIZE {
+			headerItem := ts.Get(mpegts.TS_PACKET_SIZE)
+			ts.BLL.Push(headerItem)
+			bwTsHeader = &headerItem.Value
+			bwTsHeader.Reset()
+		}
+		bigLen -= mpegts.TS_PACKET_SIZE
 		pesPktLength = util.SizeOfBuffers(pesBuffers)
 		tsHeader := mpegts.MpegTsHeader{
 			SyncByte:                   0x47,
@@ -119,7 +132,7 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 		// }
 		tsPktByteLen := bwTsHeader.Len()
 
-		if tsPktByteLen != mpegts.TS_PACKET_SIZE {
+		if tsPktByteLen != (i+1)*mpegts.TS_PACKET_SIZE && tsPktByteLen != mpegts.TS_PACKET_SIZE {
 			err = errors.New(fmt.Sprintf("%s, packet size=%d", "TS_PACKET_SIZE != 188,", tsPktByteLen))
 			return
 		}

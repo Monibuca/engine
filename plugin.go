@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mcuadros/go-defaults"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/config"
@@ -23,6 +24,7 @@ import (
 
 // InstallPlugin 安装插件，传入插件配置生成插件信息对象
 func InstallPlugin(config config.Plugin) *Plugin {
+	defaults.SetDefaults(config)
 	t := reflect.TypeOf(config).Elem()
 	name := strings.TrimSuffix(t.Name(), "Config")
 	plugin := &Plugin{

@@ -21,7 +21,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
-	aac.SetStuff("aac", uint32(90000), stream, int(256+128), byte(97), aac, time.Millisecond*10)
+	aac.SetStuff("aac", stream, int(256+128), byte(97), aac, time.Millisecond*10)
 	aac.SetStuff(stuff...)
 	aac.AVCCHead = []byte{0xAF, 1}
 	return
@@ -34,7 +34,7 @@ type AAC struct {
 	lack       int // 用于处理不完整的AU,缺少的字节数
 }
 
-func (aac *AAC) WriteADTS(ts uint32,adts []byte) {
+func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
 	if aac.SequenceHead == nil {
 		profile := ((adts[2] & 0xc0) >> 6) + 1
 		sampleRate := (adts[2] & 0x3c) >> 2
@@ -43,12 +43,11 @@ func (aac *AAC) WriteADTS(ts uint32,adts []byte) {
 		config2 := ((sampleRate & 0x1) << 7) | (channel << 3)
 		aac.Media.WriteSequenceHead([]byte{0xAF, 0x00, config1, config2})
 		aac.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
-		// aac.ClockRate = aac.SampleRate
 		aac.Channels = channel
 		aac.Parse(aac.SequenceHead[2:])
 		aac.Attach()
 	}
-	
+
 	frameLen := (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
 	for len(adts) >= frameLen {
 		aac.Value.AUList.Push(aac.BytesPool.GetShell(adts[7:frameLen]))
@@ -107,7 +106,6 @@ func (aac *AAC) WriteSequenceHead(sh []byte) {
 	config1, config2 := aac.SequenceHead[2], aac.SequenceHead[3]
 	aac.Channels = ((config2 >> 3) & 0x0F) //声道
 	aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
-	aac.ClockRate = aac.SampleRate
 	aac.Parse(aac.SequenceHead[2:])
 	aac.Attach()
 }

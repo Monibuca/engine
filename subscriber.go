@@ -115,23 +115,26 @@ func (s *Subscriber) OnEvent(event any) {
 	}
 }
 
+func (s *Subscriber) CreateTrackReader(t *track.Media) (result track.AVRingReader) {
+	result.Poll = s.Config.Poll
+	result.Track = t
+	result.Logger = s.With(zap.String("track", t.Name))
+	return
+}
+
 func (s *Subscriber) AddTrack(t Track) bool {
 	switch v := t.(type) {
 	case *track.Video:
 		if s.VideoReader.Track != nil || !s.Config.SubVideo {
 			return false
 		}
-		s.VideoReader.Poll = s.Config.Poll
-		s.VideoReader.Track = &v.Media
-		s.VideoReader.Logger = s.With(zap.String("track", v.Name))
+		s.VideoReader = s.CreateTrackReader(&v.Media)
 		s.Video = v
 	case *track.Audio:
 		if s.AudioReader.Track != nil || !s.Config.SubAudio {
 			return false
 		}
-		s.AudioReader.Poll = s.Config.Poll
-		s.AudioReader.Track = &v.Media
-		s.AudioReader.Logger = s.With(zap.String("track", v.Name))
+		s.AudioReader = s.CreateTrackReader(&v.Media)
 		s.Audio = v
 	case *track.Data:
 	default:
@@ -192,7 +195,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendAudioFrame = func(frame *AVFrame) {
 			// println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
-			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, s.AudioReader.Track.Ms2RTPTs(s.AudioReader.AbsTime), s.AudioReader.Track.Ms2RTPTs(s.AudioReader.AbsTime)})
+			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, frame.PTS - s.AudioReader.SkipRTPTs, frame.PTS - s.AudioReader.SkipRTPTs})
 		}
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16
@@ -205,20 +208,12 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				return true
 			})
 		}
-		createTimestamp := func(ts uint32) uint32 {
-			return ts - s.AudioReader.SkipRTPTs
-		}
-		// RTP需要转换时间戳调整为采样率
-		if hasAudio && s.Audio.SampleRate != s.Audio.ClockRate {
-			createTimestamp = func(ts uint32) uint32 {
-				return uint32(uint64(ts-s.AudioReader.SkipRTPTs) * uint64(s.Audio.SampleRate) / uint64(s.Audio.ClockRate))
-			}
-		}
+
 		sendAudioFrame = func(frame *AVFrame) {
 			frame.RTP.Range(func(ap RTPFrame) bool {
 				audioSeq++
 				ap.Header.SequenceNumber = audioSeq
-				ap.Header.Timestamp = createTimestamp(ap.Header.Timestamp)
+				ap.Header.Timestamp = ap.Header.Timestamp - s.AudioReader.Track.MpegTs2RTPTs(s.AudioReader.SkipRTPTs)
 				spesic.OnEvent((AudioRTP)(ap))
 				return true
 			})
@@ -261,7 +256,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 	}
-	
+
 	var subMode = conf.SubMode //订阅模式
 	if s.Args.Has(conf.SubModeArgName) {
 		subMode, _ = strconv.Atoi(s.Args.Get(conf.SubModeArgName))
@@ -314,7 +309,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				case track.READSTATE_NORMAL:
 					if s.Video != nil {
 						s.AudioReader.SkipTs = s.VideoReader.SkipTs
-						s.AudioReader.SkipRTPTs = s.AudioReader.Track.Ms2RTPTs(s.AudioReader.SkipTs)
+						s.AudioReader.SkipRTPTs = s.AudioReader.Track.Ms2MpegTs(s.AudioReader.SkipTs)
 					}
 				}
 				s.AudioReader.Read(ctx, subMode)

@@ -99,7 +99,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 			r.FirstTs = r.Frame.AbsTime
 		}
 		r.SkipTs = r.FirstTs
-		r.SkipRTPTs = r.Track.Ms2RTPTs(r.SkipTs)
+		r.SkipRTPTs = r.Track.Ms2MpegTs(r.SkipTs)
 		r.FirstSeq = r.Frame.Sequence
 		r.Info("first frame read", zap.Uint32("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
 	case READSTATE_FIRST:
@@ -110,7 +110,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 				return
 			}
 			r.SkipTs = frame.AbsTime - r.beforeJump
-			r.SkipRTPTs = r.Track.Ms2RTPTs(r.SkipTs)
+			r.SkipRTPTs = r.Track.Ms2MpegTs(r.SkipTs)
 			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Uint32("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {

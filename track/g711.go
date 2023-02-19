@@ -16,8 +16,10 @@ func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
 	g711 = &G711{}
 	if alaw {
 		g711.Name = "pcma"
+		g711.PayloadType = 8
 	} else {
 		g711.Name = "pcmu"
+		g711.PayloadType = 0
 	}
 	if alaw {
 		g711.CodecID = codec.CodecID_PCMA
@@ -27,7 +29,7 @@ func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
 	g711.SampleSize = 8
 	g711.Channels = 1
 	g711.AVCCHead = []byte{(byte(g711.CodecID) << 4) | (1 << 1)}
-	g711.SetStuff(stream, int(32), byte(97), uint32(8000), g711, time.Millisecond*10)
+	g711.SetStuff(stream, int(32), uint32(8000), g711, time.Millisecond*10)
 	g711.SetStuff(stuff...)
 	g711.Attach()
 	return
