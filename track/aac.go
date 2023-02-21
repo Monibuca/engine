@@ -47,7 +47,7 @@ func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
 		aac.Parse(aac.SequenceHead[2:])
 		aac.Attach()
 	}
-
+	aac.generateTimestamp(ts)
 	frameLen := (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
 	for len(adts) >= frameLen {
 		aac.Value.AUList.Push(aac.BytesPool.GetShell(adts[7:frameLen]))
