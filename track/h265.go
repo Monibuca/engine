@@ -115,6 +115,10 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 		vt.WriteSliceBytes(frame.Payload)
 	}
 	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延
+	if frame.Marker {
+		vt.generateTimestamp(frame.Timestamp)
+		vt.Flush()
+	}
 }
 
 // RTP格式补完

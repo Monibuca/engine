@@ -33,16 +33,11 @@ func (av *Media) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
 }
 
 func (av *Media) writeRTPFrame(frame *RTPFrame) {
+	if len(frame.Payload) == 0 {
+		return
+	}
 	av.Value.RTP.PushValue(*frame)
 	av.WriteRTPFrame(frame)
-	if frame.Marker {
-		if av.SampleRate != 90000 {
-			av.SpesificTrack.generateTimestamp(uint32(uint64(frame.Timestamp) * 90000 / uint64(av.SampleRate)))
-		} else {
-			av.SpesificTrack.generateTimestamp(frame.Timestamp)
-		}
-		av.SpesificTrack.Flush()
-	}
 }
 
 // WriteRTPPack 写入已反序列化的RTP包

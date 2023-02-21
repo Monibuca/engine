@@ -123,6 +123,10 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 		}
 	}
 	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延
+	if frame.Marker {
+		vt.generateTimestamp(frame.Timestamp)
+		vt.Flush()
+	}
 }
 
 // RTP格式补完

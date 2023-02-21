@@ -54,5 +54,9 @@ func (g711 *G711) WriteAVCC(ts uint32, frame *util.BLL) error {
 }
 
 func (g711 *G711) WriteRTPFrame(frame *RTPFrame) {
+	if g711.SampleRate != 90000 {
+		g711.generateTimestamp(uint32(uint64(frame.Timestamp) * 90000 / uint64(g711.SampleRate)))
+	}
 	g711.AppendAuBytes(frame.Payload)
+	g711.Flush()
 }
