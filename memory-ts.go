@@ -154,6 +154,7 @@ func (ts *MemoryTs) WriteAudioFrame(frame *AudioFrame, aac_asc *codec.AudioSpeci
 	packet.Header.StreamID = mpegts.STREAM_ID_AUDIO
 	packet.Header.PesPacketLength = uint16(pktLength)
 	packet.Header.Pts = uint64(frame.PTS)
+	pes.ProgramClockReferenceBase = packet.Header.Pts
 	packet.Header.PtsDtsFlags = 0x80
 	packet.Header.PesHeaderDataLength = 5
 	packet.Buffers = append(append(packet.Buffers, adts), frame.AUList.ToBuffers()...)
@@ -183,6 +184,7 @@ func (ts *MemoryTs) WriteVideoFrame(frame *VideoFrame, paramaterSets common.Para
 	packet.Header.StreamID = mpegts.STREAM_ID_VIDEO
 	packet.Header.PesPacketLength = uint16(pktLength)
 	packet.Header.Pts = uint64(frame.PTS)
+	pes.ProgramClockReferenceBase = packet.Header.Pts
 	packet.Header.Dts = uint64(frame.DTS)
 	packet.Header.PtsDtsFlags = 0xC0
 	packet.Header.PesHeaderDataLength = 10

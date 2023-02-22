@@ -130,3 +130,8 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 	// println(r.Track.Name, r.State, r.Frame.AbsTime, r.SkipTs, r.AbsTime)
 	return
 }
+
+func (r *AVRingReader) ResetAbsTime() {
+	r.SkipTs = r.Frame.AbsTime
+	r.AbsTime = 0
+}

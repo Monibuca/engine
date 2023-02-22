@@ -57,7 +57,12 @@ func (a AudioDeConf) WithOutRTMP() []byte {
 func (v VideoDeConf) WithOutRTMP() []byte {
 	return v[5:]
 }
-
+func (f FLVFrame) IsAudio() bool {
+	return f[0][0] == codec.FLV_TAG_TYPE_AUDIO
+}
+func (f FLVFrame) IsVideo() bool {
+	return f[0][0] == codec.FLV_TAG_TYPE_VIDEO
+}
 func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 	t := (net.Buffers)(f)
 	return t.WriteTo(w)
@@ -231,11 +236,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 		sendVideoDecConf = func() {
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, s.VideoReader.Track.SequenceHead)
-			// spesic.OnEvent(FLVFrame(copyBuffers(s.Video.Track.DecoderConfiguration.FLV)))
 		}
 		sendAudioDecConf = func() {
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, s.AudioReader.Track.SequenceHead)
-			// spesic.OnEvent(FLVFrame(copyBuffers(s.Audio.Track.DecoderConfiguration.FLV)))
 		}
 		sendVideoFrame = func(frame *AVFrame) {
 			// println(frame.Sequence, s.VideoReader.AbsTime, frame.DeltaTime, frame.IFrame)
