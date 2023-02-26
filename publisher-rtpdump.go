@@ -7,7 +7,9 @@ import (
 	"github.com/pion/webrtc/v3/pkg/media/rtpdump"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/track"
+	"m7s.live/engine/v4/util"
 )
 
 type RTPDumpPublisher struct {
@@ -57,7 +59,9 @@ func (t *RTPDumpPublisher) OnEvent(event any) {
 				return
 			}
 			if !packet.IsRTCP {
-				t.VideoTrack.WriteRTP(packet.Payload)
+				var frame common.RTPFrame
+				frame.Unmarshal(packet.Payload)
+				t.VideoTrack.WriteRTP(&util.ListItem[common.RTPFrame]{Value: frame})
 			}
 			// t.AudioTrack.WriteRTP(packet)
 		}

@@ -33,12 +33,14 @@ type VideoDeConf []byte
 type AudioDeConf []byte
 type AudioFrame struct {
 	*AVFrame
+	*track.Audio
 	AbsTime uint32
 	PTS     uint32
 	DTS     uint32
 }
 type VideoFrame struct {
 	*AVFrame
+	*track.Video
 	AbsTime uint32
 	PTS     uint32
 	DTS     uint32
@@ -69,6 +71,9 @@ func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 }
 
 func (v VideoFrame) GetAnnexB() (r net.Buffers) {
+	if v.IFrame {
+		r = v.ParamaterSets.GetAnnexB()
+	}
 	v.AUList.Range(func(au *util.BLL) bool {
 		r = append(append(r, codec.NALU_Delimiter2), au.ToBuffers()...)
 		return true
@@ -196,11 +201,11 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
 			// println("v", frame.Sequence, frame.AbsTime, s.VideoReader.AbsTime, frame.IFrame)
-			spesic.OnEvent(VideoFrame{frame, s.VideoReader.AbsTime, frame.PTS - s.VideoReader.SkipRTPTs, frame.DTS - s.VideoReader.SkipRTPTs})
+			spesic.OnEvent(VideoFrame{frame, s.Video, s.VideoReader.AbsTime, frame.PTS - s.VideoReader.SkipRTPTs, frame.DTS - s.VideoReader.SkipRTPTs})
 		}
 		sendAudioFrame = func(frame *AVFrame) {
 			// println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
-			spesic.OnEvent(AudioFrame{frame, s.AudioReader.AbsTime, frame.PTS - s.AudioReader.SkipRTPTs, frame.PTS - s.AudioReader.SkipRTPTs})
+			spesic.OnEvent(AudioFrame{frame, s.Audio, s.AudioReader.AbsTime, frame.PTS - s.AudioReader.SkipRTPTs, frame.PTS - s.AudioReader.SkipRTPTs})
 		}
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16

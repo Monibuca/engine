@@ -21,26 +21,27 @@ func SplitAnnexB[T ~[]byte](frame T, process func(T), delimiter []byte) {
 }
 
 type RTPFrame struct {
-	rtp.Packet
+	*rtp.Packet
+	Raw []byte
 }
 
-func (rtp *RTPFrame) Clone() *RTPFrame {
-	return &RTPFrame{*rtp.Packet.Clone()}
+func (r *RTPFrame) H264Type() (naluType codec.H264NALUType) {
+	return naluType.Parse(r.Payload[0])
+}
+func (r *RTPFrame) H265Type() (naluType codec.H265NALUType) {
+	return naluType.Parse(r.Payload[0])
 }
 
-func (rtp *RTPFrame) H264Type() (naluType codec.H264NALUType) {
-	return naluType.Parse(rtp.Payload[0])
-}
-func (rtp *RTPFrame) H265Type() (naluType codec.H265NALUType) {
-	return naluType.Parse(rtp.Payload[0])
-}
-
-func (rtp *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
-	if err := rtp.Packet.Unmarshal(raw); err != nil {
+func (r *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
+	if r.Packet == nil {
+		r.Packet = &rtp.Packet{}
+	}
+	r.Raw = raw
+	if err := r.Packet.Unmarshal(raw); err != nil {
 		log.Error(err)
 		return nil
 	}
-	return rtp
+	return r
 }
 
 type BaseFrame struct {

@@ -5,6 +5,9 @@ import (
 	"net"
 )
 
+type Recyclable interface {
+	Recycle()
+}
 type BLLReader struct {
 	*ListItem[Buffer]
 	pos int

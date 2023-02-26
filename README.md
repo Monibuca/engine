@@ -52,7 +52,6 @@ global:
       subvideo: true # 是否订阅视频流
       iframeonly: false # 只订阅关键帧
       waittimeout: 10 # 等待发布者的秒数，用于订阅尚未发布的流
-  rtpreorder : true # 启用RTP包乱序重排
   enableavcc : true  # 启用AVCC格式缓存，用于rtmp协议
   enablertp : true # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enableauth: true # 启用鉴权,详细查看鉴权机制

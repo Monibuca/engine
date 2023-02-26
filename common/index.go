@@ -98,10 +98,11 @@ type AVTrack interface {
 	Attach()
 	Detach()
 	WriteAVCC(ts uint32, frame *util.BLL) error //写入AVCC格式的数据
-	WriteRTP([]byte)
+	WriteRTP(*util.ListItem[RTPFrame])
 	WriteRTPPack(*rtp.Packet)
 	Flush()
 	SetSpeedLimit(time.Duration)
+	GetRTPFromPool() *util.ListItem[RTPFrame]
 }
 type VideoTrack interface {
 	AVTrack

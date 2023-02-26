@@ -4,6 +4,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pion/rtp"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
@@ -78,15 +79,28 @@ type Media struct {
 	IDRingList      `json:"-"` //最近的关键帧位置，首屏渲染
 	SSRC            uint32
 	SampleRate      uint32
-	BytesPool       util.BytesPool `json:"-"`
-	rtpPool         util.Pool[RTPFrame]
-	SequenceHead    []byte `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	BytesPool       util.BytesPool      `json:"-"`
+	RtpPool         util.Pool[RTPFrame] `json:"-"`
+	SequenceHead    []byte              `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	SequenceHeadSeq int
 	RTPMuxer
 	RTPDemuxer
 	SpesificTrack `json:"-"`
 	deltaTs       int64 //用于接续发布后时间戳连续
 	流速控制
+}
+
+func (av *Media) GetRTPFromPool() (result *util.ListItem[RTPFrame]) {
+	result = av.RtpPool.Get()
+	if result.Value.Packet == nil {
+		result.Value.Packet = &rtp.Packet{}
+		result.Value.PayloadType = av.PayloadType
+		result.Value.SSRC = av.SSRC
+		result.Value.Version = 2
+		result.Value.Raw = make([]byte, 1460)
+		result.Value.Payload = result.Value.Raw[:0]
+	}
+	return
 }
 
 // 毫秒转换为Mpeg时间戳

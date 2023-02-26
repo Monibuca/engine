@@ -2,55 +2,31 @@ package track
 
 import (
 	"github.com/pion/rtp"
-	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
-	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
 
 const RTPMTU = 1400
 
-func (av *Media) UnmarshalRTPPacket(p *rtp.Packet) (frame *RTPFrame) {
-	if av.PayloadType != p.PayloadType {
-		av.Warn("RTP PayloadType error", zap.Uint8("want", av.PayloadType), zap.Uint8("got", p.PayloadType))
-		return
-	}
-	frame = &RTPFrame{
-		Packet: *p,
-	}
-	av.Value.BytesIn += len(p.Payload) + 12
-	return av.recorderRTP(frame)
-}
-
-func (av *Media) UnmarshalRTP(raw []byte) (frame *RTPFrame) {
-	var p rtp.Packet
-	err := p.Unmarshal(raw)
-	if err != nil {
-		av.Warn("RTP Unmarshal error", zap.Error(err))
-		return
-	}
-	return av.UnmarshalRTPPacket(&p)
-}
-
-func (av *Media) writeRTPFrame(frame *RTPFrame) {
-	if len(frame.Payload) == 0 {
-		return
-	}
-	av.Value.RTP.PushValue(*frame)
-	av.WriteRTPFrame(frame)
-}
-
-// WriteRTPPack 写入已反序列化的RTP包
+// WriteRTPPack 写入已反序列化的RTP包，已经排序过了的
 func (av *Media) WriteRTPPack(p *rtp.Packet) {
-	for frame := av.UnmarshalRTPPacket(p); frame != nil; frame = av.nextRTPFrame() {
-		av.writeRTPFrame(frame)
+	var frame RTPFrame
+	frame.Packet = p
+	av.Value.BytesIn += len(frame.Payload) + 12
+	av.Value.RTP.PushValue(frame)
+	if len(p.Payload) > 0 {
+		av.WriteRTPFrame(&frame)
 	}
 }
 
-// WriteRTP 写入未反序列化的RTP包
-func (av *Media) WriteRTP(raw []byte) {
-	for frame := av.UnmarshalRTP(raw); frame != nil; frame = av.nextRTPFrame() {
-		av.writeRTPFrame(frame)
+// WriteRTPFrame 写入未反序列化的RTP包, 未排序的
+func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
+	for frame := av.recorderRTP(raw); frame != nil; frame = av.nextRTPFrame() {
+		av.Value.BytesIn += len(frame.Value.Payload) + 12
+		av.Value.RTP.Push(frame)
+		if len(frame.Value.Payload) > 0 {
+			av.WriteRTPFrame(&frame.Value)
+		}
 	}
 }
 
@@ -60,14 +36,8 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 	packetCount := len(payloads)
 	for i, pp := range payloads {
 		av.rtpSequence++
-		rtpItem := av.rtpPool.Get()
+		rtpItem := av.GetRTPFromPool()
 		packet := &rtpItem.Value
-		if packet.Payload == nil {
-			packet.Payload = make([]byte, 0, RTPMTU)
-			packet.Version = 2
-			packet.PayloadType = av.PayloadType
-			packet.SSRC = av.SSRC
-		}
 		packet.Payload = packet.Payload[:0]
 		packet.SequenceNumber = av.rtpSequence
 		if av.SampleRate != 90000 {
@@ -86,36 +56,17 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 type RTPDemuxer struct {
 	lastSeq  uint16 //上一个收到的序号，用于乱序重排
 	lastSeq2 uint16 //记录上上一个收到的序列号
-	乱序重排     util.RTPReorder[*RTPFrame]
+	乱序重排     util.RTPReorder[*util.ListItem[RTPFrame]]
 }
 
 // 获取缓存中下一个rtpFrame
-func (av *RTPDemuxer) nextRTPFrame() (frame *RTPFrame) {
-	if config.Global.RTPReorder {
-		return av.乱序重排.Pop()
-	}
-	return
+func (av *RTPDemuxer) nextRTPFrame() (frame *util.ListItem[RTPFrame]) {
+	return av.乱序重排.Pop()
 }
 
 // 对RTP包乱序重排
-func (av *RTPDemuxer) recorderRTP(frame *RTPFrame) *RTPFrame {
-	if config.Global.RTPReorder {
-		return av.乱序重排.Push(frame.SequenceNumber, frame)
-	} else {
-		if av.lastSeq == 0 {
-			av.lastSeq = frame.SequenceNumber
-		} else if frame.SequenceNumber == av.lastSeq2+1 { // 本次序号是上上次的序号+1 说明中间隔了一个错误序号（某些rtsp流中的rtcp包写成了rtp包导致的）
-			av.lastSeq = frame.SequenceNumber
-		} else {
-			av.lastSeq2 = av.lastSeq
-			av.lastSeq = frame.SequenceNumber
-			if av.lastSeq != av.lastSeq2+1 { //序号不连续
-				// av.Stream.Warn("RTP SequenceNumber error", av.lastSeq2, av.lastSeq)
-				return frame
-			}
-		}
-		return frame
-	}
+func (av *RTPDemuxer) recorderRTP(item *util.ListItem[RTPFrame]) *util.ListItem[RTPFrame] {
+	return av.乱序重排.Push(item.Value.SequenceNumber, item)
 }
 
 type RTPMuxer struct {

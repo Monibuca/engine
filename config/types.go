@@ -112,7 +112,6 @@ type Engine struct {
 	Publish
 	Subscribe
 	HTTP
-	RTPReorder     bool `default:"true"`
 	EnableAVCC     bool `default:"true"` //启用AVCC格式，rtmp协议使用
 	EnableRTP      bool `default:"true"` //启用RTP格式，rtsp、gb18181等协议使用
 	EnableSubEvent bool `default:"true"` //启用订阅事件,禁用可以提高性能
