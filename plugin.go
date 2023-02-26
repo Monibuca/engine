@@ -351,6 +351,7 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 				opt.Error("push subscribe", zp, zu, zap.Error(err))
 				time.Sleep(time.Second * 5)
 			} else {
+				stream := pusher.GetSubscriber().Stream
 				if err = pusher.Connect(); err != nil {
 					if err == io.EOF {
 						opt.Info("push complete", zp, zu)
@@ -358,15 +359,15 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 					}
 					opt.Error("push connect", zp, zu, zap.Error(err))
 					time.Sleep(time.Second * 5)
-				} else {
-					if err = pusher.Push(); err != nil && !pusher.IsShutdown() {
-						opt.Error("push", zp, zu, zap.Error(err))
-					}
+					stream.Receive(pusher) // 通知stream移除订阅者
+				} else if err = pusher.Push(); err != nil && !stream.IsClosed() {
+					opt.Error("push", zp, zu, zap.Error(err))
+					pusher.Stop()
 				}
-			}
-			if pusher.IsShutdown() {
-				opt.Info("stop push shutdown", zp, zu)
-				return
+				if stream.IsClosed() {
+					opt.Info("stop push closed", zp, zu)
+					return
+				}
 			}
 		}
 		opt.Warn("stop push stop reconnect", zp, zu)
