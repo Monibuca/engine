@@ -70,6 +70,11 @@ func (f FLVFrame) WriteTo(w io.Writer) (int64, error) {
 	return t.WriteTo(w)
 }
 
+func (a AudioFrame) GetADTS() (r net.Buffers) {
+	r = append(append(r, a.ADTS.Value), a.AUList.ToBuffers()...)
+	return
+}
+
 func (v VideoFrame) GetAnnexB() (r net.Buffers) {
 	if v.IFrame {
 		r = v.ParamaterSets.GetAnnexB()

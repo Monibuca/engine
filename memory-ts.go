@@ -141,22 +141,17 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 }
 
 func (ts *MemoryTs) WriteAudioFrame(frame AudioFrame, pes *mpegts.MpegtsPESFrame) (err error) {
-	adtsItem := ts.Get(7)
-	defer adtsItem.Recycle()
-	adts := adtsItem.Value
-	frame.AudioSpecificConfig.ToADTS(frame.AUList.ByteLength, adts)
 	// packetLength = 原始音频流长度 + adts(7) + MpegTsOptionalPESHeader长度(8 bytes, 因为只含有pts)
-	pktLength := len(adts) + frame.AUList.ByteLength + 8
 	var packet mpegts.MpegTsPESPacket
 	packet.Header.PacketStartCodePrefix = 0x000001
 	packet.Header.ConstTen = 0x80
 	packet.Header.StreamID = mpegts.STREAM_ID_AUDIO
-	packet.Header.PesPacketLength = uint16(pktLength)
+	packet.Header.PesPacketLength = uint16(7 + frame.AUList.ByteLength + 8)
 	packet.Header.Pts = uint64(frame.PTS)
 	pes.ProgramClockReferenceBase = packet.Header.Pts
 	packet.Header.PtsDtsFlags = 0x80
 	packet.Header.PesHeaderDataLength = 5
-	packet.Buffers = append(append(packet.Buffers, adts), frame.AUList.ToBuffers()...)
+	packet.Buffers = frame.GetADTS()
 	return ts.WritePESPacket(pes, packet)
 }
 

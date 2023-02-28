@@ -14,7 +14,7 @@ type Audio struct {
 	Channels   byte
 	SampleSize byte
 
-	AVCCHead   []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
+	AVCCHead []byte // 音频包在AVCC格式中，AAC会有两个字节，其他的只有一个字节
 	codec.AudioSpecificConfig
 }
 
@@ -45,6 +45,15 @@ func (a *Audio) GetName() string {
 
 func (av *Audio) WriteADTS(pts uint32, adts []byte) {
 
+}
+
+func (av *Audio) Flush() {
+	if av.CodecID == codec.CodecID_AAC && av.Value.ADTS == nil {
+		item := av.BytesPool.Get(7)
+		av.ToADTS(av.Value.AUList.ByteLength, item.Value)
+		av.Value.ADTS = item
+	}
+	av.Media.Flush()
 }
 
 func (av *Audio) WriteRaw(pts uint32, raw []byte) {

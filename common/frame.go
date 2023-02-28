@@ -63,10 +63,10 @@ type AVFrame struct {
 	CanRead bool `json:"-"`
 	PTS     uint32
 	DTS     uint32
-	AVCC    util.BLL            `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
-	RTP     util.List[RTPFrame] `json:"-"`
-	AUList  util.BLLs           `json:"-"` // 裸数据
-	mem     util.BLL
+	ADTS    *util.ListItem[util.Buffer] `json:"-"` // ADTS头
+	AVCC    util.BLL                    `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
+	RTP     util.List[RTPFrame]         `json:"-"`
+	AUList  util.BLLs                   `json:"-"` // 裸数据
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {
@@ -83,16 +83,15 @@ func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {
 	// frame.ByteLength = 0
 }
 
-func (av *AVFrame) AppendMem(item *util.ListItem[util.Buffer]) {
-	av.mem.Push(item)
-}
-
 // Reset 重置数据,复用内存
 func (av *AVFrame) Reset() {
 	av.RTP.Recycle()
-	av.mem.Recycle()
 	av.AVCC.Recycle()
 	av.AUList.Recycle()
+	if av.ADTS != nil {
+		av.ADTS.Recycle()
+		av.ADTS = nil
+	}
 	av.BytesIn = 0
 	av.AbsTime = 0
 	av.DeltaTime = 0

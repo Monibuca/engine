@@ -40,7 +40,12 @@ type MpegPsStream struct {
 func (ps *MpegPsStream) Drop() {
 	ps.buffer.Reset()
 	ps.audio.Reset()
-	ps.video.Reset()
+	if ps.video.Buffer.CanRead() {
+		ps.ReceiveVideo(ps.video)
+		ps.video.Buffer = make(util.Buffer, 0)
+	} else {
+		ps.video.Reset()
+	}
 }
 
 func (ps *MpegPsStream) Feed(data util.Buffer) (err error) {

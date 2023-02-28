@@ -57,6 +57,7 @@ func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
 		}
 		frameLen = (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
 	}
+	aac.Value.ADTS = aac.BytesPool.GetShell(adts)
 	aac.Flush()
 }
 
