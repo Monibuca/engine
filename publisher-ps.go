@@ -17,11 +17,11 @@ type cacheItem struct {
 
 type PSPublisher struct {
 	Publisher
-	DisableReorder bool //是否禁用rtp重排序,TCP模式下应当禁用
-	mpegps.MpegPsStream
-	reorder util.RTPReorder[*cacheItem]
-	pool    util.BytesPool
-	lastSeq uint16
+	DisableReorder      bool //是否禁用rtp重排序,TCP模式下应当禁用
+	mpegps.MpegPsStream `json:"-"`
+	reorder             util.RTPReorder[*cacheItem]
+	pool                util.BytesPool
+	lastSeq             uint16
 }
 
 // 解析rtp封装 https://www.ietf.org/rfc/rfc2250.txt
