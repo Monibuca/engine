@@ -16,6 +16,8 @@ type IPublisher interface {
 	getVideoTrack() common.VideoTrack
 }
 
+var _ IPublisher = (*Publisher)(nil)
+
 type Publisher struct {
 	IO
 	Config            *config.Publish
@@ -54,7 +56,7 @@ func (p *Publisher) OnEvent(event any) {
 	}
 }
 
-func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL) {
+func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPool) {
 	if frame.ByteLength < 6 {
 		return
 	}
@@ -63,9 +65,9 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL) {
 			ts = 0
 			switch codecID := codec.VideoCodecID(frame.GetByte(0) & 0x0F); codecID {
 			case codec.CodecID_H264:
-				p.VideoTrack = track.NewH264(p.Stream)
+				p.VideoTrack = track.NewH264(p.Stream, pool)
 			case codec.CodecID_H265:
-				p.VideoTrack = track.NewH265(p.Stream)
+				p.VideoTrack = track.NewH265(p.Stream, pool)
 			default:
 				p.Stream.Error("video codecID not support: ", zap.Uint8("codeId", uint8(codecID)))
 				return
@@ -79,7 +81,7 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL) {
 	}
 }
 
-func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL) {
+func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPool) {
 	if frame.ByteLength < 4 {
 		return
 	}
@@ -90,7 +92,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL) {
 			if frame.GetByte(1) != 0 {
 				return
 			}
-			a := track.NewAAC(p.Stream)
+			a := track.NewAAC(p.Stream, pool)
 			p.AudioTrack = a
 			a.AVCCHead = []byte{frame.GetByte(0), 1}
 			a.WriteAVCC(0, frame)
@@ -100,7 +102,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL) {
 			if codecID == codec.CodecID_PCMU {
 				alaw = false
 			}
-			a := track.NewG711(p.Stream, alaw)
+			a := track.NewG711(p.Stream, alaw, pool)
 			p.AudioTrack = a
 			a.Audio.SampleRate = uint32(codec.SoundRate[(b0&0x0c)>>2])
 			if b0&0x02 == 0 {

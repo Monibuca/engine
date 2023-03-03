@@ -67,24 +67,8 @@ func (i *IO) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
 
-// SetStuff（可选） 设置Writer、Reader、Closer、Context和本IO关联
-func (i *IO) SetStuff(stuffs ...any) {
-	for _, stuff := range stuffs {
-		switch v := stuff.(type) {
-		case context.Context:
-			i.Context, i.CancelFunc = context.WithCancel(v)
-		default:
-			if v, ok := v.(io.Closer); ok {
-				i.Closer = v
-			}
-			if v, ok := v.(io.Reader); ok {
-				i.Reader = v
-			}
-			if v, ok := v.(io.Writer); ok {
-				i.Writer = v
-			}
-		}
-	}
+func (i *IO) SetLogger(logger *zap.Logger) {
+	i.Logger = logger
 }
 
 func (i *IO) OnEvent(event any) {
@@ -106,10 +90,6 @@ func (io *IO) IsShutdown() bool {
 	return io.Stream.IsShutdown()
 }
 
-func (io *IO) GetIO() *IO {
-	return io
-}
-
 type IIO interface {
 	receive(string, IIO) error
 	IsClosed() bool
@@ -117,6 +97,7 @@ type IIO interface {
 	Stop()
 	SetIO(any)
 	SetParentCtx(context.Context)
+	SetLogger(*zap.Logger)
 	IsShutdown() bool
 }
 

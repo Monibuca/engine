@@ -1,10 +1,12 @@
 package track
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"time"
 
+	"github.com/aler9/gortsplib/v2/pkg/bits"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
@@ -15,9 +17,11 @@ var _ SpesificTrack = (*AAC)(nil)
 
 func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac = &AAC{
-		SizeLength: 13,
 		Mode:       2,
 	}
+	aac.SizeLength = 13
+	aac.IndexLength = 3
+	aac.IndexDeltaLength = 3
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
@@ -29,9 +33,9 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 
 type AAC struct {
 	Audio
-	SizeLength int // 通常为13
-	Mode       int // 1为lbr，2为hbr
-	lack       int // 用于处理不完整的AU,缺少的字节数
+
+	Mode             int       // 1为lbr，2为hbr
+	fragments        *util.BLL // 用于处理不完整的AU,缺少的字节数
 }
 
 func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
@@ -63,46 +67,98 @@ func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
 
 // https://datatracker.ietf.org/doc/html/rfc3640#section-3.2.1
 func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
+	if len(frame.Payload) < 2 {
+		// aac.fragments = aac.fragments[:0]
+		return
+	}
 	if aac.SampleRate != 90000 {
 		aac.generateTimestamp(uint32(uint64(frame.Timestamp) * 90000 / uint64(aac.SampleRate)))
 	}
-	defer aac.Flush()
-	auHeaderLen := util.ReadBE[int](frame.Payload[:aac.Mode]) >> 3 //通常为2，即一个AU Header的长度
-	// auHeaderCount := auHeaderLen >> 1 // AU Header的个数, 通常为1
+	auHeaderLen := util.ReadBE[int](frame.Payload[:2]) //通常为16，即一个AU Header的长度
 	if auHeaderLen == 0 {
-		aac.Value.AUList.Push(aac.BytesPool.GetShell(frame.Payload))
+		aac.Value.AUList.Push(aac.BytesPool.GetShell(frame.Payload[:2]))
+		aac.Flush()
 	} else {
-		startOffset := aac.Mode + auHeaderLen // 实际数据开始的位置
-		if aac.lack > 0 {
-			rawLen := aac.Value.AUList.ByteLength
-			if rawLen == 0 {
-				aac.Error("lack >0 but rawlen=0")
-			}
-			last := aac.Value.AUList.Pre
-			auLen := len(frame.Payload) - startOffset
-			if aac.lack > auLen {
-				last.Value.Push(aac.BytesPool.GetShell(frame.Payload[startOffset:]))
-				aac.lack -= auLen
-				return
-			} else if aac.lack < auLen {
-				aac.Warn("lack < auLen", zap.Int("lack", aac.lack), zap.Int("auLen", auLen))
-			}
-			last.Value.Push(aac.BytesPool.GetShell(frame.Payload[startOffset : startOffset+aac.lack]))
-			aac.lack = 0
+		payload := frame.Payload[2:]
+		// AU-headers
+		dataLens, err := aac.readAUHeaders(payload, auHeaderLen)
+		if err != nil {
+			// discard pending fragmented packets
 			return
 		}
-		for iIndex := aac.Mode; iIndex <= auHeaderLen; iIndex += aac.Mode {
-			auLen := util.ReadBE[int](frame.Payload[iIndex:iIndex+aac.Mode]) >> (8*aac.Mode - aac.SizeLength) //取高13bit代表AU的长度
-			nextPos := startOffset + auLen
-			if len(frame.Payload) < nextPos {
-				aac.lack = nextPos - len(frame.Payload)
-				aac.AppendAuBytes(frame.Payload[startOffset:])
-				break
-			} else {
-				aac.AppendAuBytes(frame.Payload[startOffset:nextPos])
-			}
-			startOffset = nextPos
+
+		pos := (auHeaderLen >> 3)
+		if (auHeaderLen % 8) != 0 {
+			pos++
 		}
+		payload = payload[pos:]
+
+		if aac.fragments == nil {
+			if frame.Header.Marker {
+				// AUs
+				for _, dataLen := range dataLens {
+					if len(payload) < int(dataLen) {
+						aac.fragments = &util.BLL{}
+						aac.fragments.Push(aac.BytesPool.GetShell(payload))
+						// aac.fragments = aac.fragments[:0]
+						// aac.Error("payload is too short 1", zap.Int("dataLen", int(dataLen)), zap.Int("len", len(payload)))
+						return
+					}
+					aac.AppendAuBytes(payload[:dataLen])
+					payload = payload[dataLen:]
+				}
+			} else {
+				if len(dataLens) != 1 {
+					// aac.fragments = aac.fragments[:0]
+					aac.Error("a fragmented packet can only contain one AU")
+					return
+				}
+				aac.fragments = &util.BLL{}
+				// if len(payload) < int(dataLens[0]) {
+				// 	aac.fragments = aac.fragments[:0]
+				// 	aac.Error("payload is too short 2", zap.Int("dataLen", int(dataLens[0])), zap.Int("len", len(payload)))
+				// 	return
+				// }
+				aac.fragments.Push(aac.BytesPool.GetShell(payload))
+				// aac.fragments = append(aac.fragments, payload[:dataLens[0]])
+				return
+			}
+		} else {
+			// we are decoding a fragmented AU
+			if len(dataLens) != 1 {
+				aac.fragments.Recycle()
+				aac.fragments = nil
+				// aac.fragments = aac.fragments[:0]
+				aac.Error("a fragmented packet can only contain one AU")
+				return
+			}
+
+			// if len(payload) < int(dataLens[0]) {
+			// 	aac.fragments = aac.fragments[:0]
+			// 	aac.Error("payload is too short 3", zap.Int("dataLen", int(dataLens[0])), zap.Int("len", len(payload)))
+			// 	return
+			// }
+
+			// if fragmentedSize := util.SizeOfBuffers(aac.fragments) + int(dataLens[0]); fragmentedSize > 5*1024 {
+			// 	aac.fragments = aac.fragments[:0] // discard pending fragmented packets
+			// 	aac.Error(fmt.Sprintf("AU size (%d) is too big (maximum is %d)", fragmentedSize, 5*1024))
+			// 	return
+			// }
+
+			// aac.fragments = append(aac.fragments, payload[:dataLens[0]])
+			aac.fragments.Push(aac.BytesPool.GetShell(payload))
+			if !frame.Header.Marker {
+				return
+			}
+			if uint64(aac.fragments.ByteLength) != dataLens[0] {
+				aac.Error("fragmented AU size is not correct", zap.Uint64("dataLen", dataLens[0]), zap.Int("len", aac.fragments.ByteLength))
+			}
+			aac.Value.AUList.PushValue(aac.fragments)
+			// aac.AppendAuBytes(aac.fragments...)
+
+			aac.fragments = nil
+		}
+		aac.Flush()
 	}
 }
 
@@ -142,4 +198,63 @@ func (aac *AAC) CompleteRTP(value *AVFrame) {
 		packets = append(packets, append(net.Buffers{auHeaderLen}, bufs...))
 	}
 	aac.PacketizeRTP(packets...)
+}
+
+func (aac *AAC) readAUHeaders(buf []byte, headersLen int) ([]uint64, error) {
+	firstRead := false
+
+	count := 0
+	for i := 0; i < headersLen; {
+		if i == 0 {
+			i += aac.SizeLength
+			i += aac.IndexLength
+		} else {
+			i += aac.SizeLength
+			i += aac.IndexDeltaLength
+		}
+		count++
+	}
+
+	dataLens := make([]uint64, count)
+
+	pos := 0
+	i := 0
+
+	for headersLen > 0 {
+		dataLen, err := bits.ReadBits(buf, &pos, aac.SizeLength)
+		if err != nil {
+			return nil, err
+		}
+		headersLen -= aac.SizeLength
+
+		if !firstRead {
+			firstRead = true
+			if aac.IndexLength > 0 {
+				auIndex, err := bits.ReadBits(buf, &pos, aac.IndexLength)
+				if err != nil {
+					return nil, err
+				}
+				headersLen -= aac.IndexLength
+
+				if auIndex != 0 {
+					return nil, fmt.Errorf("AU-index different than zero is not supported")
+				}
+			}
+		} else if aac.IndexDeltaLength > 0 {
+			auIndexDelta, err := bits.ReadBits(buf, &pos, aac.IndexDeltaLength)
+			if err != nil {
+				return nil, err
+			}
+			headersLen -= aac.IndexDeltaLength
+
+			if auIndexDelta != 0 {
+				return nil, fmt.Errorf("AU-index-delta different than zero is not supported")
+			}
+		}
+
+		dataLens[i] = dataLen
+		i++
+	}
+
+	return dataLens, nil
 }

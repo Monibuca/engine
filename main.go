@@ -35,6 +35,7 @@ var (
 	// ConfigRaw 配置信息的原始数据
 	ConfigRaw    []byte
 	Plugins      = make(map[string]*Plugin) // Plugins 所有的插件配置
+	plugins      []*Plugin                  //插件列表
 	EngineConfig = &GlobalConfig{
 		Engine: config.Global,
 	}
@@ -96,8 +97,8 @@ func Run(ctx context.Context, configFile string) (err error) {
 	log.With(zap.String("config", "global")).Debug("", zap.Any("config", EngineConfig))
 	EventBus = make(chan any, EngineConfig.EventBusSize)
 	go EngineConfig.Listen(Engine)
-	for name, plugin := range Plugins {
-		userConfig := cg.GetChild(name)
+	for _, plugin := range plugins {
+		userConfig := cg.GetChild(plugin.Name)
 		if userConfig != nil {
 			if b, err := yaml.Marshal(userConfig); err == nil {
 				plugin.Yaml = string(b)

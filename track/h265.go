@@ -96,7 +96,12 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 			buffer.ReadUint16()
 		}
 		for buffer.CanRead() {
-			vt.WriteSliceBytes(buffer.ReadN(int(buffer.ReadUint16())))
+			l := int(buffer.ReadUint16())
+			if buffer.CanReadN(l) {
+				vt.WriteSliceBytes(buffer.ReadN(l))
+			} else {
+				return
+			}
 			if usingDonlField {
 				buffer.ReadByte()
 			}
