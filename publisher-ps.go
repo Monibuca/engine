@@ -26,7 +26,9 @@ type PSPublisher struct {
 
 // 解析rtp封装 https://www.ietf.org/rfc/rfc2250.txt
 func (p *PSPublisher) PushPS(rtp *rtp.Packet) {
-	// fmt.Println(rtp.SequenceNumber)
+	if p.Stream == nil {
+		return
+	}
 	if p.EsHandler == nil {
 		p.EsHandler = p
 		p.lastSeq = rtp.SequenceNumber - 1
