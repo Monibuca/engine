@@ -29,10 +29,11 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 
 func (vt *H264) WriteSliceBytes(slice []byte) {
 	naluType := codec.ParseH264NALUType(slice[0])
-	// println("naluType", naluType)
+	// vt.Info("naluType", zap.Uint8("naluType", naluType.Byte()))
 	switch naluType {
 	case codec.NALU_SPS:
 		vt.SPSInfo, _ = codec.ParseSPS(slice)
+		vt.Debug("SPS", zap.Any("SPSInfo", vt.SPSInfo))
 		vt.Video.SPS = slice
 		vt.ParamaterSets[0] = slice
 	case codec.NALU_PPS:
@@ -100,6 +101,10 @@ func (vt *H264) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 }
 
 func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
+	if vt.lastSeq != vt.lastSeq2+1 && vt.lastSeq2 != 0 {
+		vt.lostFlag = true
+		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq), zap.Uint16("lastSeq2", vt.lastSeq2))
+	}
 	rv := &vt.Value
 	if naluType := frame.H264Type(); naluType < 24 {
 		vt.WriteSliceBytes(frame.Payload)
@@ -119,7 +124,12 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 			if util.Bit1(frame.Payload[1], 0) {
 				vt.WriteSliceByte(naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60))
 			}
-			rv.AUList.Pre.Value.Push(vt.BytesPool.GetShell(frame.Payload[naluType.Offset():]))
+			if rv.AUList.Pre != nil && rv.AUList.Pre.Value != nil {
+				rv.AUList.Pre.Value.Push(vt.BytesPool.GetShell(frame.Payload[naluType.Offset():]))
+			} else {
+				vt.Error("fu have no start")
+				return
+			}
 		}
 	}
 	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延

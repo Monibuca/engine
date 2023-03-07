@@ -91,7 +91,17 @@ func (vt *Video) computeGOP() {
 func (vt *Video) writeAnnexBSlice(nalu []byte) {
 	common.SplitAnnexB(nalu, vt.WriteSliceBytes, codec.NALU_Delimiter1)
 }
-
+func (vt *Video) WriteNalu(pts uint32, dts uint32, nalu []byte) {
+	if dts == 0 {
+		vt.generateTimestamp(pts)
+	} else {
+		vt.Value.PTS = pts
+		vt.Value.DTS = dts
+	}
+	vt.Value.BytesIn += len(nalu)
+	vt.WriteSliceBytes(nalu)
+	vt.Flush()
+}
 func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame []byte) {
 	if dts == 0 {
 		vt.generateTimestamp(pts)
@@ -101,10 +111,13 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame []byte) {
 	}
 	vt.Value.BytesIn += len(frame)
 	common.SplitAnnexB(frame, vt.writeAnnexBSlice, codec.NALU_Delimiter2)
-	vt.Flush()
+	if vt.Value.AUList.ByteLength > 0 {
+		vt.Flush()
+	}
 }
 
-func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) error {
+func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) (e error) {
+	// bbb := util.Buffer(frame.ToBytes()[5:])
 	r := frame.NewReader()
 	b, err := r.ReadByte()
 	if err != nil {
@@ -120,7 +133,23 @@ func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) error {
 	vt.Value.PTS = vt.Ms2MpegTs(ts + cts)
 	vt.Value.DTS = vt.Ms2MpegTs(ts)
 	// println(":", vt.Value.Sequence)
-	for nalulen, err := r.ReadBE(vt.nalulenSize); err == nil; nalulen, err = r.ReadBE(vt.nalulenSize) {
+	var nalulen uint32
+	for nalulen, e = r.ReadBE(vt.nalulenSize); e == nil; nalulen, e = r.ReadBE(vt.nalulenSize) {
+		if remain := frame.ByteLength - r.GetOffset(); remain < int(nalulen) {
+			vt.Error("read nalu length error", zap.Int("nalulen", int(nalulen)), zap.Int("remain", remain))
+			frame.Recycle()
+			vt.Value.Reset()
+			return
+			// for bbb.CanRead() {
+			// 	nalulen = bbb.ReadUint32()
+			// 	if bbb.CanReadN(int(nalulen)) {
+			// 		bbb.ReadN(int(nalulen))
+			// 	} else {
+			// 		panic("read nalu error1")
+			// 	}
+			// }
+			// panic("read nalu error2")
+		}
 		// var au util.BLL
 		// for _, bb := range r.ReadN(int(nalulen)) {
 		// 	au.Push(vt.BytesPool.GetShell(bb))
@@ -148,6 +177,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) error {
 }
 
 func (vt *Video) WriteSliceByte(b ...byte) {
+	// fmt.Println("write slice byte", b)
 	vt.WriteSliceBytes(b)
 }
 

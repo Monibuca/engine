@@ -2,6 +2,7 @@ package track
 
 import (
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -23,9 +24,13 @@ func (av *Media) WriteRTPPack(p *rtp.Packet) {
 func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
 	for frame := av.recorderRTP(raw); frame != nil; frame = av.nextRTPFrame() {
 		av.Value.BytesIn += len(frame.Value.Payload) + 12
-		av.Value.RTP.Push(frame)
 		if len(frame.Value.Payload) > 0 {
+			av.Value.RTP.Push(frame)
 			av.WriteRTPFrame(&frame.Value)
+			// av.Info("rtp", zap.Uint32("ts", (frame.Value.Timestamp)), zap.Int("len", len(frame.Value.Payload)), zap.Bool("marker", frame.Value.Marker), zap.Uint16("seq", frame.Value.SequenceNumber))
+		} else {
+			av.Warn("rtp payload is empty", zap.Uint32("ts", (frame.Value.Timestamp)), zap.Any("ext", frame.Value.GetExtensionIDs()), zap.Uint16("seq", frame.Value.SequenceNumber))
+			frame.Recycle()
 		}
 	}
 }
@@ -54,19 +59,31 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 }
 
 type RTPDemuxer struct {
-	lastSeq  uint16 //上一个收到的序号，用于乱序重排
-	lastSeq2 uint16 //记录上上一个收到的序列号
+	lastSeq  uint16 //上一个rtp包的序号
+	lastSeq2 uint16 //上上一个rtp包的序号
 	乱序重排     util.RTPReorder[*util.ListItem[RTPFrame]]
 }
 
 // 获取缓存中下一个rtpFrame
 func (av *RTPDemuxer) nextRTPFrame() (frame *util.ListItem[RTPFrame]) {
-	return av.乱序重排.Pop()
+	frame = av.乱序重排.Pop()
+	if frame == nil {
+		return
+	}
+	av.lastSeq2 = av.lastSeq
+	av.lastSeq = frame.Value.SequenceNumber
+	return
 }
 
 // 对RTP包乱序重排
-func (av *RTPDemuxer) recorderRTP(item *util.ListItem[RTPFrame]) *util.ListItem[RTPFrame] {
-	return av.乱序重排.Push(item.Value.SequenceNumber, item)
+func (av *RTPDemuxer) recorderRTP(item *util.ListItem[RTPFrame]) (frame *util.ListItem[RTPFrame]) {
+	frame = av.乱序重排.Push(item.Value.SequenceNumber, item)
+	if frame == nil {
+		return
+	}
+	av.lastSeq2 = av.lastSeq
+	av.lastSeq = frame.Value.SequenceNumber
+	return
 }
 
 type RTPMuxer struct {

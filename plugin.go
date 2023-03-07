@@ -290,12 +290,18 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int)
 				time.Sleep(time.Second * 5)
 			} else {
 				if err = opt.Publish(streamPath, puller); err != nil {
-					if stream := Streams.Get(streamPath); stream != nil && stream.Publisher != puller && stream.Publisher != nil {
-						io := stream.Publisher.GetPublisher()
-						opt.Error("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
+					if stream := Streams.Get(streamPath); stream != nil {
+						if stream.Publisher != puller && stream.Publisher != nil {
+							io := stream.Publisher.GetPublisher()
+							opt.Error("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
+							return
+						} else {
+							opt.Warn("pull publish", zurl, zap.Error(err))
+						}
+					} else {
+						opt.Error("pull publish", zurl, zap.Error(err))
 						return
 					}
-					opt.Error("pull publish", zurl, zap.Error(err))
 				}
 				if err = puller.Pull(); err != nil && !puller.IsShutdown() {
 					opt.Error("pull", zurl, zap.Error(err))

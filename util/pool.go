@@ -72,6 +72,10 @@ func (r *BLLReader) ReadN(n int) (result net.Buffers) {
 	return
 }
 
+func (r *BLLReader) GetOffset() int {
+	return r.pos
+}
+
 type BLLsReader struct {
 	*ListItem[*BLL]
 	BLLReader

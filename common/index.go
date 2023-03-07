@@ -107,6 +107,7 @@ type AVTrack interface {
 type VideoTrack interface {
 	AVTrack
 	WriteSliceBytes(slice []byte)
+	WriteNalu(uint32, uint32, []byte)
 	WriteAnnexB(uint32, uint32, []byte)
 	SetLostFlag()
 }

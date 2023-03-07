@@ -215,6 +215,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	case SUBTYPE_RTP:
 		var videoSeq, audioSeq uint16
 		sendVideoFrame = func(frame *AVFrame) {
+			// fmt.Println("v", frame.Sequence, frame.AbsTime, s.VideoReader.AbsTime, frame.IFrame)
 			frame.RTP.Range(func(vp RTPFrame) bool {
 				videoSeq++
 				vp.Header.Timestamp = vp.Header.Timestamp - s.VideoReader.SkipRTPTs
@@ -225,6 +226,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 
 		sendAudioFrame = func(frame *AVFrame) {
+			// fmt.Println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
 			frame.RTP.Range(func(ap RTPFrame) bool {
 				audioSeq++
 				ap.Header.SequenceNumber = audioSeq
@@ -282,31 +284,36 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			for ctx.Err() == nil {
 				s.VideoReader.Read(ctx, subMode)
 				frame := s.VideoReader.Frame
-				// println("video", s.VideoReader.Track.PreFrame().Sequence-frame.Sequence)
 				if frame == nil || ctx.Err() != nil {
 					return
 				}
+				// fmt.Println("video", s.VideoReader.Track.PreFrame().Sequence-frame.Sequence)
 				if frame.IFrame && s.VideoReader.DecConfChanged() {
 					s.VideoReader.ConfSeq = s.VideoReader.Track.SequenceHeadSeq
 					sendVideoDecConf()
 				}
-				if audioFrame != nil {
-					if frame.AbsTime > lastAbsTime {
-						if audioFrame.CanRead {
-							sendAudioFrame(audioFrame)
+				if hasAudio {
+					if audioFrame != nil {
+						if frame.AbsTime > lastAbsTime {
+							// fmt.Println("switch audio", audioFrame.CanRead)
+							if audioFrame.CanRead {
+								sendAudioFrame(audioFrame)
+							}
+							videoFrame = frame
+							lastAbsTime = frame.AbsTime
+							break
 						}
-						videoFrame = frame
-						lastAbsTime = frame.AbsTime
-						break
-					}
-				} else if lastAbsTime == 0 {
-					if lastAbsTime = frame.AbsTime; lastAbsTime != 0 {
-						videoFrame = frame
-						break
+					} else if lastAbsTime == 0 {
+						if lastAbsTime = frame.AbsTime; lastAbsTime != 0 {
+							videoFrame = frame
+							break
+						}
 					}
 				}
 				if !conf.IFrameOnly || frame.IFrame {
 					sendVideoFrame(frame)
+				} else {
+					// fmt.Println("skip video", frame.Sequence)
 				}
 			}
 		}
@@ -327,16 +334,17 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				s.AudioReader.Read(ctx, subMode)
 				frame := s.AudioReader.Frame
-				// println("audio", s.AudioReader.Track.PreFrame().Sequence-frame.Sequence)
 				if frame == nil || ctx.Err() != nil {
 					return
 				}
+				// fmt.Println("audio", s.AudioReader.Track.PreFrame().Sequence-frame.Sequence)
 				if s.AudioReader.DecConfChanged() {
 					s.AudioReader.ConfSeq = s.AudioReader.Track.SequenceHeadSeq
 					sendAudioDecConf()
 				}
-				if videoFrame != nil {
+				if hasVideo && videoFrame != nil {
 					if frame.AbsTime > lastAbsTime {
+						// fmt.Println("switch video", videoFrame.CanRead)
 						if videoFrame.CanRead {
 							sendVideoFrame(videoFrame)
 						}
@@ -347,6 +355,8 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				if frame.AbsTime >= s.AudioReader.SkipTs {
 					sendAudioFrame(frame)
+				} else {
+					// fmt.Println("skip audio", frame.AbsTime, s.AudioReader.SkipTs)
 				}
 			}
 		}

@@ -1,6 +1,8 @@
 package common
 
 import (
+	"time"
+
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -16,4 +18,5 @@ type IStream interface {
 	Receive(any) bool
 	SetIDR(Track)
 	GetPublisherConfig() *config.Publish
+	GetStartTime() time.Time
 }

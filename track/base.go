@@ -247,6 +247,9 @@ func (av *Media) Flush() {
 
 	if av.起始时间.IsZero() {
 		curValue.DeltaTime = 0
+		if curValue.AbsTime == 0 {
+			curValue.AbsTime = uint32(time.Since(av.Stream.GetStartTime()).Milliseconds())
+		}
 		av.重置(curValue.AbsTime)
 	} else if curValue.AbsTime == 0 {
 		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
@@ -254,7 +257,7 @@ func (av *Media) Flush() {
 	} else {
 		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime
 	}
-	// fmt.Println(av.Name,curValue.DTS, curValue.AbsTime, curValue.DeltaTime)
+	// fmt.Println(av.Name, curValue.DTS, curValue.AbsTime, curValue.DeltaTime)
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {

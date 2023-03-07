@@ -218,6 +218,10 @@ type StreamSummay struct {
 	BPS         int
 }
 
+func (s *Stream) GetStartTime() time.Time {
+	return s.StartTime
+}
+
 func (s *Stream) GetPublisherConfig() *config.Publish {
 	return s.Publisher.GetPublisher().Config
 }
