@@ -218,6 +218,13 @@ type StreamSummay struct {
 	BPS         int
 }
 
+func (s *Stream) GetType() string {
+	if s.Publisher == nil {
+		return ""
+	}
+	return s.Publisher.GetPublisher().Type
+}
+
 func (s *Stream) GetStartTime() time.Time {
 	return s.StartTime
 }

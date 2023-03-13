@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"github.com/pion/rtp/v2"
+	"github.com/pion/rtp"
 	"github.com/yapingcat/gomedia/go-mpeg2"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
@@ -48,17 +48,17 @@ func (p *PSPublisher) PushPS(rtp *rtp.Packet) {
 	} else {
 		item := p.pool.Get(len(rtp.Payload))
 		copy(item.Value, rtp.Payload)
-		for cacheItem := p.reorder.Push(rtp.SequenceNumber, &cacheItem{rtp.SequenceNumber, item}); cacheItem != nil; cacheItem = p.reorder.Pop() {
-			if cacheItem.Seq != p.lastSeq+1 {
-				p.Debug("drop", zap.Uint16("seq", cacheItem.Seq), zap.Uint16("lastSeq", p.lastSeq))
+		for rtpPacket := p.reorder.Push(rtp.SequenceNumber, &cacheItem{rtp.SequenceNumber, item}); rtpPacket != nil; rtpPacket = p.reorder.Pop() {
+			if rtpPacket.Seq != p.lastSeq+1 {
+				p.Debug("drop", zap.Uint16("seq", rtpPacket.Seq), zap.Uint16("lastSeq", p.lastSeq))
 				p.Reset()
 				if p.VideoTrack != nil {
 					p.SetLostFlag()
 				}
 			}
-			p.Feed(cacheItem.Value)
-			p.lastSeq = cacheItem.Seq
-			cacheItem.Recycle()
+			p.Feed(rtpPacket.Value)
+			p.lastSeq = rtpPacket.Seq
+			rtpPacket.Recycle()
 		}
 	}
 }

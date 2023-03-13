@@ -19,4 +19,5 @@ type IStream interface {
 	SetIDR(Track)
 	GetPublisherConfig() *config.Publish
 	GetStartTime() time.Time
+	GetType() string
 }
