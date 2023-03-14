@@ -70,6 +70,9 @@ type AVFrame struct {
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {
+	if ts == 0 {
+		ts = 1
+	}
 	av.AbsTime = ts
 	av.BytesIn += frame.ByteLength
 	for {
