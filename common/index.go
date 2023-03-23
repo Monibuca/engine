@@ -68,7 +68,7 @@ func (bt *Base) SnapForJson() {
 }
 func (bt *Base) Flush(bf *BaseFrame) {
 	bt.ComputeBPS(bf.BytesIn)
-	bf.Timestamp = time.Now()
+	bf.WriteTime = time.Now()
 }
 func (bt *Base) SetStuff(stuff ...any) {
 	for _, s := range stuff {

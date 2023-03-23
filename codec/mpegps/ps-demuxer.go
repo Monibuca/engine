@@ -166,7 +166,7 @@ func (psdemuxer *PSDemuxer) Feed(data []byte) error {
     return ret
 }
 
-func (psdemuxer *PSDemuxer) Drop() {
+func (psdemuxer *PSDemuxer) Reset() {
 	psdemuxer.cache = psdemuxer.cache[:0]
     for _, stream := range psdemuxer.streamMap {
         if len(stream.streamBuf) == 0 {

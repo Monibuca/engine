@@ -1,6 +1,8 @@
 package track
 
 import (
+	"time"
+
 	"github.com/pion/rtp"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
@@ -40,15 +42,13 @@ func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
 func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 	packetCount := len(payloads)
 	for i, pp := range payloads {
-		av.rtpSequence++
 		rtpItem := av.GetRTPFromPool()
 		packet := &rtpItem.Value
 		packet.Payload = packet.Payload[:0]
-		packet.SequenceNumber = av.rtpSequence
 		if av.SampleRate != 90000 {
-			packet.Timestamp = uint32(uint64(av.SampleRate) * uint64(av.Value.PTS) / 90000)
+			packet.Timestamp = uint32(time.Duration(av.SampleRate) * av.Value.PTS / 90000)
 		} else {
-			packet.Timestamp = av.Value.PTS
+			packet.Timestamp = uint32(av.Value.PTS)
 		}
 		packet.Marker = i == packetCount-1
 		for _, p := range pp {
@@ -84,8 +84,4 @@ func (av *RTPDemuxer) recorderRTP(item *util.ListItem[RTPFrame]) (frame *util.Li
 	av.lastSeq2 = av.lastSeq
 	av.lastSeq = frame.Value.SequenceNumber
 	return
-}
-
-type RTPMuxer struct {
-	rtpSequence uint16 //用于生成下一个rtp包的序号
 }

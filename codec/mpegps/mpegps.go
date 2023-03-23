@@ -37,7 +37,7 @@ type MpegPsStream struct {
 	video MpegPsEsStream
 }
 
-func (ps *MpegPsStream) Drop() {
+func (ps *MpegPsStream) Reset() {
 	ps.buffer.Reset()
 	ps.audio.Reset()
 	if ps.video.Buffer.CanRead() {

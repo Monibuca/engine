@@ -22,7 +22,7 @@ func (d *Data) ReadRing() *LockRing[any] {
 }
 
 func (d *Data) LastWriteTime() time.Time {
-	return d.LockRing.RingBuffer.LastValue.Timestamp
+	return d.LockRing.RingBuffer.LastValue.WriteTime
 }
 
 func (dt *Data) Push(data any) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -227,11 +228,34 @@ func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Requ
 	default:
 		pub.ACodec = codec.CodecID_AAC
 	}
-	pub.DumpFile = dumpFile
-	if err := Engine.Publish(streamPath, &pub); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	ss := strings.Split(dumpFile, ",")
+	if len(ss) > 1 {
+		if err := Engine.Publish(streamPath, &pub); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		} else {
+			for _, s := range ss {
+				f, err := os.Open(s)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				go pub.Feed(f)
+			}
+			w.Write([]byte("ok"))
+		}
 	} else {
-		w.Write([]byte("ok"))
+		f, err := os.Open(dumpFile)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := Engine.Publish(streamPath, &pub); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		} else {
+			pub.SetIO(f)
+			w.Write([]byte("ok"))
+			go pub.Feed(f)
+		}
 	}
 }
 
@@ -245,12 +269,42 @@ func (conf *GlobalConfig) API_replay_ts(w http.ResponseWriter, r *http.Request) 
 	if dumpFile == "" {
 		dumpFile = streamPath + ".ts"
 	}
+	f, err := os.Open(dumpFile)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	var pub TSPublisher
 	if err := Engine.Publish(streamPath, &pub); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	} else {
-		f, _ := os.Open(dumpFile)
+		pub.SetIO(f)
 		go pub.Feed(f)
 		w.Write([]byte("ok"))
+	}
+}
+
+func (conf *GlobalConfig) API_replay_mp4(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	if streamPath == "" {
+		streamPath = "dump/mp4"
+	}
+	dumpFile := q.Get("dump")
+	if dumpFile == "" {
+		dumpFile = streamPath + ".mp4"
+	}
+	var pub MP4Publisher
+	f, err := os.Open(dumpFile)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := Engine.Publish(streamPath, &pub); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		pub.SetIO(f)
+		w.Write([]byte("ok"))
+		go pub.ReadMP4Data(f)
 	}
 }

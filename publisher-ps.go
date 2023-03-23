@@ -22,9 +22,9 @@ type PSPublisher struct {
 	// mpegps.MpegPsStream `json:"-"`
 	// *mpegps.PSDemuxer `json:"-"`
 	mpegps.DecPSPackage `json:"-"`
-	reorder             util.RTPReorder[*cacheItem]
-	pool                util.BytesPool
-	lastSeq             uint16
+	reorder util.RTPReorder[*cacheItem]
+	pool    util.BytesPool
+	lastSeq uint16
 }
 
 // 解析rtp封装 https://www.ietf.org/rfc/rfc2250.txt
@@ -32,15 +32,13 @@ func (p *PSPublisher) PushPS(rtp *rtp.Packet) {
 	if p.Stream == nil {
 		return
 	}
-	if p.EsHandler == nil {
+	if p.pool == nil {
 		// p.PSDemuxer = mpegps.NewPSDemuxer()
 		// p.PSDemuxer.OnPacket = p.OnPacket
 		// p.PSDemuxer.OnFrame = p.OnFrame
 		p.EsHandler = p
 		p.lastSeq = rtp.SequenceNumber - 1
-		if p.pool == nil {
-			p.pool = make(util.BytesPool, 17)
-		}
+		p.pool = make(util.BytesPool, 17)
 	}
 	if p.DisableReorder {
 		p.Feed(rtp.Payload)

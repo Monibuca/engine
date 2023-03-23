@@ -23,14 +23,14 @@ type AVRingReader struct {
 	Poll       time.Duration
 	State      byte
 	FirstSeq   uint32
-	FirstTs    uint32
-	SkipTs     uint32
-	SkipRTPTs  uint32
-	beforeJump uint32
+	FirstTs    time.Duration
+	SkipTs     time.Duration //ms
+	beforeJump time.Duration
 	ConfSeq    int
 	startTime  time.Time
 	Frame      *common.AVFrame
 	AbsTime    uint32
+	Delay      uint32
 	*zap.Logger
 }
 
@@ -96,12 +96,11 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 		}
 		r.startTime = time.Now()
 		if r.FirstTs == 0 {
-			r.FirstTs = r.Frame.AbsTime
+			r.FirstTs = r.Frame.Timestamp
 		}
 		r.SkipTs = r.FirstTs
-		r.SkipRTPTs = r.Track.Ms2MpegTs(r.SkipTs)
 		r.FirstSeq = r.Frame.Sequence
-		r.Info("first frame read", zap.Uint32("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
+		r.Info("first frame read", zap.Duration("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
 	case READSTATE_FIRST:
 		if r.Track.IDRing.Value.Sequence != r.FirstSeq {
 			r.Ring = r.Track.IDRing
@@ -109,14 +108,13 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 			if err = r.ctx.Err(); err != nil {
 				return
 			}
-			r.SkipTs = frame.AbsTime - r.beforeJump
-			r.SkipRTPTs = r.Track.Ms2MpegTs(r.SkipTs)
-			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Uint32("skipTs", r.SkipTs))
+			r.SkipTs = frame.Timestamp - r.beforeJump
+			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Duration("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {
 			r.MoveNext()
 			frame := r.ReadFrame()
-			r.beforeJump = frame.AbsTime - r.FirstTs
+			r.beforeJump = frame.Timestamp - r.FirstTs
 			// 防止过快消费
 			if fast := time.Duration(r.beforeJump)*time.Millisecond - time.Since(r.startTime); fast > 0 && fast < time.Second {
 				time.Sleep(fast)
@@ -126,12 +124,18 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 		r.MoveNext()
 		r.ReadFrame()
 	}
-	r.AbsTime = r.Frame.AbsTime - r.SkipTs
+	r.AbsTime = uint32((r.Frame.Timestamp - r.SkipTs).Milliseconds())
+	r.Delay = uint32((r.Track.LastValue.Timestamp - r.Frame.Timestamp).Milliseconds())
 	// println(r.Track.Name, r.State, r.Frame.AbsTime, r.SkipTs, r.AbsTime)
 	return
 }
-
+func (r *AVRingReader) GetPTS32() uint32 {
+	return uint32((r.Frame.PTS - r.SkipTs * 90 / time.Millisecond))
+}
+func (r *AVRingReader) GetDTS32() uint32 {
+	return uint32((r.Frame.DTS - r.SkipTs * 90 / time.Millisecond))
+}
 func (r *AVRingReader) ResetAbsTime() {
-	r.SkipTs = r.Frame.AbsTime
+	r.SkipTs = r.Frame.Timestamp
 	r.AbsTime = 0
 }
