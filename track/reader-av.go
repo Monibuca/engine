@@ -116,7 +116,7 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 			frame := r.ReadFrame()
 			r.beforeJump = frame.Timestamp - r.FirstTs
 			// 防止过快消费
-			if fast := time.Duration(r.beforeJump)*time.Millisecond - time.Since(r.startTime); fast > 0 && fast < time.Second {
+			if fast := r.beforeJump - time.Since(r.startTime); fast > 0 && fast < time.Second {
 				time.Sleep(fast)
 			}
 		}

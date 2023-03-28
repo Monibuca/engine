@@ -198,6 +198,9 @@ func (vt *Video) insertDCRtp() {
 }
 
 func (vt *Video) generateTimestamp(ts uint32) {
+	if vt.State == TrackStateOffline {
+		vt.dtsEst = NewDTSEstimator()
+	}
 	vt.Value.PTS = time.Duration(ts)
 	vt.Value.DTS = time.Duration(vt.dtsEst.Feed(ts))
 }

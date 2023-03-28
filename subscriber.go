@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -249,7 +248,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		flvHeadCache := make([]byte, 15) //内存复用
 		sendFlvFrame := func(t byte, ts uint32, avcc ...[]byte) {
 			// println(t, ts)
-			fmt.Printf("%d %X %X %d\n",t, avcc[0][0], avcc[0][1], ts)
+			// fmt.Printf("%d %X %X %d\n",t, avcc[0][0], avcc[0][1], ts)
 			flvHeadCache[0] = t
 			result := append(FLVFrame{flvHeadCache[:11]}, avcc...)
 			dataSize := uint32(util.SizeOfBuffers(avcc))

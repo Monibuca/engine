@@ -30,11 +30,9 @@ func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) t
 	}
 	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
-func (p *流速控制) 时间戳差(绝对时间戳 time.Duration) time.Duration {
-	return 绝对时间戳 - p.起始时间戳
-}
+
 func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Duration) {
-	数据时间差, 实际时间差 := p.时间戳差(绝对时间戳), time.Since(p.起始时间)
+	数据时间差, 实际时间差 := 绝对时间戳-p.起始时间戳, time.Since(p.起始时间)
 	// println("数据时间差", 数据时间差, "实际时间差", 实际时间差, "绝对时间戳", 绝对时间戳, "起始时间戳", p.起始时间戳, "起始时间", p.起始时间.Format("2006-01-02 15:04:05"))
 	// if 实际时间差 > 数据时间差 {
 	// 	p.重置(绝对时间戳)
@@ -224,13 +222,12 @@ func (av *Media) Flush() {
 		av.State = TrackStateOnline
 		if useDts {
 			av.deltaTs = curValue.DTS - preValue.DTS
-			curValue.Timestamp = preValue.Timestamp + time.Millisecond
 		} else {
 			av.deltaTs = curValue.Timestamp - preValue.Timestamp
 		}
-		curValue.DTS += 90
-		curValue.PTS += 90
-		curValue.Timestamp += time.Millisecond
+		curValue.DTS = preValue.DTS + 90
+		curValue.PTS = preValue.PTS + 90
+		curValue.Timestamp = preValue.Timestamp + time.Millisecond
 		av.Info("track back online", zap.Duration("delta", av.deltaTs))
 	} else if av.deltaTs != 0 {
 		if useDts {

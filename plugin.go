@@ -219,7 +219,8 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
 	if !ok {
 		conf = EngineConfig
 	}
-	pub.GetPublisher().Config = conf.GetPublishConfig()
+	var copyConfig = *conf.GetPublishConfig()
+	pub.GetPublisher().Config = &copyConfig
 	return pub.receive(streamPath, pub)
 }
 

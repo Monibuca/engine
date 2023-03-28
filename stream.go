@@ -499,6 +499,8 @@ func (s *Stream) run() {
 					} else {
 						v.Reject(ErrBadTrackName)
 					}
+				case NoMoreTrack:
+					s.Subscribers.AbortWait()
 				case StreamAction:
 					s.action(v)
 				default:
@@ -523,6 +525,10 @@ func (s *Stream) AddTrack(t Track) (promise *util.Promise[Track]) {
 	return
 }
 
+func (s *Stream) RemoveTrack(t Track) {
+	s.Receive(TrackRemoved{t})
+}
+
 type TrackRemoved struct {
 	Track
 }
@@ -532,10 +538,7 @@ type SubPulse struct {
 }
 
 type Unsubscribe ISubscriber
-
-func (s *Stream) RemoveTrack(t Track) {
-	s.Receive(TrackRemoved{t})
-}
+type NoMoreTrack struct{}
 
 func (r *Stream) NewDataTrack(name string, locker sync.Locker) (dt *track.Data) {
 	dt = &track.Data{
