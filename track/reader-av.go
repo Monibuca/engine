@@ -125,17 +125,21 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 		r.ReadFrame()
 	}
 	r.AbsTime = uint32((r.Frame.Timestamp - r.SkipTs).Milliseconds())
+	if r.AbsTime == 0 {
+		r.AbsTime = 1
+	}
 	r.Delay = uint32((r.Track.LastValue.Timestamp - r.Frame.Timestamp).Milliseconds())
+	// fmt.Println(r.Track.Name, r.Delay)
 	// println(r.Track.Name, r.State, r.Frame.AbsTime, r.SkipTs, r.AbsTime)
 	return
 }
 func (r *AVRingReader) GetPTS32() uint32 {
-	return uint32((r.Frame.PTS - r.SkipTs * 90 / time.Millisecond))
+	return uint32((r.Frame.PTS - r.SkipTs*90/time.Millisecond))
 }
 func (r *AVRingReader) GetDTS32() uint32 {
-	return uint32((r.Frame.DTS - r.SkipTs * 90 / time.Millisecond))
+	return uint32((r.Frame.DTS - r.SkipTs*90/time.Millisecond))
 }
 func (r *AVRingReader) ResetAbsTime() {
 	r.SkipTs = r.Frame.Timestamp
-	r.AbsTime = 0
+	r.AbsTime = 1
 }

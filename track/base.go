@@ -5,6 +5,7 @@ import (
 	"unsafe"
 
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
@@ -12,19 +13,27 @@ import (
 
 type 流速控制 struct {
 	起始时间戳 time.Duration
+	起始dts time.Duration
 	等待上限  time.Duration
 	起始时间  time.Time
 }
 
-func (p *流速控制) 重置(绝对时间戳 time.Duration) {
+func (p *流速控制) 重置(绝对时间戳 time.Duration, dts time.Duration) {
 	p.起始时间 = time.Now()
 	p.起始时间戳 = 绝对时间戳
+	p.起始dts = dts
 	// println("重置", p.起始时间.Format("2006-01-02 15:04:05"), p.起始时间戳)
+}
+func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) time.Duration {
+	if dts < p.起始dts {
+		dts += 0xFFFFFFFFF
+	}
+	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
 func (p *流速控制) 时间戳差(绝对时间戳 time.Duration) time.Duration {
 	return 绝对时间戳 - p.起始时间戳
 }
-func (p *流速控制) 控制流速(绝对时间戳 time.Duration) {
+func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Duration) {
 	数据时间差, 实际时间差 := p.时间戳差(绝对时间戳), time.Since(p.起始时间)
 	// println("数据时间差", 数据时间差, "实际时间差", 实际时间差, "绝对时间戳", 绝对时间戳, "起始时间戳", p.起始时间戳, "起始时间", p.起始时间.Format("2006-01-02 15:04:05"))
 	// if 实际时间差 > 数据时间差 {
@@ -41,6 +50,8 @@ func (p *流速控制) 控制流速(绝对时间戳 time.Duration) {
 			time.Sleep(过快)
 		}
 	} else if 过快 < -100*time.Millisecond {
+		// fmt.Println("过慢毫秒", 过快.Milliseconds())
+		// p.重置(绝对时间戳, dts)
 		// println("过慢毫秒", p.name, 过快.Milliseconds())
 	}
 }
@@ -87,6 +98,10 @@ type Media struct {
 	SpesificTrack `json:"-"`
 	deltaTs       time.Duration //用于接续发布后时间戳连续
 	流速控制
+}
+
+func (av *Media) GetRBSize() int {
+	return av.RingBuffer.Size
 }
 
 func (av *Media) GetRTPFromPool() (result *util.ListItem[RTPFrame]) {
@@ -204,16 +219,29 @@ func (av *Media) AddIDR() {
 
 func (av *Media) Flush() {
 	curValue, preValue, nextValue := &av.Value, av.LastValue, av.Next()
+	useDts := curValue.Timestamp == 0
 	if av.State == TrackStateOffline {
 		av.State = TrackStateOnline
-		av.deltaTs = preValue.Timestamp - curValue.Timestamp + time.Duration(preValue.DeltaTime)*time.Millisecond
-		av.Info("track back online")
-	}
-	if av.deltaTs != 0 {
-		rtpts := av.deltaTs * 90 / 1000
-		curValue.DTS = curValue.DTS + rtpts
-		curValue.PTS = curValue.PTS + rtpts
-		curValue.Timestamp = 0
+		if useDts {
+			av.deltaTs = curValue.DTS - preValue.DTS
+			curValue.Timestamp = preValue.Timestamp + time.Millisecond
+		} else {
+			av.deltaTs = curValue.Timestamp - preValue.Timestamp
+		}
+		curValue.DTS += 90
+		curValue.PTS += 90
+		curValue.Timestamp += time.Millisecond
+		av.Info("track back online", zap.Duration("delta", av.deltaTs))
+	} else if av.deltaTs != 0 {
+		if useDts {
+			curValue.DTS -= av.deltaTs
+			curValue.PTS -= av.deltaTs
+		} else {
+			rtpts := av.deltaTs * 90 / time.Millisecond
+			curValue.DTS -= rtpts
+			curValue.PTS -= rtpts
+			curValue.Timestamp -= av.deltaTs
+		}
 	}
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
 	if bufferTime > 0 && av.IDRingList.Length > 1 && curValue.Timestamp-av.IDRingList.Next.Next.Value.Value.Timestamp > bufferTime {
@@ -232,17 +260,17 @@ func (av *Media) Flush() {
 
 	if av.起始时间.IsZero() {
 		curValue.DeltaTime = 0
-		if curValue.Timestamp == 0 {
+		if useDts {
 			curValue.Timestamp = time.Since(av.Stream.GetStartTime())
 		}
-		av.重置(curValue.Timestamp)
+		av.重置(curValue.Timestamp, curValue.DTS)
 	} else {
-		if curValue.Timestamp == 0 {
-			curValue.Timestamp = (preValue.Timestamp*90 + (curValue.DTS-preValue.DTS)*time.Millisecond) / 90
+		if useDts {
+			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
 		}
 		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
 	}
-	// fmt.Println(av.Name, curValue.DTS, curValue.Timestamp, curValue.DeltaTime)
+	// fmt.Println(av.Name, curValue.Timestamp, curValue.DeltaTime)
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {
@@ -255,7 +283,7 @@ func (av *Media) Flush() {
 	}
 	av.Base.Flush(&curValue.BaseFrame)
 	if av.等待上限 > 0 {
-		av.控制流速(curValue.Timestamp)
+		av.控制流速(curValue.Timestamp, curValue.DTS)
 	}
 	preValue = curValue
 	curValue = av.MoveNext()

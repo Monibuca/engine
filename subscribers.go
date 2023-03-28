@@ -93,7 +93,7 @@ func (s *Subscribers) Delete(suber ISubscriber) {
 	io := suber.GetSubscriber()
 	io.Info("suber -1", zap.Int("remains", s.Len()))
 	if config.Global.EnableSubEvent {
-		EventBus <- UnsubscribeEvent{suber}
+		EventBus <- UnsubscribeEvent{CreateEvent(suber)}
 	}
 }
 

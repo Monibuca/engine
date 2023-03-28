@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -164,6 +165,10 @@ func (s *Subscriber) IsPlaying() bool {
 	return s.TrackPlayer.Context != nil && s.TrackPlayer.Err() == nil
 }
 
+func (s *Subscriber) SubPulse() {
+	s.Stream.Receive(SubPulse{s})
+}
+
 func (s *Subscriber) PlayRaw() {
 	s.PlayBlock(SUBTYPE_RAW)
 }
@@ -206,11 +211,11 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
-			// println("v", frame.Sequence, frame.AbsTime, s.VideoReader.AbsTime, frame.IFrame)
+			// fmt.Println("v", frame.Sequence, s.VideoReader.AbsTime, frame.IFrame)
 			spesic.OnEvent(VideoFrame{frame, s.Video, s.VideoReader.AbsTime, s.VideoReader.GetPTS32(), s.VideoReader.GetDTS32()})
 		}
 		sendAudioFrame = func(frame *AVFrame) {
-			// println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
+			// fmt.Println("a", frame.Sequence, s.AudioReader.AbsTime)
 			spesic.OnEvent(AudioFrame{frame, s.Audio, s.AudioReader.AbsTime, s.AudioReader.GetPTS32(), s.AudioReader.GetDTS32()})
 		}
 	case SUBTYPE_RTP:
@@ -243,7 +248,8 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	case SUBTYPE_FLV:
 		flvHeadCache := make([]byte, 15) //内存复用
 		sendFlvFrame := func(t byte, ts uint32, avcc ...[]byte) {
-			// fmt.Println(ts)
+			// println(t, ts)
+			fmt.Printf("%d %X %X %d\n",t, avcc[0][0], avcc[0][1], ts)
 			flvHeadCache[0] = t
 			result := append(FLVFrame{flvHeadCache[:11]}, avcc...)
 			dataSize := uint32(util.SizeOfBuffers(avcc))
@@ -273,7 +279,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 		sendAudioFrame = func(frame *AVFrame) {
-			// println(frame.Sequence, s.AudioReader.AbsTime, frame.DeltaTime)
+			// fmt.Println(frame.Sequence, s.AudioReader.AbsTime, frame.DeltaTime)
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 	}
@@ -282,43 +288,38 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	if s.Args.Has(conf.SubModeArgName) {
 		subMode, _ = strconv.Atoi(s.Args.Get(conf.SubModeArgName))
 	}
+	var initState = 0
 	var videoFrame, audioFrame *AVFrame
-	var lastAbsTime time.Duration
-
 	for ctx.Err() == nil {
 		if hasVideo {
 			for ctx.Err() == nil {
 				s.VideoReader.Read(ctx, subMode)
-				frame := s.VideoReader.Frame
-				if frame == nil || ctx.Err() != nil {
+				videoFrame = s.VideoReader.Frame
+				if videoFrame == nil || ctx.Err() != nil {
 					return
 				}
 				// fmt.Println("video", s.VideoReader.Track.PreFrame().Sequence-frame.Sequence)
-				if frame.IFrame && s.VideoReader.DecConfChanged() {
+				if videoFrame.IFrame && s.VideoReader.DecConfChanged() {
 					s.VideoReader.ConfSeq = s.VideoReader.Track.SequenceHeadSeq
 					sendVideoDecConf()
 				}
 				if hasAudio {
 					if audioFrame != nil {
-						if frame.Timestamp > lastAbsTime {
+						if videoFrame.Timestamp > audioFrame.Timestamp {
 							// fmt.Println("switch audio", audioFrame.CanRead)
 							if audioFrame.CanRead {
 								sendAudioFrame(audioFrame)
 							}
 							audioFrame = nil
-							videoFrame = frame
-							lastAbsTime = frame.Timestamp
 							break
 						}
-					} else if lastAbsTime == 0 {
-						if lastAbsTime = frame.Timestamp; lastAbsTime != 0 {
-							videoFrame = frame
-							break
-						}
+					} else if initState++; initState >= 2 {
+						break
 					}
 				}
-				if !conf.IFrameOnly || frame.IFrame {
-					sendVideoFrame(frame)
+
+				if !conf.IFrameOnly || videoFrame.IFrame {
+					sendVideoFrame(videoFrame)
 				} else {
 					// fmt.Println("skip video", frame.Sequence)
 				}
@@ -339,8 +340,8 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					}
 				}
 				s.AudioReader.Read(ctx, subMode)
-				frame := s.AudioReader.Frame
-				if frame == nil || ctx.Err() != nil {
+				audioFrame = s.AudioReader.Frame
+				if audioFrame == nil || ctx.Err() != nil {
 					return
 				}
 				// fmt.Println("audio", s.AudioReader.Track.PreFrame().Sequence-frame.Sequence)
@@ -349,19 +350,17 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					sendAudioDecConf()
 				}
 				if hasVideo && videoFrame != nil {
-					if frame.Timestamp > lastAbsTime {
+					if audioFrame.Timestamp > videoFrame.Timestamp {
 						// fmt.Println("switch video", videoFrame.CanRead)
 						if videoFrame.CanRead {
 							sendVideoFrame(videoFrame)
 						}
 						videoFrame = nil
-						audioFrame = frame
-						lastAbsTime = frame.Timestamp
 						break
 					}
 				}
-				if frame.Timestamp >= s.AudioReader.SkipTs {
-					sendAudioFrame(frame)
+				if audioFrame.Timestamp >= s.AudioReader.SkipTs {
+					sendAudioFrame(audioFrame)
 				} else {
 					// fmt.Println("skip audio", frame.AbsTime, s.AudioReader.SkipTs)
 				}

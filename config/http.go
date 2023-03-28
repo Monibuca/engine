@@ -19,7 +19,7 @@ type HTTP struct {
 	ListenAddrTLS string
 	CertFile      string
 	KeyFile       string
-	CORS          bool //是否自动添加CORS头
+	CORS          bool `default:"true"` //是否自动添加CORS头
 	UserName      string
 	Password      string
 	ReadTimeout   time.Duration

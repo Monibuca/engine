@@ -83,6 +83,7 @@ func (b Buffer) SubBuf(start int, length int) Buffer {
 	return b[start : start+length]
 }
 
+// Malloc 扩大原来的buffer的长度，返回新增的buffer
 func (b *Buffer) Malloc(count int) Buffer {
 	l := b.Len()
 	newL := l + count
@@ -96,14 +97,14 @@ func (b *Buffer) Malloc(count int) Buffer {
 	return b.SubBuf(l, count)
 }
 
-func (b *Buffer) Reset() {
-	*b = b.SubBuf(0, 0)
+// Relloc 改变 buffer 到指定大小
+func (b *Buffer) Relloc(count int) {
+	b.Reset()
+	b.Malloc(count)
 }
 
-func (b *Buffer) Glow(n int) {
-	l := b.Len()
-	b.Malloc(n)
-	*b = b.SubBuf(0, l)
+func (b *Buffer) Reset() {
+	*b = b.SubBuf(0, 0)
 }
 
 func (b *Buffer) Split(n int) (result net.Buffers) {

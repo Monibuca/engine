@@ -41,7 +41,10 @@ func InstallPlugin(config config.Plugin) *Plugin {
 	if _, ok := Plugins[name]; ok {
 		return nil
 	}
-	if config != EngineConfig {
+	switch v := config.(type) {
+	case *GlobalConfig:
+		v.InitDefaultHttp()
+	default:
 		plugin.Logger = log.With(zap.String("plugin", name))
 		Plugins[name] = plugin
 		plugins = append(plugins, plugin)
@@ -66,6 +69,7 @@ type Plugin struct {
 	Modified           config.Config //修改过的配置项
 	*zap.Logger        `json:"-"`
 	saveTimer          *time.Timer //用于保存的时候的延迟，防抖
+	Disabled           bool
 }
 
 func (opt *Plugin) logHandler(pattern string, handler http.Handler) http.Handler {

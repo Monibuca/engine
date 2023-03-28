@@ -24,6 +24,7 @@ require (
 )
 
 require (
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/golang/mock v1.6.0 // indirect

@@ -30,9 +30,7 @@ type Video struct {
 
 func (v *Video) Attach() {
 	if v.Attached.CompareAndSwap(false, true) {
-		promise := util.NewPromise(common.Track(v))
-		v.Stream.AddTrack(promise)
-		if err := promise.Await(); err != nil {
+		if err := v.Stream.AddTrack(v).Await(); err != nil {
 			v.Error("attach video track failed", zap.Error(err))
 		} else {
 			v.Info("video track attached", zap.Uint("width", v.Width), zap.Uint("height", v.Height))

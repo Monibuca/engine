@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mcuadros/go-defaults"
+	"github.com/quic-go/quic-go"
 	"golang.org/x/net/websocket"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -121,39 +121,25 @@ type Engine struct {
 	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
 	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
 	EventBusSize        int           `default:"10"`    //事件总线大小
+	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
+	reportStream        quic.Stream   // console server connection
+	instanceId          string        // instance id 来自console
 }
 
-var Global = &Engine{
-	// Publish: Publish{true, true, false, 10, 0, 0, 0},
-	// Subscribe: Subscribe{
-	// 	SubAudio:        true,
-	// 	SubVideo:        true,
-	// 	SubVideoArgName: "vts",
-	// 	SubAudioArgName: "ats",
-	// 	SubDataArgName:  "dts",
-	// 	SubAudioTracks:  nil,
-	// 	SubVideoTracks:  nil,
-	// 	SubMode:         0,
-	// 	IFrameOnly:      false,
-	// 	WaitTimeout:     10,
-	// },
-	HTTP: HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	// RTPReorder:     true,
-	// EnableAVCC:     true,
-	// EnableRTP:      true,
-	// EnableSubEvent: true,
-	// EnableAuth:     true,
-	// Console: Console{
-	// 	"console.monibuca.com:4242", "", "", "",
-	// },
-	// LogLevel:            "info",
-	// RTPReorderBufferLen: 50,
-	// SpeedLimit:          500,
-	// EventBusSize:        10,
+func (cfg *Engine) GetEnableReport() bool {
+	return cfg.enableReport
 }
 
-func init() {
-	defaults.SetDefaults(Global)
+func (cfg *Engine) GetInstanceId() string {
+	return cfg.instanceId
+}
+
+var Global *Engine
+
+func (cfg *Engine) InitDefaultHttp() {
+	Global = cfg
+	cfg.HTTP.mux = http.DefaultServeMux
+	cfg.HTTP.ListenAddr = ":8080"
 }
 
 type myResponseWriter struct {
@@ -233,6 +219,11 @@ func (cfg *Engine) WsRemote() {
 
 func (cfg *Engine) OnEvent(event any) {
 	switch v := event.(type) {
+	case []byte:
+		if cfg.reportStream != nil {
+			cfg.reportStream.Write(v)
+			cfg.reportStream.Write([]byte{0})
+		}
 	case context.Context:
 		util.RTPReorderBufferLen = uint16(cfg.RTPReorderBufferLen)
 		if strings.HasPrefix(cfg.Console.Server, "wss") {

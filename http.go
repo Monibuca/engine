@@ -19,7 +19,7 @@ const (
 )
 
 type GlobalConfig struct {
-	*config.Engine
+	config.Engine
 }
 
 func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

@@ -3,7 +3,6 @@ package track
 import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
-	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -22,9 +21,7 @@ type Audio struct {
 
 func (a *Audio) Attach() {
 	if a.Attached.CompareAndSwap(false, true) {
-		promise := util.NewPromise(common.Track(a))
-		a.Stream.AddTrack(promise)
-		if err := promise.Await(); err != nil {
+		if err := a.Stream.AddTrack(a).Await(); err != nil {
 			a.Error("attach audio track failed", zap.Error(err))
 		} else {
 			a.Info("audio track attached", zap.Uint32("sample rate", a.SampleRate))

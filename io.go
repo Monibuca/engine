@@ -103,6 +103,10 @@ type IIO interface {
 
 // Stop 停止订阅或者发布，由订阅者或者发布者调用
 func (io *IO) Stop() {
+	if io.IsClosed() {
+		return
+	}
+	io.Debug("stop", zap.Stack("stack"))
 	if io.CancelFunc != nil {
 		io.CancelFunc()
 	}
