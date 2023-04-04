@@ -58,11 +58,19 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 					var rMessage map[string]any
 					if err = json.Unmarshal(msg[:len(msg)-1], &rMessage); err == nil {
 						if rMessage["code"].(float64) != 0 {
-							log.Error("response from console server ", cfg.Server, " ", rMessage["msg"])
+							if Global.LogLang == "zh" {
+								log.Error("控制台服务器", cfg.Server, "返回错误", rMessage["msg"])
+							} else {
+								log.Error("response from console server ", cfg.Server, " ", rMessage["msg"])
+							}
 							return nil
 						} else {
 							cfg.reportStream = stream
-							log.Info("response from console server ", cfg.Server, " success ", rMessage)
+							if Global.LogLang == "zh" {
+								log.Info("连接到控制台服务器", cfg.Server, "成功", rMessage)
+							} else {
+								log.Info("response from console server ", cfg.Server, " success ", rMessage)
+							}
 							if v, ok := rMessage["enableReport"]; ok {
 								cfg.enableReport = v.(bool)
 							}
@@ -85,7 +93,11 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 
 	if err != nil {
 		if wasConnected {
-			log.Error("connect to console server ", cfg.Server, " ", err)
+			if Global.LogLang == "zh" {
+				log.Error("连接到控制台服务器", cfg.Server, "失败", err)
+			} else {
+				log.Error("connect to console server ", cfg.Server, " ", err)
+			}
 		}
 		if ctx.Err() == nil {
 			go cfg.Remote(ctx)

@@ -29,18 +29,29 @@ func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func fetchSummary() *Summary {
+	return &summary
+}
+
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
 	if r.Header.Get("Accept") == "text/event-stream" {
 		summary.Add()
 		defer summary.Done()
-		util.ReturnJson(func() *Summary {
-			return &summary
-		}, time.Second, rw, r)
+		if format == "yaml" {
+			util.ReturnYaml(fetchSummary, time.Second, rw, r)
+		} else {
+			util.ReturnJson(fetchSummary, time.Second, rw, r)
+		}
 	} else {
 		if !summary.Running() {
 			summary.collect()
 		}
-		if err := json.NewEncoder(rw).Encode(&summary); err != nil {
+		if format == "yaml" {
+			if err := yaml.NewEncoder(rw).Encode(&summary); err != nil {
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			}
+		} else if err := json.NewEncoder(rw).Encode(&summary); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 		}
 	}

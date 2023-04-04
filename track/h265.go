@@ -46,12 +46,14 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 	case codec.NAL_UNIT_PPS:
 		vt.PPS = slice
 		vt.ParamaterSets[2] = slice
-		extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.VPS, vt.SPS, vt.PPS)
-		if err == nil {
-			vt.WriteSequenceHead(extraData)
-		} else {
-			vt.Error("H265 BuildH265SeqHeaderFromVpsSpsPps", zap.Error(err))
-			vt.Stream.Close()
+		if vt.VPS != nil && vt.SPS != nil && vt.PPS != nil {
+			extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.VPS, vt.SPS, vt.PPS)
+			if err == nil {
+				vt.WriteSequenceHead(extraData)
+			} else {
+				vt.Error("H265 BuildH265SeqHeaderFromVpsSpsPps", zap.Error(err))
+				vt.Stream.Close()
+			}
 		}
 	case
 		codec.NAL_UNIT_CODED_SLICE_BLA,

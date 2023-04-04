@@ -11,6 +11,7 @@ import (
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
@@ -35,7 +36,7 @@ type IO struct {
 	Type               string
 	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
 	context.CancelFunc `json:"-"` //流关闭是关闭发布者或者订阅者
-	*zap.Logger        `json:"-"`
+	*log.Logger        `json:"-"`
 	StartTime          time.Time //创建时间
 	Stream             *Stream   `json:"-"`
 	io.Reader          `json:"-"`
@@ -67,7 +68,7 @@ func (i *IO) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
 
-func (i *IO) SetLogger(logger *zap.Logger) {
+func (i *IO) SetLogger(logger *log.Logger) {
 	i.Logger = logger
 }
 
@@ -97,7 +98,7 @@ type IIO interface {
 	Stop()
 	SetIO(any)
 	SetParentCtx(context.Context)
-	SetLogger(*zap.Logger)
+	SetLogger(*log.Logger)
 	IsShutdown() bool
 }
 
@@ -126,7 +127,11 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
-		io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
+		if EngineConfig.LogLang == "zh" {
+			io.Error("接收流路径(流唯一标识)格式错误,必须形如 live/test ", zap.String("流路径", streamPath), zap.Error(err))
+		} else {
+			io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
+		}
 		return err
 	}
 	io.Args = u.Query()
@@ -156,6 +161,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if v, ok := specific.(IPublisher); ok {
 		conf := v.GetPublisher().Config
 		io.Type = strings.TrimSuffix(io.Type, "Publisher")
+		io.Info("publish")
 		oldPublisher := s.Publisher
 		if oldPublisher != nil && !oldPublisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
@@ -200,6 +206,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		}
 	} else {
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
+		io.Info("subscribe")
 		if create {
 			EventBus <- s // 通知发布者按需拉流
 		}

@@ -69,7 +69,7 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 			case codec.CodecID_H265:
 				p.VideoTrack = track.NewH265(p.Stream, pool)
 			default:
-				p.Stream.Error("video codecID not support: ", zap.Uint8("codeId", uint8(codecID)))
+				p.Stream.Error("video codecID not support", zap.Uint8("codeId", uint8(codecID)))
 				return
 			}
 			p.VideoTrack.WriteAVCC(ts, frame)

@@ -67,7 +67,11 @@ func (config *HTTP) Listen(ctx context.Context) error {
 	var g errgroup.Group
 	if config.ListenAddrTLS != "" && (config == &Global.HTTP || config.ListenAddrTLS != Global.ListenAddrTLS) {
 		g.Go(func() error {
-			log.Info("🌐 https listen at ", Blink(config.ListenAddrTLS))
+			if Global.LogLang == "zh" {
+				log.Info("🌐 https 监听在 ", Blink(config.ListenAddrTLS))
+			} else {
+				log.Info("🌐 https listen at ", Blink(config.ListenAddrTLS))
+			}
 			var server = http.Server{
 				Addr:         config.ListenAddrTLS,
 				ReadTimeout:  config.ReadTimeout,
@@ -80,7 +84,11 @@ func (config *HTTP) Listen(ctx context.Context) error {
 	}
 	if config.ListenAddr != "" && (config == &Global.HTTP || config.ListenAddr != Global.ListenAddr) {
 		g.Go(func() error {
-			log.Info("🌐 http listen at ", Blink(config.ListenAddr))
+			if Global.LogLang == "zh" {
+				log.Info("🌐 http 监听在 ", Blink(config.ListenAddr))
+			} else {
+				log.Info("🌐 http listen at ", Blink(config.ListenAddr))
+			}
 			var server = http.Server{
 				Addr:         config.ListenAddr,
 				ReadTimeout:  config.ReadTimeout,

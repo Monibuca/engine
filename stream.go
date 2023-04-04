@@ -160,7 +160,7 @@ func (tracks *Tracks) MarshalJSON() ([]byte, error) {
 type Stream struct {
 	timeout    *time.Timer //当前状态的超时定时器
 	actionChan util.SafeChan[any]
-	*zap.Logger
+	*log.Logger
 	StartTime time.Time //创建时间
 	StreamTimeoutConfig
 	Path        string
@@ -239,7 +239,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 			timeout:    time.NewTimer(waitTimeout),
 		}
 		s.Subscribers.Init()
-		s.Logger = log.With(zap.String("stream", streamPath))
+		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath))
 		s.Info("created")
 		Streams.Map[streamPath] = s
 		s.actionChan.Init(1)
@@ -282,7 +282,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 				waitTime = time.Millisecond * 10 //没有订阅者也没有配置发布者等待重连时间，默认10ms后关闭流
 			}
 			r.timeout.Reset(waitTime)
-			r.Debug("wait publish", zap.Duration("wait", waitTime))
+			r.Debug("wait publisher", zap.Duration("wait timeout", waitTime))
 		case STATE_PUBLISHING:
 			if len(r.SEHistory) > 1 {
 				stateEvent = SErepublish{event}
@@ -362,7 +362,7 @@ func (s *Stream) onSuberClose(sub ISubscriber) {
 // 流状态处理中枢，包括接收订阅发布指令等
 func (s *Stream) run() {
 	EventBus <- SEcreate{StreamEvent{Event[*Stream]{Target: s, Time: time.Now()}}}
-	pulseTicker := time.NewTicker(time.Second * 5)
+	pulseTicker := time.NewTicker(EngineConfig.PulseInterval)
 	defer pulseTicker.Stop()
 	pulseSuber := make(map[ISubscriber]struct{})
 	for {
@@ -387,7 +387,7 @@ func (s *Stream) run() {
 				s.Tracks.ModifyRange(func(name string, t Track) {
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
-						s.Warn("track timeout", zap.String("name", name), zap.Time("lastWriteTime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
+						s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
 						delete(s.Tracks.Map.Map, name)
 						var event TrackTimeoutEvent
 						event.Target = t

@@ -24,6 +24,7 @@ import (
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
+	"m7s.live/engine/v4/lang"
 )
 
 var (
@@ -86,19 +87,23 @@ func Run(ctx context.Context, configFile string) (err error) {
 		}
 	}
 	loglevel, err := zapcore.ParseLevel(EngineConfig.LogLevel)
+	var logger log.Logger
+	log.LocaleLogger = logger.Lang(lang.Get(EngineConfig.LogLang))
 	if err != nil {
-		log.Error("parse log level error:", err)
+		logger.Error("parse log level error:", zap.Error(err))
 		loglevel = zapcore.InfoLevel
 	}
-	log.Config.Level.SetLevel(loglevel)
-	Engine.Logger = log.With(zap.Bool("engine", true))
+	log.LogLevel.SetLevel(loglevel)
+	Engine.Logger = log.LocaleLogger.Named("engine")
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
 	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
 	Engine.assign()
-	log.With(zap.String("config", "global")).Debug("", zap.Any("config", EngineConfig))
+	Engine.Logger.Debug("", zap.Any("config", EngineConfig))
 	EventBus = make(chan any, EngineConfig.EventBusSize)
 	go EngineConfig.Listen(Engine)
 	for _, plugin := range plugins {
+		plugin.Logger = log.LocaleLogger.Named(plugin.Name)
+		plugin.Info("initialize", zap.String("version", plugin.Version))
 		userConfig := cg.GetChild(plugin.Name)
 		if userConfig != nil {
 			if b, err := yaml.Marshal(userConfig); err == nil {
@@ -124,22 +129,34 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if ver, ok := ctx.Value("version").(string); ok && ver != "" && ver != "dev" {
 		version = ver
 	}
-	log.Info("monibuca", version, Green(" start success"))
+	if EngineConfig.LogLang == "zh" {
+		log.Info("monibuca 引擎版本：", version, Green(" 启动成功"))
+	} else {
+		log.Info("monibuca", version, Green(" start success"))
+	}
 	var enabledPlugins, disabledPlugins []string
 	for _, plugin := range plugins {
-		if plugin.RawConfig["enable"] == false {
+		if plugin.RawConfig["enable"] == false || plugin.Disabled {
 			plugin.Disabled = true
 			disabledPlugins = append(disabledPlugins, plugin.Name)
 		} else {
 			enabledPlugins = append(enabledPlugins, plugin.Name)
 		}
 	}
-	fmt.Print("已运行的插件：")
+	if EngineConfig.LogLang == "zh" {
+		fmt.Print("已运行的插件：")
+	} else {
+		fmt.Print("enabled plugins：")
+	}
 	for _, plugin := range enabledPlugins {
 		fmt.Print(Colorize(" "+plugin+" ", BlackFg|GreenBg|BoldFm), " ")
 	}
 	fmt.Println()
-	fmt.Print("已禁用的插件：")
+	if EngineConfig.LogLang == "zh" {
+		fmt.Print("已禁用的插件：")
+	} else {
+		fmt.Print("disabled plugins：")
+	}
 	for _, plugin := range disabledPlugins {
 		fmt.Print(Colorize(" "+plugin+" ", BlackFg|RedBg|CrossedOutFm), " ")
 	}

@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
@@ -31,7 +32,7 @@ type AVRingReader struct {
 	Frame      *common.AVFrame
 	AbsTime    uint32
 	Delay      uint32
-	*zap.Logger
+	*log.Logger
 }
 
 func (r *AVRingReader) DecConfChanged() bool {

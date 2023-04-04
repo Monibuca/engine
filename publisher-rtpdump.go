@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aler9/gortsplib/pkg/mpeg4audio"
+	"github.com/aler9/gortsplib/v2/pkg/codecs/mpeg4audio"
 	"github.com/pion/webrtc/v3/pkg/media/rtpdump"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"

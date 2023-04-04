@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
@@ -24,24 +26,21 @@ func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWr
 	}
 }
 
-// func GetJsonHandler[T any](fetch func() T, tickDur time.Duration) http.HandlerFunc {
-// 	return func(rw http.ResponseWriter, r *http.Request) {
-// 		if r.URL.Query().Get("json") != "" {
-// 			if err := json.NewEncoder(rw).Encode(fetch()); err != nil {
-// 				rw.WriteHeader(500)
-// 			}
-// 			return
-// 		}
-// 		sse := NewSSE(rw, r.Context())
-// 		tick := time.NewTicker(tickDur)
-// 		for range tick.C {
-// 			if sse.WriteJSON(fetch()) != nil {
-// 				tick.Stop()
-// 				break
-// 			}
-// 		}
-// 	}
-// }
+func ReturnYaml[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Accept") == "text/event-stream" {
+		sse := NewSSE(rw, r.Context())
+		tick := time.NewTicker(tickDur)
+		defer tick.Stop()
+		for range tick.C {
+			if sse.WriteYAML(fetch()) != nil {
+				return
+			}
+		}
+	} else if err := yaml.NewEncoder(rw).Encode(fetch()); err != nil {
+		http.Error(rw, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 
 func ListenUDP(address string, networkBuffer int) (*net.UDPConn, error) {
 	addr, err := net.ResolveUDPAddr("udp", address)

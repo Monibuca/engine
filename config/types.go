@@ -117,10 +117,12 @@ type Engine struct {
 	EnableSubEvent bool `default:"true"` //启用订阅事件,禁用可以提高性能
 	EnableAuth     bool `default:"true"` //启用鉴权
 	Console
-	LogLevel            string        `default:"info"`
+	LogLang             string        `default:"zh"`    //日志语言
+	LogLevel            string        `default:"info"`  //日志级别
 	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
 	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
 	EventBusSize        int           `default:"10"`    //事件总线大小
+	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
 	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
 	reportStream        quic.Stream   // console server connection
 	instanceId          string        // instance id 来自console

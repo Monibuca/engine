@@ -3,6 +3,7 @@ package config
 import (
 	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -43,11 +44,11 @@ func (config Config) CreateElem(eleType reflect.Type) reflect.Value {
 }
 
 func (config Config) Unmarshal(s any) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Error("Unmarshal error:", err)
-		}
-	}()
+	// defer func() {
+	// 	if err := recover(); err != nil {
+	// 		log.Error("Unmarshal error:", err)
+	// 	}
+	// }()
 	if s == nil {
 		return
 	}
@@ -106,6 +107,13 @@ func (config Config) Unmarshal(s any) {
 					fv.SetInt(0)
 				} else if d, err := time.ParseDuration(value.String()); err == nil {
 					fv.SetInt(int64(d))
+				} else {
+					if Global.LogLang == "zh" {
+						log.Errorf("%s 无效的时间值: %v 请添加单位（s,m,h,d），例如：100ms, 10s, 4m, 1h", k, value)
+					} else {
+						log.Errorf("%s invalid duration value: %v please add unit (s,m,h,d)，eg: 100ms, 10s, 4m, 1h", k, value)
+					}
+					os.Exit(1)
 				}
 				continue
 			}
@@ -176,7 +184,11 @@ func (config Config) Merge(source Config) {
 			case Config:
 				m.Merge(v.(Config))
 			default:
-				log.Debug("merge", k, v)
+				if Global.LogLang == "zh" {
+					log.Debug("合并配置", k, ":", v)
+				} else {
+					log.Debug("merge", k, ":", v)
+				}
 				config[k] = v
 			}
 		} else {

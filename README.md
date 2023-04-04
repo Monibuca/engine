@@ -38,6 +38,7 @@
 # 引擎默认配置
 ```yaml
 global:
+  loglang: zh # 日志语言，可选值：zh,en
   loglevel: info # 日志级别，可选值：debug,info,warn,error,panic,fatal
   http:
     listenaddr: :8080 # 网关地址，用于访问API
@@ -47,28 +48,29 @@ global:
     cors: true  # 是否自动添加cors头
     username: ""  # 用户名和密码，用于API访问时的基本身份认证
     password: ""
-    readtimeout: 0 # 读取超时时间，单位秒，0为不限制
-    writetimeout: 0 # 写入超时时间，单位秒，0为不限制
-    idletimeout: 0 # 空闲超时时间，单位秒，0为不限制
+    readtimeout: 0 # 读取超时时间，0为不限制
+    writetimeout: 0 # 写入超时时间，0为不限制
+    idletimeout: 0 # 空闲超时时间，0为不限制
   publish:
       pubaudio: true # 是否发布音频流
       pubvideo: true # 是否发布视频流
       kickexist: false # 剔出已经存在的发布者，用于顶替原有发布者
-      publishtimeout: 10 # 发布流默认过期时间单位秒，超过该时间发布者没有恢复流将被删除
-      delayclosetimeout: 0 # 自动关闭触发后延迟的秒数(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
+      publishtimeout: 10s # 发布流默认过期时间，超过该时间发布者没有恢复流将被删除
+      delayclosetimeout: 0 # 自动关闭触发后延迟的时间(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
       waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
   subscribe:
       subaudio: true # 是否订阅音频流
       subvideo: true # 是否订阅视频流
       iframeonly: false # 只订阅关键帧
-      waittimeout: 10 # 等待发布者的秒数，用于订阅尚未发布的流
+      waittimeout: 10s # 等待发布者超时时间，用于订阅尚未发布的流
   enableavcc : true  # 启用AVCC格式缓存，用于rtmp协议
   enablertp : true # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enableauth: true # 启用鉴权,详细查看鉴权机制
   enablesubevent: true # 启用订阅事件，用于订阅者上下线事件,关闭可以提高性能
-  rtpreoderbufferlen: 50 # rtp乱序重排缓存长度
-  speedlimit: 0 # 限速超时时间（毫秒）0为不限速，对于读取文件这类流需要限速，否则读取过快
+  rtpreroderbufferlen: 50 # rtp乱序重排缓存长度
+  speedlimit: 500ms # 限速超时时间 0为不限速，对于读取文件这类流需要限速，否则读取过快
   eventbussize: 10 # 事件总线缓存大小，事件较多时容易堵阻塞线程，需要增大缓存
+  pulseinterval: 5s # 心跳事件间隔时间
   console: 
     server : console.monibuca.com:4242 # 连接远程控制台的地址
     secret: "" # 远程控制台的秘钥

@@ -267,7 +267,7 @@ func (av *Media) Flush() {
 		}
 		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
 	}
-	// fmt.Println(av.Name, curValue.Timestamp, curValue.DeltaTime)
+	// fmt.Println(av.Name, curValue.DTS, curValue.Timestamp, curValue.DeltaTime)
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {

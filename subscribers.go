@@ -49,7 +49,13 @@ func (s *Subscribers) Len() int {
 	return len(s.public)
 }
 
-func (s *Subscribers) RangeAll(f func(sub ISubscriber, wait *waitTracks)) {
+func (s *Subscribers) RangeAll(f func(sub ISubscriber)) {
+	s.rangeAll(func(sub ISubscriber, wait *waitTracks) {
+		f(sub)
+	})
+}
+
+func (s *Subscribers) rangeAll(f func(sub ISubscriber, wait *waitTracks)) {
 	for sub, wait := range s.internal {
 		f(sub, wait)
 	}
@@ -59,7 +65,7 @@ func (s *Subscribers) RangeAll(f func(sub ISubscriber, wait *waitTracks)) {
 }
 
 func (s *Subscribers) OnTrack(track common.Track) {
-	s.RangeAll(func(sub ISubscriber, wait *waitTracks) {
+	s.rangeAll(func(sub ISubscriber, wait *waitTracks) {
 		if _, ok := s.waits[wait]; ok {
 			if wait.Accept(track) {
 				delete(s.waits, wait)
@@ -71,7 +77,7 @@ func (s *Subscribers) OnTrack(track common.Track) {
 }
 
 func (s *Subscribers) OnPublisherLost(event StateEvent) {
-	s.RangeAll(func(sub ISubscriber, wait *waitTracks) {
+	s.rangeAll(func(sub ISubscriber, wait *waitTracks) {
 		if _, ok := s.waits[wait]; ok {
 			wait.Reject(ErrPublisherLost)
 			delete(s.waits, wait)

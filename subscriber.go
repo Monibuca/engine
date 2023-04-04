@@ -165,7 +165,7 @@ func (s *Subscriber) IsPlaying() bool {
 }
 
 func (s *Subscriber) SubPulse() {
-	s.Stream.Receive(SubPulse{s})
+	s.Stream.Receive(SubPulse{s.Spesific.(ISubscriber)})
 }
 
 func (s *Subscriber) PlayRaw() {
@@ -210,10 +210,11 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
-			// fmt.Println("v", frame.Sequence, s.VideoReader.AbsTime, frame.IFrame)
+			// fmt.Println("v", s.VideoReader.Delay)
 			spesic.OnEvent(VideoFrame{frame, s.Video, s.VideoReader.AbsTime, s.VideoReader.GetPTS32(), s.VideoReader.GetDTS32()})
 		}
 		sendAudioFrame = func(frame *AVFrame) {
+			// fmt.Println("a", s.AudioReader.Delay)
 			// fmt.Println("a", frame.Sequence, s.AudioReader.AbsTime)
 			spesic.OnEvent(AudioFrame{frame, s.Audio, s.AudioReader.AbsTime, s.AudioReader.GetPTS32(), s.AudioReader.GetDTS32()})
 		}
