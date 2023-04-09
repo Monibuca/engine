@@ -496,6 +496,12 @@ func (s *Stream) run() {
 					if s.Tracks.Add(name, v.Value) {
 						v.Resolve()
 						s.Subscribers.OnTrack(v.Value)
+						if _, ok := v.Value.(*track.Video); ok && !s.GetPublisherConfig().PubAudio {
+							s.Subscribers.AbortWait()
+						}
+						if _, ok := v.Value.(*track.Audio); ok && !s.GetPublisherConfig().PubVideo {
+							s.Subscribers.AbortWait()
+						}
 					} else {
 						v.Reject(ErrBadTrackName)
 					}

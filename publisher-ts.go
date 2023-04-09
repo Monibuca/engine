@@ -59,7 +59,16 @@ func (t *TSPublisher) ReadPES() {
 			pes.Header.Dts = pes.Header.Pts
 		}
 		switch pes.Header.StreamID & 0xF0 {
-		case mpegts.STREAM_ID_AUDIO:
+		case mpegts.STREAM_ID_VIDEO:
+			if t.VideoTrack == nil {
+				for _, s := range t.PMT.Stream {
+					t.OnPmtStream(s)
+				}
+			}
+			if t.VideoTrack != nil {
+				t.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), pes.Payload)
+			}
+		default:
 			if t.AudioTrack == nil {
 				for _, s := range t.PMT.Stream {
 					t.OnPmtStream(s)
@@ -72,15 +81,6 @@ func (t *TSPublisher) ReadPES() {
 				case *track.G711:
 					t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload)
 				}
-			}
-		case mpegts.STREAM_ID_VIDEO:
-			if t.VideoTrack == nil {
-				for _, s := range t.PMT.Stream {
-					t.OnPmtStream(s)
-				}
-			}
-			if t.VideoTrack != nil {
-				t.WriteAnnexB(uint32(pes.Header.Pts), uint32(pes.Header.Dts), pes.Payload)
 			}
 		}
 	}

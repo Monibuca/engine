@@ -168,7 +168,7 @@ func (opt *Plugin) run() {
 
 // Update 热更新配置
 func (opt *Plugin) Update(conf config.Config) {
-	conf.Unmarshal(&opt.Config)
+	conf.Unmarshal(opt.Config)
 	opt.Config.OnEvent(conf)
 }
 
