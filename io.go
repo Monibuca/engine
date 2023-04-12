@@ -75,12 +75,7 @@ func (i *IO) SetLogger(logger *log.Logger) {
 func (i *IO) OnEvent(event any) {
 	switch event.(type) {
 	case SEclose, SEKick:
-		if i.Closer != nil {
-			i.Closer.Close()
-		}
-		if i.CancelFunc != nil {
-			i.CancelFunc()
-		}
+		i.close()
 	}
 }
 
@@ -102,14 +97,23 @@ type IIO interface {
 	IsShutdown() bool
 }
 
+func (i *IO) close() bool {
+	if i.IsClosed() {
+		return false
+	}
+	if i.Closer != nil {
+		i.Closer.Close()
+	}
+	if i.CancelFunc != nil {
+		i.CancelFunc()
+	}
+	return true
+}
+
 // Stop 停止订阅或者发布，由订阅者或者发布者调用
 func (io *IO) Stop() {
-	if io.IsClosed() {
-		return
-	}
-	io.Debug("stop", zap.Stack("stack"))
-	if io.CancelFunc != nil {
-		io.CancelFunc()
+	if io.close() {
+		io.Debug("stop", zap.Stack("stack"))
 	}
 }
 

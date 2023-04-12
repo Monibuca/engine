@@ -54,6 +54,7 @@ type Subscribe struct {
 	SubMode         int           // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
 	IFrameOnly      bool          // 只要关键帧
 	WaitTimeout     time.Duration `default:"10s"`  // 等待流超时
+	WriteBufferSize int           `default:"0"`    // 写缓冲大小
 	Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
 }
 

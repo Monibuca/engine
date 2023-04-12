@@ -61,20 +61,30 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 		return
 	}
 	if p.VideoTrack == nil {
-		if frame.GetByte(1) == 0 {
-			ts = 0
-			switch codecID := codec.VideoCodecID(frame.GetByte(0) & 0x0F); codecID {
-			case codec.CodecID_H264:
-				p.VideoTrack = track.NewH264(p.Stream, pool)
-			case codec.CodecID_H265:
+		b0 := frame.GetByte(0)
+		// https://github.com/veovera/enhanced-rtmp/blob/main/enhanced-rtmp-v1.pdf
+		if isExtHeader := b0 & 0b1000_0000; isExtHeader != 0 {
+			fourCC := frame.GetUintN(1,4)
+			if fourCC == codec.FourCC_H265_32 {
 				p.VideoTrack = track.NewH265(p.Stream, pool)
-			default:
-				p.Stream.Error("video codecID not support", zap.Uint8("codeId", uint8(codecID)))
-				return
+				p.VideoTrack.WriteAVCC(ts, frame)
 			}
-			p.VideoTrack.WriteAVCC(ts, frame)
 		} else {
-			p.Stream.Warn("need sequence frame")
+			if frame.GetByte(1) == 0 {
+				ts = 0
+				switch codecID := codec.VideoCodecID(b0 & 0x0F); codecID {
+				case codec.CodecID_H264:
+					p.VideoTrack = track.NewH264(p.Stream, pool)
+				case codec.CodecID_H265:
+					p.VideoTrack = track.NewH265(p.Stream, pool)
+				default:
+					p.Stream.Error("video codecID not support", zap.Uint8("codeId", uint8(codecID)))
+					return
+				}
+				p.VideoTrack.WriteAVCC(ts, frame)
+			} else {
+				p.Stream.Warn("need sequence frame")
+			}
 		}
 	} else {
 		p.VideoTrack.WriteAVCC(ts, frame)

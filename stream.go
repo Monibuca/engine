@@ -359,19 +359,30 @@ func (s *Stream) onSuberClose(sub ISubscriber) {
 	}
 }
 
+func (s *Stream) checkRunCost(timeStart time.Time, timeOutInfo zap.Field) {
+	if cost := time.Since(timeStart); cost > 100*time.Millisecond {
+		s.Warn("run timeout", timeOutInfo, zap.Duration("cost", cost))
+	}
+}
+
 // 流状态处理中枢，包括接收订阅发布指令等
 func (s *Stream) run() {
 	EventBus <- SEcreate{StreamEvent{Event[*Stream]{Target: s, Time: time.Now()}}}
 	pulseTicker := time.NewTicker(EngineConfig.PulseInterval)
 	defer pulseTicker.Stop()
-	pulseSuber := make(map[ISubscriber]struct{})
-	for {
+	var timeOutInfo zap.Field
+	var timeStart time.Time
+	for pulseSuber := make(map[ISubscriber]struct{}); ; s.checkRunCost(timeStart, timeOutInfo) {
 		select {
 		case <-pulseTicker.C:
+			timeStart = time.Now()
+			timeOutInfo = zap.String("type", "pulse")
 			for sub := range pulseSuber {
 				sub.OnEvent(PulseEvent{CreateEvent(struct{}{})})
 			}
 		case <-s.timeout.C:
+			timeStart = time.Now()
+			timeOutInfo = zap.String("state", StateNames[s.State])
 			if s.State == STATE_PUBLISHING {
 				for sub := range s.Subscribers.internal {
 					if sub.IsClosed() {
@@ -406,10 +417,12 @@ func (s *Stream) run() {
 					s.Subscribers.AbortWait()
 				}
 			} else {
-				s.Debug("timeout", zap.String("state", StateNames[s.State]))
+				s.Debug("timeout", timeOutInfo)
 				s.action(ACTION_TIMEOUT)
 			}
 		case action, ok := <-s.actionChan.C:
+			timeStart = time.Now()
+			timeOutInfo = zap.Any("action", action)
 			if ok {
 				switch v := action.(type) {
 				case SubPulse:
@@ -510,7 +523,7 @@ func (s *Stream) run() {
 				case StreamAction:
 					s.action(v)
 				default:
-					s.Error("unknown action", zap.Any("action", action))
+					s.Error("unknown action", timeOutInfo)
 				}
 			} else {
 				s.Subscribers.Dispose()

@@ -124,7 +124,7 @@ func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) (e error) {
 	if err != nil {
 		return err
 	}
-	b = b >> 4
+	b = (b >> 4) & 0b0111
 	vt.Value.IFrame = b == 1 || b == 4
 	r.ReadByte() //sequence frame flag
 	cts, err := r.ReadBE(3)

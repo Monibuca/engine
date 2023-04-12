@@ -9,13 +9,13 @@ import (
 type TSPublisher struct {
 	Publisher
 	mpegts.MpegTsStream
-	adts []byte
 }
 
 func (t *TSPublisher) OnEvent(event any) {
 	switch v := event.(type) {
 	case IPublisher:
 		t.PESChan = make(chan *mpegts.MpegTsPESPacket, 50)
+		t.PESBuffer = make(map[uint16]*mpegts.MpegTsPESPacket)
 		go t.ReadPES()
 		if !t.Equal(v) {
 			t.AudioTrack = v.getAudioTrack()

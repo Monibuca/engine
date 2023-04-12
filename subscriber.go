@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
@@ -121,7 +122,12 @@ type Subscriber struct {
 func (s *Subscriber) GetSubscriber() *Subscriber {
 	return s
 }
-
+func (s *Subscriber) SetIO(i any) {
+	s.IO.SetIO(i)
+	if s.Writer != nil && s.Config != nil && s.Config.WriteBufferSize > 0 {
+		s.Writer = bufio.NewWriterSize(s.Writer, s.Config.WriteBufferSize)
+	}
+}
 func (s *Subscriber) OnEvent(event any) {
 	switch v := event.(type) {
 	case Track: //默认接受所有track
