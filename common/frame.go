@@ -59,15 +59,15 @@ type DataFrame[T any] struct {
 type AVFrame struct {
 	BaseFrame
 	IFrame    bool
-	CanRead   bool `json:"-"`
+	CanRead   bool `json:"-" yaml:"-"`
 	PTS       time.Duration
 	DTS       time.Duration
 	Timestamp time.Duration               // 绝对时间戳
-	ADTS      *util.ListItem[util.Buffer] `json:"-"` // ADTS头
-	AVCC      util.BLL                    `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
-	RTP       util.List[RTPFrame]         `json:"-"`
-	AUList    util.BLLs                   `json:"-"` // 裸数据
-	Extras    any                         `json:"-"` // 任意扩展数据
+	ADTS      *util.ListItem[util.Buffer] `json:"-" yaml:"-"` // ADTS头
+	AVCC      util.BLL                    `json:"-" yaml:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
+	RTP       util.List[RTPFrame]         `json:"-" yaml:"-"`
+	AUList    util.BLLs                   `json:"-" yaml:"-"` // 裸数据
+	Extras    any                         `json:"-" yaml:"-"` // 任意扩展数据
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {

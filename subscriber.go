@@ -116,7 +116,7 @@ type Subscriber struct {
 	IO
 	IsInternal  bool //是否内部订阅,不放入订阅列表
 	Config      *config.Subscribe
-	TrackPlayer `json:"-"`
+	TrackPlayer `json:"-" yaml:"-"`
 }
 
 func (s *Subscriber) GetSubscriber() *Subscriber {

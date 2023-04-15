@@ -66,6 +66,7 @@ type Pull struct {
 	RePull      int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
 	PullOnStart map[string]string // 启动时拉流的列表
 	PullOnSub   map[string]string // 订阅时自动拉流的列表
+	Proxy       string            // 代理地址
 }
 
 func (p *Pull) GetPullConfig() *Pull {
@@ -89,6 +90,7 @@ func (p *Pull) AddPullOnSub(streamPath string, url string) {
 type Push struct {
 	RePush   int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
 	PushList map[string]string // 自动推流列表
+	Proxy    string            // 代理地址
 }
 
 func (p *Push) GetPushConfig() *Push {

@@ -18,6 +18,8 @@ name:     名称
 state:    状态
 initialize: 初始化
 "start read": 开始读取
+"start pull": 开始从远端拉流
+"pull failed": 拉取失败
 "wait publisher": 等待发布者发布
 "wait timeout": 等待超时
 created:  已创建
@@ -39,10 +41,10 @@ reamins:  剩余
 "http handle added": http处理器已添加
 "http handle added to engine": http处理器已添加到引擎
 "plugin disabled": 插件已禁用
-"pull failed": 拉取失败
 "audio codec not support yet": 音频编码暂不支持
 "video track attached": 视频轨道已附加
 "audio track attached": 音频轨道已附加
+"data track attached": 数据轨道已附加
 "first frame read": 第一帧已读取
 firstTs:  第一帧时间戳
 firstSeq: 第一帧序列号

@@ -5,7 +5,7 @@ import (
 )
 
 type RingBuffer[T any] struct {
-	*util.Ring[T] `json:"-"`
+	*util.Ring[T] `json:"-" yaml:"-"`
 	Size          int
 	MoveCount     uint32
 	LastValue     *T

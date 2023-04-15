@@ -34,16 +34,16 @@ type AuthPub interface {
 type IO struct {
 	ID                 string
 	Type               string
-	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
-	context.CancelFunc `json:"-"` //流关闭是关闭发布者或者订阅者
-	*log.Logger        `json:"-"`
+	context.Context    `json:"-" yaml:"-"` //不要直接设置，应当通过OnEvent传入父级Context
+	context.CancelFunc `json:"-" yaml:"-"`          //流关闭是关闭发布者或者订阅者
+	*log.Logger        `json:"-" yaml:"-"`
 	StartTime          time.Time //创建时间
-	Stream             *Stream   `json:"-"`
-	io.Reader          `json:"-"`
-	io.Writer          `json:"-"`
-	io.Closer          `json:"-"`
+	Stream             *Stream   `json:"-" yaml:"-"`
+	io.Reader          `json:"-" yaml:"-"`
+	io.Writer          `json:"-" yaml:"-"`
+	io.Closer          `json:"-" yaml:"-"`
 	Args               url.Values
-	Spesific           IIO `json:"-"`
+	Spesific           IIO `json:"-" yaml:"-"`
 }
 
 func (io *IO) IsClosed() bool {

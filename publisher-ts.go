@@ -8,7 +8,7 @@ import (
 
 type TSPublisher struct {
 	Publisher
-	mpegts.MpegTsStream
+	mpegts.MpegTsStream `json:"-" yaml:"-"`
 }
 
 func (t *TSPublisher) OnEvent(event any) {
@@ -21,6 +21,9 @@ func (t *TSPublisher) OnEvent(event any) {
 			t.AudioTrack = v.getAudioTrack()
 			t.VideoTrack = v.getVideoTrack()
 		}
+	case SEKick, SEclose:
+		close(t.PESChan)
+		t.Publisher.OnEvent(event)
 	default:
 		t.Publisher.OnEvent(event)
 	}

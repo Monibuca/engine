@@ -396,6 +396,9 @@ func (s *Stream) run() {
 					}
 				}
 				s.Tracks.ModifyRange(func(name string, t Track) {
+					if _, ok := t.(*track.Data); ok {
+						return
+					}
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
 						s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
@@ -422,12 +425,13 @@ func (s *Stream) run() {
 			}
 		case action, ok := <-s.actionChan.C:
 			timeStart = time.Now()
-			timeOutInfo = zap.Any("action", action)
 			if ok {
 				switch v := action.(type) {
 				case SubPulse:
+					timeOutInfo = zap.String("action", "SubPulse")
 					pulseSuber[v] = struct{}{}
 				case *util.Promise[IPublisher]:
+					timeOutInfo = zap.String("action", "Publish")
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
@@ -441,6 +445,7 @@ func (s *Stream) run() {
 						v.Reject(ErrBadStreamName)
 					}
 				case *util.Promise[ISubscriber]:
+					timeOutInfo = zap.String("action", "Subscribe")
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
@@ -487,9 +492,11 @@ func (s *Stream) run() {
 						s.action(ACTION_FIRSTENTER)
 					}
 				case Unsubscribe:
+					timeOutInfo = zap.String("action", "Unsubscribe")
 					delete(pulseSuber, v)
 					s.onSuberClose(v)
 				case TrackRemoved:
+					timeOutInfo = zap.String("action", "TrackRemoved")
 					name := v.GetBase().Name
 					if t, ok := s.Tracks.Delete(name); ok {
 						s.Info("track -1", zap.String("name", name))
@@ -502,6 +509,7 @@ func (s *Stream) run() {
 						}
 					}
 				case *util.Promise[Track]:
+					timeOutInfo = zap.String("action", "Track")
 					if s.State == STATE_WAITPUBLISH {
 						s.action(ACTION_PUBLISH)
 					}
@@ -521,8 +529,10 @@ func (s *Stream) run() {
 				case NoMoreTrack:
 					s.Subscribers.AbortWait()
 				case StreamAction:
+					timeOutInfo = zap.String("action", "StreamAction")
 					s.action(v)
 				default:
+					timeOutInfo = zap.String("action", "unknown")
 					s.Error("unknown action", timeOutInfo)
 				}
 			} else {

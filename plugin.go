@@ -56,16 +56,16 @@ type DefaultYaml string
 
 // Plugin 插件信息
 type Plugin struct {
-	context.Context    `json:"-"`
-	context.CancelFunc `json:"-"`
+	context.Context    `json:"-" yaml:"-"`
+	context.CancelFunc `json:"-" yaml:"-"`
 	Name               string        //插件名称
-	Config             config.Plugin `json:"-"` //类型化的插件配置
+	Config             config.Plugin `json:"-" yaml:"-"` //类型化的插件配置
 	Version            string        //插件版本
 	Yaml               string        //配置文件中的配置项
 	modifiedYaml       string        //修改过的配置的yaml文件内容
 	RawConfig          config.Config //最终合并后的配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
-	*log.Logger        `json:"-"`
+	*log.Logger        `json:"-" yaml:"-"`
 	saveTimer          *time.Timer //用于保存的时候的延迟，防抖
 	Disabled           bool
 }

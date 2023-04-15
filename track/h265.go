@@ -14,7 +14,7 @@ var _ SpesificTrack = (*H265)(nil)
 
 type H265 struct {
 	Video
-	VPS []byte `json:"-"`
+	VPS []byte `json:"-" yaml:"-"`
 }
 
 func NewH265(stream IStream, stuff ...any) (vt *H265) {

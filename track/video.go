@@ -23,9 +23,9 @@ type Video struct {
 	dtsEst      *DTSEstimator
 	lostFlag    bool // 是否丢帧
 	codec.SPSInfo
-	ParamaterSets `json:"-"`
-	SPS           []byte `json:"-"`
-	PPS           []byte `json:"-"`
+	ParamaterSets `json:"-" yaml:"-"`
+	SPS           []byte `json:"-" yaml:"-"`
+	PPS           []byte `json:"-" yaml:"-"`
 }
 
 func (v *Video) Attach() {

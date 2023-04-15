@@ -21,8 +21,8 @@ var _ IPublisher = (*Publisher)(nil)
 type Publisher struct {
 	IO
 	Config            *config.Publish
-	common.AudioTrack `json:"-"`
-	common.VideoTrack `json:"-"`
+	common.AudioTrack `json:"-" yaml:"-"`
+	common.VideoTrack `json:"-" yaml:"-"`
 }
 
 func (p *Publisher) GetPublisher() *Publisher {
@@ -64,7 +64,7 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 		b0 := frame.GetByte(0)
 		// https://github.com/veovera/enhanced-rtmp/blob/main/enhanced-rtmp-v1.pdf
 		if isExtHeader := b0 & 0b1000_0000; isExtHeader != 0 {
-			fourCC := frame.GetUintN(1,4)
+			fourCC := frame.GetUintN(1, 4)
 			if fourCC == codec.FourCC_H265_32 {
 				p.VideoTrack = track.NewH265(p.Stream, pool)
 				p.VideoTrack.WriteAVCC(ts, frame)

@@ -8,7 +8,7 @@ import (
 
 type Event[T any] struct {
 	Time   time.Time
-	Target T `json:"-"`
+	Target T `json:"-" yaml:"-"`
 }
 
 func CreateEvent[T any](target T) (event Event[T]) {

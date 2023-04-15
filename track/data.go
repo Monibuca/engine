@@ -33,6 +33,7 @@ func (dt *Data) Push(data any) {
 		dt.Lock()
 		defer dt.Unlock()
 	}
+	dt.Value.WriteTime = time.Now()
 	dt.Write(data)
 }
 

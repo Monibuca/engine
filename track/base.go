@@ -85,15 +85,15 @@ type Media struct {
 	Base
 	RingBuffer[AVFrame]
 	PayloadType     byte
-	IDRingList      `json:"-"` //最近的关键帧位置，首屏渲染
+	IDRingList      `json:"-" yaml:"-"` //最近的关键帧位置，首屏渲染
 	SSRC            uint32
 	SampleRate      uint32
-	BytesPool       util.BytesPool      `json:"-"`
-	RtpPool         util.Pool[RTPFrame] `json:"-"`
-	SequenceHead    []byte              `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	BytesPool       util.BytesPool      `json:"-" yaml:"-"`
+	RtpPool         util.Pool[RTPFrame] `json:"-" yaml:"-"`
+	SequenceHead    []byte              `json:"-" yaml:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	SequenceHeadSeq int
 	RTPDemuxer
-	SpesificTrack `json:"-"`
+	SpesificTrack `json:"-" yaml:"-"`
 	deltaTs       time.Duration //用于接续发布后时间戳连续
 	流速控制
 }

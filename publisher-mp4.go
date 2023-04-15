@@ -10,7 +10,7 @@ import (
 
 type MP4Publisher struct {
 	Publisher
-	*mp4.MovDemuxer `json:"-"`
+	*mp4.MovDemuxer `json:"-" yaml:"-"`
 }
 
 // Start reading the MP4 file

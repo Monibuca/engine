@@ -24,9 +24,9 @@ const (
 // Base 基础Track类
 type Base struct {
 	Name     string
-	log.Zap  `json:"-"`
-	Stream   IStream     `json:"-"`
-	Attached atomic.Bool `json:"-"`
+	log.Zap  `json:"-" yaml:"-"`
+	Stream   IStream     `json:"-" yaml:"-"`
+	Attached atomic.Bool `json:"-" yaml:"-"`
 	State    TrackState
 	ts       time.Time
 	bytes    int
