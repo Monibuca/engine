@@ -17,6 +17,8 @@ func (av *Media) WriteRTPPack(p *rtp.Packet) {
 	frame.Packet = p
 	av.Value.BytesIn += len(frame.Payload) + 12
 	av.Value.RTP.PushValue(frame)
+	av.lastSeq2 = av.lastSeq
+	av.lastSeq = frame.SequenceNumber
 	if len(p.Payload) > 0 {
 		av.WriteRTPFrame(&frame)
 	}
