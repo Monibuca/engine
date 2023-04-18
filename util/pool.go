@@ -3,6 +3,7 @@ package util
 import (
 	"io"
 	"net"
+	"sync"
 )
 
 type Recyclable interface {
@@ -113,6 +114,10 @@ func (list *BLLs) PushValue(item *BLL) {
 	list.ByteLength += item.ByteLength
 }
 
+func (list *BLLs) PushShell(b []byte) {
+	list.Push(GetShell(b))
+}
+
 func (list *BLLs) Push(item *ListItem[Buffer]) {
 	if list == nil {
 		return
@@ -174,12 +179,16 @@ func (list *BLL) NewReader() *BLLReader {
 	return &BLLReader{list.Next, 0}
 }
 
-// func (list *BLL) Concat(list2 BLL) {
-// 	list.Tail.Next = list2.Head
-// 	list.Tail = list2.Tail
-// 	list.Length += list2.Length
-// 	list.ByteLength += list2.ByteLength
-// }
+//	func (list *BLL) Concat(list2 BLL) {
+//		list.Tail.Next = list2.Head
+//		list.Tail = list2.Tail
+//		list.Length += list2.Length
+//		list.ByteLength += list2.ByteLength
+//	}
+
+func (list *BLL) PushShell(b Buffer) {
+	list.Push(GetShell(b))
+}
 
 func (list *BLL) Push(item *ListItem[Buffer]) {
 	if list == nil {
@@ -262,45 +271,63 @@ func (list *BLL) GetUintN(index int, n int) (result uint32) {
 // 	return
 // }
 
-type BytesPool []List[Buffer]
+type BytesPool []*sync.Pool
+
+var DefaultBytesPool = make(BytesPool, 17)
+
+func init() {
+	for i := 0; i < len(DefaultBytesPool); i++ {
+		pool := &sync.Pool{}
+		pool.New = func() interface{} {
+			return &ListItem[Buffer]{Value: make(Buffer, 1<<i), Pool: pool}
+		}
+		DefaultBytesPool[i] = pool
+	}
+}
+
+func GetShell(b []byte) (item *ListItem[Buffer]) {
+	return DefaultBytesPool.GetShell(b)
+}
+
+func GetBLI(size int) *ListItem[Buffer] {
+	return DefaultBytesPool.Get(size)
+}
 
 // 获取来自真实内存的切片的——假内存块，即只回收外壳
 func (p BytesPool) GetShell(b []byte) (item *ListItem[Buffer]) {
 	if len(p) == 0 {
 		return &ListItem[Buffer]{Value: b}
 	}
-	item = p[0].PoolShift()
+	item = p[0].Get().(*ListItem[Buffer])
+	item.Pool = p[0]
 	item.Value = b
 	return
 }
 
-func (p BytesPool) Get(size int) (item *ListItem[Buffer]) {
+func (p BytesPool) Get(size int) (mem *ListItem[Buffer]) {
 	for i := 1; i < len(p); i++ {
 		if level := 1 << i; level >= size {
-			if item = p[i].PoolShift(); cap(item.Value) > 0 {
-				item.Value = item.Value.SubBuf(0, size)
-			} else {
-				item.Value = make(Buffer, size, level)
-			}
+			mem = p[i].Get().(*ListItem[Buffer])
+			mem.Pool = p[i]
+			mem.Value.Relloc(size)
 			return
 		}
 	}
 	// Pool 中没有就无法回收
-	if item == nil {
-		item = &ListItem[Buffer]{
+	if mem == nil {
+		mem = &ListItem[Buffer]{
 			Value: make(Buffer, size),
 		}
 	}
 	return
 }
 
-type Pool[T any] List[T]
+type Pool[T any] sync.Pool
 
-func (p *Pool[T]) Get() (item *ListItem[T]) {
-	if item = (*List[T])(p).PoolShift(); item == nil {
-		item = &ListItem[T]{
-			Pool: (*List[T])(p),
-		}
-	}
-	return
+func (p *Pool[T]) Get() (v *T) {
+	return ((*sync.Pool)(p)).Get().(*T)
+}
+
+func (p *Pool[T]) Put(v *T) {
+	((*sync.Pool)(p)).Put(v)
 }

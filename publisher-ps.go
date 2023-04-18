@@ -23,7 +23,6 @@ type PSPublisher struct {
 	// *mpegps.PSDemuxer `json:"-" yaml:"-"`
 	mpegps.DecPSPackage `json:"-" yaml:"-"`
 	reorder             util.RTPReorder[*cacheItem]
-	pool                util.BytesPool
 	lastSeq             uint16
 }
 
@@ -32,19 +31,18 @@ func (p *PSPublisher) PushPS(rtp *rtp.Packet) {
 	if p.Stream == nil {
 		return
 	}
-	if p.pool == nil {
+	if p.EsHandler == nil {
 		// p.PSDemuxer = mpegps.NewPSDemuxer()
 		// p.PSDemuxer.OnPacket = p.OnPacket
 		// p.PSDemuxer.OnFrame = p.OnFrame
 		p.EsHandler = p
 		p.lastSeq = rtp.SequenceNumber - 1
-		p.pool = make(util.BytesPool, 17)
 	}
 	if p.DisableReorder {
 		p.Feed(rtp.Payload)
 		p.lastSeq = rtp.SequenceNumber
 	} else {
-		item := p.pool.Get(len(rtp.Payload))
+		item := util.GetBLI(len(rtp.Payload))
 		copy(item.Value, rtp.Payload)
 		for rtpPacket := p.reorder.Push(rtp.SequenceNumber, &cacheItem{rtp.SequenceNumber, item}); rtpPacket != nil; rtpPacket = p.reorder.Pop() {
 			if rtpPacket.Seq != p.lastSeq+1 {

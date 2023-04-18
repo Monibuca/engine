@@ -105,8 +105,9 @@ func (vt *H264) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 
 func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 	if vt.lastSeq != vt.lastSeq2+1 && vt.lastSeq2 != 0 {
+		vt.Drop(int(vt.lastSeq - vt.lastSeq2))
 		vt.lostFlag = true
-		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq), zap.Uint16("lastSeq2", vt.lastSeq2))
+		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq2), zap.Uint16("now", vt.lastSeq))
 	}
 	rv := &vt.Value
 	if naluType := frame.H264Type(); naluType < 24 {
@@ -124,13 +125,14 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 				}
 			}
 		case codec.NALU_FUA, codec.NALU_FUB:
+			// fmt.Println(frame.SequenceNumber, util.Bit1(frame.Payload[1], 0), util.Bit1(frame.Payload[1], 1), frame.Marker)
 			if util.Bit1(frame.Payload[1], 0) {
 				vt.WriteSliceByte(naluType.Parse(frame.Payload[1]).Or(frame.Payload[0] & 0x60))
 			}
 			if rv.AUList.Pre != nil && rv.AUList.Pre.Value != nil {
-				rv.AUList.Pre.Value.Push(vt.BytesPool.GetShell(frame.Payload[naluType.Offset():]))
+				rv.AUList.Pre.Value.PushShell(frame.Payload[naluType.Offset():])
 			} else {
-				vt.Error("fu have no start")
+				vt.Warn("fu have no start")
 				return
 			}
 		}

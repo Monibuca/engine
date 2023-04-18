@@ -56,7 +56,7 @@ func (p *Publisher) OnEvent(event any) {
 	}
 }
 
-func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPool) {
+func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL) {
 	if frame.ByteLength < 6 {
 		return
 	}
@@ -66,7 +66,7 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 		if isExtHeader := b0 & 0b1000_0000; isExtHeader != 0 {
 			fourCC := frame.GetUintN(1, 4)
 			if fourCC == codec.FourCC_H265_32 {
-				p.VideoTrack = track.NewH265(p.Stream, pool)
+				p.VideoTrack = track.NewH265(p.Stream)
 				p.VideoTrack.WriteAVCC(ts, frame)
 			}
 		} else {
@@ -74,9 +74,9 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 				ts = 0
 				switch codecID := codec.VideoCodecID(b0 & 0x0F); codecID {
 				case codec.CodecID_H264:
-					p.VideoTrack = track.NewH264(p.Stream, pool)
+					p.VideoTrack = track.NewH264(p.Stream)
 				case codec.CodecID_H265:
-					p.VideoTrack = track.NewH265(p.Stream, pool)
+					p.VideoTrack = track.NewH265(p.Stream)
 				default:
 					p.Stream.Error("video codecID not support", zap.Uint8("codeId", uint8(codecID)))
 					return
@@ -91,7 +91,7 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 	}
 }
 
-func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPool) {
+func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL) {
 	if frame.ByteLength < 4 {
 		return
 	}
@@ -102,7 +102,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPo
 			if frame.GetByte(1) != 0 {
 				return
 			}
-			a := track.NewAAC(p.Stream, pool)
+			a := track.NewAAC(p.Stream)
 			p.AudioTrack = a
 			a.AVCCHead = []byte{frame.GetByte(0), 1}
 			a.WriteAVCC(0, frame)
@@ -112,7 +112,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPo
 			if codecID == codec.CodecID_PCMU {
 				alaw = false
 			}
-			a := track.NewG711(p.Stream, alaw, pool)
+			a := track.NewG711(p.Stream, alaw)
 			p.AudioTrack = a
 			a.Audio.SampleRate = uint32(codec.SoundRate[(b0&0x0c)>>2])
 			if b0&0x02 == 0 {

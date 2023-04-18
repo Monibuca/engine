@@ -209,7 +209,7 @@ func (vt *Video) SetLostFlag() {
 	vt.lostFlag = true
 }
 func (vt *Video) CompleteAVCC(rv *AVFrame) {
-	mem := vt.BytesPool.Get(5)
+	mem := util.GetBLI(5)
 	b := mem.Value
 	if rv.IFrame {
 		b[0] = 0x10 | byte(vt.CodecID)
@@ -226,12 +226,12 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	// }
 	// var tmp = 0
 	rv.AUList.Range(func(au *util.BLL) bool {
-		mem = vt.BytesPool.Get(4)
+		mem = util.GetBLI(4)
 		// println(au.ByteLength)
 		util.PutBE(mem.Value, uint32(au.ByteLength))
 		rv.AVCC.Push(mem)
 		au.Range(func(slice util.Buffer) bool {
-			rv.AVCC.Push(vt.BytesPool.GetShell(slice))
+			rv.AVCC.PushShell(slice)
 			return true
 		})
 		// tmp += 4 + au.ByteLength

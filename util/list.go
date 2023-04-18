@@ -1,5 +1,7 @@
 package util
 
+import "sync"
+
 // 带回收功能的泛型双向链表
 
 type IList[T any] interface {
@@ -11,7 +13,7 @@ type IList[T any] interface {
 type ListItem[T any] struct {
 	Value     T
 	Next, Pre *ListItem[T]
-	Pool      *List[T] // 回收池
+	Pool      *sync.Pool // 回收池
 	list      *List[T]
 }
 
@@ -49,8 +51,9 @@ func (item *ListItem[T]) IsRoot() bool {
 }
 
 func (item *ListItem[T]) Recycle() {
-	if item.list != item.Pool && item.Pool != nil {
-		item.Pool.Push(item)
+	if pool := item.Pool; pool != nil {
+		item.Pool = nil //防止重复回收
+		pool.Put(item)
 	}
 }
 
@@ -104,13 +107,6 @@ func (p *List[T]) Unshift(item *ListItem[T]) {
 
 func (p *List[T]) ShiftValue() T {
 	return p.Shift().Value
-}
-
-func (p *List[T]) PoolShift() (head *ListItem[T]) {
-	if head = p.Shift(); head == nil {
-		head = &ListItem[T]{Pool: p}
-	}
-	return
 }
 
 func (p *List[T]) Shift() (head *ListItem[T]) {

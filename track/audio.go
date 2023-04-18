@@ -48,7 +48,7 @@ func (av *Audio) WriteADTS(pts uint32, adts []byte) {
 
 func (av *Audio) Flush() {
 	if av.CodecID == codec.CodecID_AAC && av.Value.ADTS == nil {
-		item := av.BytesPool.Get(7)
+		item := util.GetBLI(7)
 		av.ToADTS(av.Value.AUList.ByteLength, item.Value)
 		av.Value.ADTS = item
 	}
@@ -58,7 +58,7 @@ func (av *Audio) Flush() {
 func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	curValue := &av.Value
 	curValue.BytesIn += len(raw)
-	curValue.AUList.Push(av.BytesPool.GetShell(raw))
+	curValue.AUList.PushShell(raw)
 	av.generateTimestamp(pts)
 	av.Flush()
 }
@@ -70,10 +70,10 @@ func (av *Audio) WriteAVCC(ts uint32, frame *util.BLL) {
 }
 
 func (a *Audio) CompleteAVCC(value *AVFrame) {
-	value.AVCC.Push(a.BytesPool.GetShell(a.AVCCHead))
+	value.AVCC.PushShell(a.AVCCHead)
 	value.AUList.Range(func(v *util.BLL) bool {
 		v.Range(func(v util.Buffer) bool {
-			value.AVCC.Push(a.BytesPool.GetShell(v))
+			value.AVCC.PushShell(v)
 			return true
 		})
 		return true

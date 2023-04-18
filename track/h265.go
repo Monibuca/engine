@@ -131,6 +131,11 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 }
 
 func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
+	if vt.lastSeq != vt.lastSeq2+1 && vt.lastSeq2 != 0 {
+		vt.Drop(int(vt.lastSeq - vt.lastSeq2))
+		vt.lostFlag = true
+		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq2), zap.Uint16("now", vt.lastSeq))
+	}
 	rv := &vt.Value
 	// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
 	var usingDonlField bool
@@ -165,7 +170,7 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 			vt.WriteSliceByte(first3[0]&0b10000001|(naluType<<1), first3[1])
 		}
 		if rv.AUList.Pre != nil {
-			rv.AUList.Pre.Value.Push(vt.BytesPool.GetShell(buffer))
+			rv.AUList.Pre.Value.PushShell(buffer)
 		}
 	default:
 		vt.WriteSliceBytes(frame.Payload)

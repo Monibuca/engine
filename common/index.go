@@ -52,7 +52,9 @@ func (bt *Base) ComputeBPS(bytes int) {
 		bt.ts = time.Now()
 	}
 }
-
+func (bt *Base) Drop(count int) {
+	bt.drops += count
+}
 func (bt *Base) GetBase() *Base {
 	return bt
 }

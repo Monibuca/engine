@@ -1,6 +1,7 @@
 package track
 
 import (
+	"sync"
 	"time"
 	"unsafe"
 
@@ -88,9 +89,8 @@ type Media struct {
 	IDRingList      `json:"-" yaml:"-"` //最近的关键帧位置，首屏渲染
 	SSRC            uint32
 	SampleRate      uint32
-	BytesPool       util.BytesPool      `json:"-" yaml:"-"`
-	RtpPool         util.Pool[RTPFrame] `json:"-" yaml:"-"`
-	SequenceHead    []byte              `json:"-" yaml:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	RtpPool         *util.Pool[util.ListItem[RTPFrame]] `json:"-" yaml:"-"`
+	SequenceHead    []byte                              `json:"-" yaml:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	SequenceHeadSeq int
 	RTPDemuxer
 	SpesificTrack `json:"-" yaml:"-"`
@@ -104,6 +104,7 @@ func (av *Media) GetRBSize() int {
 
 func (av *Media) GetRTPFromPool() (result *util.ListItem[RTPFrame]) {
 	result = av.RtpPool.Get()
+	result.Pool = (*sync.Pool)(av.RtpPool)
 	if result.Value.Packet == nil {
 		result.Value.Packet = &rtp.Packet{}
 		result.Value.PayloadType = av.PayloadType
@@ -141,12 +142,17 @@ func (av *Media) SetStuff(stuff ...any) {
 			av.Init(v)
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
 			av.等待上限 = config.Global.SpeedLimit
+			if config.Global.EnableRTP {
+				av.RtpPool = &util.Pool[util.ListItem[RTPFrame]]{
+					New: func() any {
+						return &util.ListItem[RTPFrame]{}
+					},
+				}
+			}
 		case uint32:
 			av.SampleRate = v
 		case byte:
 			av.PayloadType = v
-		case util.BytesPool:
-			av.BytesPool = v
 		case SpesificTrack:
 			av.SpesificTrack = v
 		default:
@@ -189,7 +195,7 @@ func (av *Media) WriteSequenceHead(sh []byte) {
 func (av *Media) AppendAuBytes(b ...[]byte) {
 	var au util.BLL
 	for _, bb := range b {
-		au.Push(av.BytesPool.GetShell(bb))
+		au.Push(util.DefaultBytesPool.GetShell(bb))
 	}
 	av.Value.AUList.PushValue(&au)
 }

@@ -12,7 +12,6 @@ import (
 )
 
 type MemoryTs struct {
-	util.BytesPool
 	PMT util.Buffer
 	util.BLL
 }
@@ -33,7 +32,7 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 		err = errors.New("packetStartCodePrefix != 0x000001")
 		return
 	}
-	pesHeadItem := ts.Get(32)
+	pesHeadItem := util.GetBLI(32)
 	pesHeadItem.Value.Reset()
 	_, err = mpegts.WritePESHeader(&pesHeadItem.Value, packet.Header)
 	if err != nil {
@@ -42,7 +41,7 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 	pesBuffers := append(net.Buffers{pesHeadItem.Value}, packet.Buffers...)
 	defer pesHeadItem.Recycle()
 	pesPktLength := util.SizeOfBuffers(pesBuffers)
-	buffer := ts.Get((pesPktLength/mpegts.TS_PACKET_SIZE+1)*6 + pesPktLength)
+	buffer := util.GetBLI((pesPktLength/mpegts.TS_PACKET_SIZE+1)*6 + pesPktLength)
 	bwTsHeader := &buffer.Value
 	bigLen := bwTsHeader.Len()
 	bwTsHeader.Reset()
@@ -50,7 +49,7 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 	var tsHeaderLength int
 	for i := 0; len(pesBuffers) > 0; i++ {
 		if bigLen < mpegts.TS_PACKET_SIZE {
-			headerItem := ts.Get(mpegts.TS_PACKET_SIZE)
+			headerItem := util.GetBLI(mpegts.TS_PACKET_SIZE)
 			ts.BLL.Push(headerItem)
 			bwTsHeader = &headerItem.Value
 			bwTsHeader.Reset()

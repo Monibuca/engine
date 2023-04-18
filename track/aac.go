@@ -54,14 +54,14 @@ func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
 	aac.generateTimestamp(ts)
 	frameLen := (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
 	for len(adts) >= frameLen {
-		aac.Value.AUList.Push(aac.BytesPool.GetShell(adts[7:frameLen]))
+		aac.Value.AUList.PushShell(adts[7:frameLen])
 		adts = adts[frameLen:]
 		if len(adts) < 7 {
 			break
 		}
 		frameLen = (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
 	}
-	aac.Value.ADTS = aac.BytesPool.GetShell(adts)
+	aac.Value.ADTS = util.GetShell(adts)
 	aac.Flush()
 }
 
@@ -76,7 +76,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 	}
 	auHeaderLen := util.ReadBE[int](frame.Payload[:2]) //通常为16，即一个AU Header的长度
 	if auHeaderLen == 0 {
-		aac.Value.AUList.Push(aac.BytesPool.GetShell(frame.Payload[:2]))
+		aac.Value.AUList.PushShell(frame.Payload[:2])
 		aac.Flush()
 	} else {
 		payload := frame.Payload[2:]
@@ -99,7 +99,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 				for _, dataLen := range dataLens {
 					if len(payload) < int(dataLen) {
 						aac.fragments = &util.BLL{}
-						aac.fragments.Push(aac.BytesPool.GetShell(payload))
+						aac.fragments.PushShell(payload)
 						// aac.fragments = aac.fragments[:0]
 						// aac.Error("payload is too short 1", zap.Int("dataLen", int(dataLen)), zap.Int("len", len(payload)))
 						return
@@ -119,7 +119,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 				// 	aac.Error("payload is too short 2", zap.Int("dataLen", int(dataLens[0])), zap.Int("len", len(payload)))
 				// 	return
 				// }
-				aac.fragments.Push(aac.BytesPool.GetShell(payload))
+				aac.fragments.PushShell(payload)
 				// aac.fragments = append(aac.fragments, payload[:dataLens[0]])
 				return
 			}
@@ -146,7 +146,7 @@ func (aac *AAC) WriteRTPFrame(frame *RTPFrame) {
 			// }
 
 			// aac.fragments = append(aac.fragments, payload[:dataLens[0]])
-			aac.fragments.Push(aac.BytesPool.GetShell(payload))
+			aac.fragments.PushShell(payload)
 			if !frame.Header.Marker {
 				return
 			}
