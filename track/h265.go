@@ -186,12 +186,12 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 	if value.IFrame {
 		out = append(out, [][]byte{vt.VPS}, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 	}
-	for au := vt.Value.AUList.Next; au != nil && au != &vt.Value.AUList.ListItem; au = au.Next {
-		if au.Value.ByteLength < RTPMTU {
-			out = append(out, au.Value.ToBuffers())
+	vt.Value.AUList.Range(func(au *util.BLL) bool {
+		if au.ByteLength < RTPMTU {
+			out = append(out, au.ToBuffers())
 		} else {
 			var naluType codec.H265NALUType
-			r := au.Value.NewReader()
+			r := au.NewReader()
 			b0, _ := r.ReadByte()
 			b1, _ := r.ReadByte()
 			naluType = naluType.Parse(b0)
@@ -205,6 +205,7 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 			}
 			buf[0][2] |= 1 << 6 // set end bit
 		}
-	}
+		return true
+	})
 	vt.PacketizeRTP(out...)
 }

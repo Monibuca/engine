@@ -1,6 +1,7 @@
 package track
 
 import (
+	"fmt"
 	"time"
 	"unsafe"
 
@@ -25,9 +26,6 @@ func (p *流速控制) 重置(绝对时间戳 time.Duration, dts time.Duration) 
 	// println("重置", p.起始时间.Format("2006-01-02 15:04:05"), p.起始时间戳)
 }
 func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) time.Duration {
-	if dts < p.起始dts {
-		dts += 0xFFFFFFFFF
-	}
 	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
 
@@ -95,6 +93,7 @@ type Media struct {
 	RTPDemuxer
 	SpesificTrack `json:"-" yaml:"-"`
 	deltaTs       time.Duration //用于接续发布后时间戳连续
+	deltaDTSRange time.Duration //DTS差的范围
 	流速控制
 }
 
@@ -263,11 +262,27 @@ func (av *Media) Flush() {
 		av.重置(curValue.Timestamp, curValue.DTS)
 	} else {
 		if useDts {
-			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
+			dts := curValue.DTS
+			if dts < av.起始dts {
+				dts += 0xFFFFFFFFF
+			}
+			if av.deltaDTSRange > 0 {
+				if dts < preValue.DTS {
+					dts = preValue.DTS + av.deltaDTSRange/2
+					curValue.DTS = dts
+				} else if curValue.DTS-preValue.DTS > av.deltaDTSRange {
+					dts = preValue.DTS + av.deltaDTSRange/2
+					curValue.DTS = dts
+				}
+			}
+			av.deltaDTSRange = (curValue.DTS - preValue.DTS) * 2
+			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(dts)
 		}
 		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
 	}
-	// fmt.Println(av.Name, curValue.DTS, curValue.Timestamp, curValue.DeltaTime)
+	if config.Global.PrintTs {
+		fmt.Println(av.Name, curValue.DTS, curValue.DTS-preValue.DTS, curValue.Timestamp, curValue.DeltaTime)
+	}
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {

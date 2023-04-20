@@ -44,9 +44,13 @@ func (g711 *G711) WriteAVCC(ts uint32, frame *util.BLL) error {
 		g711.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite
 	}
-	g711.Value.AUList.Push(g711.BytesPool.GetShell(frame.Next.Value[1:]))
+	i := 0
 	frame.Range(func(v util.Buffer) bool {
+		if i == 0 {
+			v = v.SubBuf(1, v.Len()-1)
+		}
 		g711.Value.AUList.Push(g711.BytesPool.GetShell(v))
+		i++
 		return true
 	})
 	g711.Audio.WriteAVCC(ts, frame)

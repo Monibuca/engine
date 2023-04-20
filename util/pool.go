@@ -123,8 +123,8 @@ func (list *BLLs) Push(item *ListItem[Buffer]) {
 		list.PushValue(&bll)
 	} else {
 		list.Pre.Value.Push(item)
+		list.ByteLength += item.Value.Len()
 	}
-	list.ByteLength += item.Value.Len()
 }
 
 func (list *BLLs) ToList() (result [][][]byte) {

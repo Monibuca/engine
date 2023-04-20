@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"os"
+	"time"
+
 	"github.com/pion/rtp"
 	"github.com/yapingcat/gomedia/go-mpeg2"
 	"go.uber.org/zap"
@@ -189,4 +192,25 @@ func (p *PSPublisher) ReceiveAudio(es mpegps.MpegPsEsStream) {
 	} else {
 		p.WriteRaw(ts, payload)
 	}
+}
+
+func (p *PSPublisher) Replay(f *os.File) (err error) {
+	var rtpPacket rtp.Packet
+	defer f.Close()
+	var t uint16
+	for l := make([]byte, 6); !p.IsClosed(); time.Sleep(time.Millisecond * time.Duration(t)) {
+		_, err = f.Read(l)
+		if err != nil {
+			return
+		}
+		payload := make([]byte, util.ReadBE[int](l[:4]))
+		t = util.ReadBE[uint16](l[4:])
+		_, err = f.Read(payload)
+		if err != nil {
+			return
+		}
+		rtpPacket.Unmarshal(payload)
+		p.PushPS(&rtpPacket)
+	}
+	return
 }

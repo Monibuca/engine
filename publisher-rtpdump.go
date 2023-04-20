@@ -23,11 +23,13 @@ type RTPDumpPublisher struct {
 }
 
 func (t *RTPDumpPublisher) Feed(file *os.File) {
+	
 	r, h, err := rtpdump.NewReader(file)
 	if err != nil {
 		t.Stream.Error("RTPDumpPublisher open file error", zap.Error(err))
 		return
 	}
+	t.Lock()
 	t.Stream.Info("RTPDumpPublisher open file success", zap.String("file", file.Name()), zap.String("start", h.Start.String()), zap.String("source", h.Source.String()), zap.Uint16("port", h.Port))
 	if t.VideoTrack == nil {
 		switch t.VCodec {
@@ -55,6 +57,7 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 		}
 		t.AudioTrack.SetSpeedLimit(500 * time.Millisecond)
 	}
+	t.Unlock()
 	needLock := true
 	for {
 		packet, err := r.Next()
@@ -91,7 +94,7 @@ func (t *RTPDumpPublisher) WriteRTP(raw []byte) {
 	switch frame.PayloadType {
 	case 96:
 		t.VideoTrack.WriteRTP(&util.ListItem[common.RTPFrame]{Value: frame})
-	case 97:
+	case 97, 0, 8:
 		t.AudioTrack.WriteRTP(&util.ListItem[common.RTPFrame]{Value: frame})
 	default:
 		t.Stream.Warn("RTPDumpPublisher unknown payload type", zap.Uint8("payloadType", frame.PayloadType))

@@ -126,6 +126,7 @@ type Engine struct {
 	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
 	EventBusSize        int           `default:"10"`    //事件总线大小
 	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
+	PrintTs             bool          `default:"false"` //打印时间戳
 	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
 	reportStream        quic.Stream   // console server connection
 	instanceId          string        // instance id 来自console

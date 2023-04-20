@@ -58,7 +58,7 @@ func (av *Audio) Flush() {
 func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	curValue := &av.Value
 	curValue.BytesIn += len(raw)
-	curValue.AUList.Push(av.BytesPool.GetShell(raw))
+	av.AppendAuBytes(raw)
 	av.generateTimestamp(pts)
 	av.Flush()
 }
