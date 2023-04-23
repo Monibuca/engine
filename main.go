@@ -96,13 +96,18 @@ func Run(ctx context.Context, configFile string) (err error) {
 	log.LogLevel.SetLevel(loglevel)
 	Engine.Logger = log.LocaleLogger.Named("engine")
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
-	Engine.RawConfig = config.Struct2Config(EngineConfig.Engine)
+	Engine.RawConfig = config.Struct2Config(&EngineConfig.Engine, "GLOBAL")
 	Engine.assign()
 	Engine.Logger.Debug("", zap.Any("config", EngineConfig))
 	EventBus = make(chan any, EngineConfig.EventBusSize)
 	go EngineConfig.Listen(Engine)
 	for _, plugin := range plugins {
 		plugin.Logger = log.LocaleLogger.Named(plugin.Name)
+		if os.Getenv(strings.ToUpper(plugin.Name)+"_ENABLE") == "false" {
+			plugin.Disabled = true
+			plugin.Warn("disabled by env")
+			continue
+		}
 		plugin.Info("initialize", zap.String("version", plugin.Version))
 		userConfig := cg.GetChild(plugin.Name)
 		if userConfig != nil {
@@ -136,7 +141,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	}
 	var enabledPlugins, disabledPlugins []string
 	for _, plugin := range plugins {
-		if plugin.RawConfig["enable"] == false || plugin.Disabled {
+		if plugin.Disabled || plugin.RawConfig["enable"] == false {
 			plugin.Disabled = true
 			disabledPlugins = append(disabledPlugins, plugin.Name)
 		} else {

@@ -14,6 +14,7 @@ type IPublisher interface {
 	GetPublisher() *Publisher
 	getAudioTrack() common.AudioTrack
 	getVideoTrack() common.VideoTrack
+	Publish(streamPath string, pub IPublisher) error
 }
 
 var _ IPublisher = (*Publisher)(nil)
@@ -23,6 +24,10 @@ type Publisher struct {
 	Config            *config.Publish
 	common.AudioTrack `json:"-" yaml:"-"`
 	common.VideoTrack `json:"-" yaml:"-"`
+}
+
+func (p *Publisher) Publish(streamPath string, pub IPublisher) error {
+	return p.receive(streamPath, pub)
 }
 
 func (p *Publisher) GetPublisher() *Publisher {

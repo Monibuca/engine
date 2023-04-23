@@ -3,6 +3,7 @@ package engine
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -101,6 +102,7 @@ type ISubscriber interface {
 	PlayBlock(byte)
 	PlayFLV()
 	Stop()
+	Subscribe(streamPath string, sub ISubscriber) error
 }
 
 type TrackPlayer struct {
@@ -119,9 +121,14 @@ type Subscriber struct {
 	TrackPlayer `json:"-" yaml:"-"`
 }
 
+func (s *Subscriber) Subscribe(streamPath string, sub ISubscriber) error {
+	return s.receive(streamPath, sub)
+}
+
 func (s *Subscriber) GetSubscriber() *Subscriber {
 	return s
 }
+
 func (s *Subscriber) SetIO(i any) {
 	s.IO.SetIO(i)
 	if s.Writer != nil && s.Config != nil && s.Config.WriteBufferSize > 0 {
@@ -216,7 +223,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
-			// fmt.Println("v", s.VideoReader.Delay)
+			// fmt.Println("v", frame.Sequence, s.VideoReader.AbsTime, s.VideoReader.Delay)
 			spesic.OnEvent(VideoFrame{frame, s.Video, s.VideoReader.AbsTime, s.VideoReader.GetPTS32(), s.VideoReader.GetDTS32()})
 		}
 		sendAudioFrame = func(frame *AVFrame) {
@@ -255,7 +262,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		flvHeadCache := make([]byte, 15) //内存复用
 		sendFlvFrame := func(t byte, ts uint32, avcc ...[]byte) {
 			// println(t, ts)
-			// fmt.Printf("%d %X %X %d\n",t, avcc[0][0], avcc[0][1], ts)
+			// fmt.Printf("%d %X %X %d\n", t, avcc[0][0], avcc[0][1], ts)
 			flvHeadCache[0] = t
 			result := append(FLVFrame{flvHeadCache[:11]}, avcc...)
 			dataSize := uint32(util.SizeOfBuffers(avcc))
@@ -271,7 +278,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, s.AudioReader.Track.SequenceHead)
 		}
 		sendVideoFrame = func(frame *AVFrame) {
-			// fmt.Println(frame.Sequence, s.VideoReader.AbsTime, frame.DeltaTime, frame.IFrame)
+			// fmt.Println(frame.Sequence, s.VideoReader.AbsTime, s.VideoReader.Delay, frame.IFrame)
 			// b := util.Buffer(frame.AVCC.ToBytes()[5:])
 			// for b.CanRead() {
 			// 	nalulen := int(b.ReadUint32())
@@ -285,7 +292,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 		sendAudioFrame = func(frame *AVFrame) {
-			// fmt.Println(frame.Sequence, s.AudioReader.AbsTime, frame.DeltaTime)
+			fmt.Println(frame.Sequence, s.AudioReader.AbsTime, s.AudioReader.Delay)
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 	}

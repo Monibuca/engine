@@ -58,7 +58,12 @@ func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(rw).Encode(Plugins); err != nil {
+	format := r.URL.Query().Get("format")
+	if format == "yaml" {
+		if err := yaml.NewEncoder(rw).Encode(Plugins); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
+	} else if err := json.NewEncoder(rw).Encode(Plugins); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 	}
 }

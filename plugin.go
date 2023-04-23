@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -115,6 +114,7 @@ func (opt *Plugin) assign() {
 			opt.Warn("assign config failed", zap.Error(err))
 		}
 	}
+
 	if opt == Engine {
 		opt.registerHandler()
 		return
@@ -148,16 +148,17 @@ func (opt *Plugin) assign() {
 func (opt *Plugin) run() {
 	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	opt.RawConfig.Unmarshal(opt.Config)
+	opt.RawConfig = config.Struct2Config(opt.Config, strings.ToUpper(opt.Name))
+	// var buffer bytes.Buffer
+	// err := yaml.NewEncoder(&buffer).Encode(opt.Config)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// err = yaml.NewDecoder(&buffer).Decode(&opt.RawConfig)
+	// if err != nil {
+	// 	panic(err)
+	// }
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
-	var buffer bytes.Buffer
-	err := yaml.NewEncoder(&buffer).Encode(opt.Config)
-	if err != nil {
-		panic(err)
-	}
-	err = yaml.NewDecoder(&buffer).Decode(&opt.RawConfig)
-	if err != nil {
-		panic(err)
-	}
 	delete(opt.RawConfig, "defaultyaml")
 	opt.Debug("config", zap.Any("config", opt.Config))
 	// opt.RawConfig = config.Struct2Config(opt.Config)
@@ -214,13 +215,23 @@ func (opt *Plugin) Save() error {
 }
 
 func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
-	conf, ok := opt.Config.(config.PublishConfig)
-	if !ok {
-		conf = EngineConfig
+	puber := pub.GetPublisher()
+	if puber == nil {
+		if EngineConfig.LogLang == "zh" {
+			return errors.New("不是发布者")
+		} else {
+			return errors.New("not publisher")
+		}
 	}
-	var copyConfig = *conf.GetPublishConfig()
-	pub.GetPublisher().Config = &copyConfig
-	return pub.receive(streamPath, pub)
+	if puber.Config == nil {
+		conf, ok := opt.Config.(config.PublishConfig)
+		if !ok {
+			conf = EngineConfig
+		}
+		copyConfig := conf.GetPublishConfig()
+		puber.Config = &copyConfig
+	}
+	return pub.Publish(streamPath, pub)
 }
 
 var ErrStreamNotExist = errors.New("stream not exist")
@@ -233,12 +244,7 @@ func (opt *Plugin) SubscribeExist(streamPath string, sub ISubscriber) error {
 		opt.Warn("stream not exist", zap.String("path", streamPath))
 		return ErrStreamNotExist
 	}
-	conf, ok := opt.Config.(config.SubscribeConfig)
-	if !ok {
-		conf = EngineConfig
-	}
-	sub.GetSubscriber().Config = conf.GetSubscribeConfig()
-	return sub.receive(streamPath, sub)
+	return opt.Subscribe(streamPath, sub)
 }
 
 // Subscribe 订阅一个流，如果流不存在则创建一个等待流
@@ -251,12 +257,15 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 			return errors.New("not subscriber")
 		}
 	}
-	conf, ok := opt.Config.(config.SubscribeConfig)
-	if !ok {
-		conf = EngineConfig
+	if suber.Config == nil {
+		conf, ok := opt.Config.(config.SubscribeConfig)
+		if !ok {
+			conf = EngineConfig
+		}
+		copyConfig := *conf.GetSubscribeConfig()
+		suber.Config = &copyConfig
 	}
-	suber.Config = conf.GetSubscribeConfig()
-	return sub.receive(streamPath, sub)
+	return sub.Subscribe(streamPath, sub)
 }
 
 // SubscribeBlock 阻塞订阅一个流，直到订阅结束

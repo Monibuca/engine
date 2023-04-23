@@ -4,10 +4,12 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec/mpegts"
 	"m7s.live/engine/v4/track"
+	"m7s.live/engine/v4/util"
 )
 
 type TSPublisher struct {
 	Publisher
+	pool                util.BytesPool
 	mpegts.MpegTsStream `json:"-" yaml:"-"`
 }
 
@@ -16,6 +18,7 @@ func (t *TSPublisher) OnEvent(event any) {
 	case IPublisher:
 		t.PESChan = make(chan *mpegts.MpegTsPESPacket, 50)
 		t.PESBuffer = make(map[uint16]*mpegts.MpegTsPESPacket)
+		t.pool = make(util.BytesPool, 17)
 		go t.ReadPES()
 		if !t.Equal(v) {
 			t.AudioTrack = v.getAudioTrack()
@@ -33,23 +36,23 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 	switch s.StreamType {
 	case mpegts.STREAM_TYPE_H264:
 		if t.VideoTrack == nil {
-			t.VideoTrack = track.NewH264(t.Publisher.Stream)
+			t.VideoTrack = track.NewH264(t.Publisher.Stream, t.pool)
 		}
 	case mpegts.STREAM_TYPE_H265:
 		if t.VideoTrack == nil {
-			t.VideoTrack = track.NewH265(t.Publisher.Stream)
+			t.VideoTrack = track.NewH265(t.Publisher.Stream, t.pool)
 		}
 	case mpegts.STREAM_TYPE_AAC:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewAAC(t.Publisher.Stream)
+			t.AudioTrack = track.NewAAC(t.Publisher.Stream, t.pool)
 		}
 	case mpegts.STREAM_TYPE_G711A:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, true)
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, true, t.pool)
 		}
 	case mpegts.STREAM_TYPE_G711U:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, false, t.pool)
 		}
 	default:
 		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))

@@ -13,7 +13,7 @@ import (
 )
 
 type PublishConfig interface {
-	GetPublishConfig() *Publish
+	GetPublishConfig() Publish
 }
 
 type SubscribeConfig interface {
@@ -37,7 +37,7 @@ type Publish struct {
 	BufferTime        time.Duration `default:"0s"`  // 缓冲长度(单位：秒)，0代表取最近关键帧
 }
 
-func (c *Publish) GetPublishConfig() *Publish {
+func (c Publish) GetPublishConfig() Publish {
 	return c
 }
 

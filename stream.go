@@ -20,6 +20,13 @@ import (
 type StreamState byte
 type StreamAction byte
 
+func (s StreamState) String() string {
+	return StateNames[s]
+}
+func (s StreamAction) String() string {
+	return ActionNames[s]
+}
+
 // 四状态机
 const (
 	STATE_WAITPUBLISH StreamState = iota // 等待发布者状态
@@ -261,7 +268,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		r.SEHistory = append(r.SEHistory, event)
 		// 给Publisher状态变更的回调，方便进行远程拉流等操作
 		var stateEvent any
-		r.Info(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[next]), zap.String("action", ActionNames[action]))
+		r.Info(Sprintf("%s%s%s", event.From.String(), Yellow("->"), next.String()), zap.String("action", action.String()))
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
@@ -309,7 +316,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.Publisher.OnEvent(stateEvent)
 		}
 	} else {
-		r.Debug("wrong action", zap.String("action", ActionNames[action]))
+		r.Debug("wrong action", zap.String("action", action.String()))
 	}
 	return
 }
@@ -382,7 +389,7 @@ func (s *Stream) run() {
 			}
 		case <-s.timeout.C:
 			timeStart = time.Now()
-			timeOutInfo = zap.String("state", StateNames[s.State])
+			timeOutInfo = zap.String("state", s.State.String())
 			if s.State == STATE_PUBLISHING {
 				for sub := range s.Subscribers.internal {
 					if sub.IsClosed() {
@@ -529,7 +536,7 @@ func (s *Stream) run() {
 				case NoMoreTrack:
 					s.Subscribers.AbortWait()
 				case StreamAction:
-					timeOutInfo = zap.String("action", "StreamAction")
+					timeOutInfo = zap.String("action", "StreamAction"+v.String())
 					s.action(v)
 				default:
 					timeOutInfo = zap.String("action", "unknown")

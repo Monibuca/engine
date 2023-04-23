@@ -26,6 +26,9 @@ func (p *流速控制) 重置(绝对时间戳 time.Duration, dts time.Duration) 
 	// println("重置", p.起始时间.Format("2006-01-02 15:04:05"), p.起始时间戳)
 }
 func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) time.Duration {
+	if dts < p.起始dts {
+		dts += 0xFFFFFFFFF
+	}
 	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
 
@@ -194,10 +197,10 @@ func (av *Media) AppendAuBytes(b ...[]byte) {
 }
 
 func (av *Media) narrow(gop int) {
-	if l := av.Size - gop - 5; l > 5 {
-		// av.Stream.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-l), zap.String("name", av.Name))
+	if l := av.Size - gop; l > 12 {
+		// av.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-5))
 		//缩小缓冲环节省内存
-		av.Reduce(l).Do(func(v AVFrame) {
+		av.Reduce(5).Do(func(v AVFrame) {
 			v.Reset()
 		})
 	}
@@ -239,6 +242,33 @@ func (av *Media) Flush() {
 			curValue.Timestamp -= av.deltaTs
 		}
 	}
+	if av.起始时间.IsZero() {
+		curValue.DeltaTime = 0
+		if useDts {
+			curValue.Timestamp = time.Since(av.Stream.GetStartTime())
+		}
+		av.重置(curValue.Timestamp, curValue.DTS)
+	} else {
+		if useDts {
+			deltaDts := curValue.DTS - preValue.DTS
+			if deltaDts <= 0 {
+				// 生成一个无奈的deltaDts
+				deltaDts = 90
+				// 必须保证DTS递增
+				curValue.DTS = preValue.DTS + deltaDts
+			} else if deltaDts != 90 {
+				// 正常情况下生成容错范围
+				av.deltaDTSRange = deltaDts * 2
+			}
+			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
+		}
+		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
+	}
+
+	if config.Global.PrintTs {
+		fmt.Println(av.Name, curValue.DTS, av.deltaDTSRange, curValue.DTS-preValue.DTS, curValue.Timestamp, curValue.DeltaTime)
+	}
+
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
 	if bufferTime > 0 && av.IDRingList.Length > 1 && curValue.Timestamp-av.IDRingList.Next.Next.Value.Value.Timestamp > bufferTime {
 		av.ShiftIDR()
@@ -254,35 +284,6 @@ func (av *Media) Flush() {
 		// }
 	}
 
-	if av.起始时间.IsZero() {
-		curValue.DeltaTime = 0
-		if useDts {
-			curValue.Timestamp = time.Since(av.Stream.GetStartTime())
-		}
-		av.重置(curValue.Timestamp, curValue.DTS)
-	} else {
-		if useDts {
-			dts := curValue.DTS
-			if dts < av.起始dts {
-				dts += 0xFFFFFFFFF
-			}
-			if av.deltaDTSRange > 0 {
-				if dts < preValue.DTS {
-					dts = preValue.DTS + av.deltaDTSRange/2
-					curValue.DTS = dts
-				} else if curValue.DTS-preValue.DTS > av.deltaDTSRange {
-					dts = preValue.DTS + av.deltaDTSRange/2
-					curValue.DTS = dts
-				}
-			}
-			av.deltaDTSRange = (curValue.DTS - preValue.DTS) * 2
-			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(dts)
-		}
-		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
-	}
-	if config.Global.PrintTs {
-		fmt.Println(av.Name, curValue.DTS, curValue.DTS-preValue.DTS, curValue.Timestamp, curValue.DeltaTime)
-	}
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {

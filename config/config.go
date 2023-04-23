@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/log"
 )
 
@@ -89,72 +91,15 @@ func (config Config) Unmarshal(s any) {
 		}
 		// 需要被写入的字段
 		fv := el.FieldByName(name)
-		fvKind := fv.Kind()
-		ft := fv.Type()
-		value := reflect.ValueOf(v)
 		if child, ok := v.(Config); ok { //处理值是递归情况（map)
-			if fvKind == reflect.Map {
+			if fv.Kind() == reflect.Map {
 				if fv.IsNil() {
-					fv.Set(reflect.MakeMap(ft))
+					fv.Set(reflect.MakeMap(fv.Type()))
 				}
 			}
 			child.Unmarshal(fv)
 		} else {
-			if ft == durationType && fv.CanSet() {
-				if value.Type() == durationType {
-					fv.Set(value)
-				} else if value.IsZero() || !value.IsValid() {
-					fv.SetInt(0)
-				} else if d, err := time.ParseDuration(value.String()); err == nil {
-					fv.SetInt(int64(d))
-				} else {
-					if Global.LogLang == "zh" {
-						log.Errorf("%s 无效的时间值: %v 请添加单位（s,m,h,d），例如：100ms, 10s, 4m, 1h", k, value)
-					} else {
-						log.Errorf("%s invalid duration value: %v please add unit (s,m,h,d)，eg: 100ms, 10s, 4m, 1h", k, value)
-					}
-					os.Exit(1)
-				}
-				continue
-			}
-			switch fvKind {
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				fv.SetUint(uint64(value.Int()))
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				fv.SetInt(value.Int())
-			case reflect.Float32, reflect.Float64:
-				if value.CanFloat() {
-					fv.SetFloat(value.Float())
-				} else {
-					fv.SetFloat(float64(value.Int()))
-				}
-			case reflect.Slice:
-				var s reflect.Value
-				if value.Kind() == reflect.Slice {
-					l := value.Len()
-					s = reflect.MakeSlice(ft, l, value.Cap())
-					for i := 0; i < l; i++ {
-						fv := value.Index(i)
-						item := s.Index(i)
-						if child, ok := fv.Interface().(Config); ok {
-							item.Set(child.CreateElem(ft.Elem()))
-						} else if fv.Kind() == reflect.Interface {
-							item.Set(reflect.ValueOf(fv.Interface()).Convert(item.Type()))
-						} else {
-							item.Set(fv)
-						}
-					}
-				} else {
-					//值是单值，但类型是数组，默认解析为一个元素的数组
-					s = reflect.MakeSlice(ft, 1, 1)
-					s.Index(0).Set(value)
-				}
-				fv.Set(s)
-			default:
-				if value.IsValid() {
-					fv.Set(value)
-				}
-			}
+			assign(name, fv, reflect.ValueOf(v))
 		}
 	}
 }
@@ -205,9 +150,9 @@ func (config *Config) Set(key string, value any) {
 	}
 }
 
-func (config Config) Get(key string) any {
-	v, _ := config[strings.ToLower(key)]
-	return v
+func (config Config) Get(key string) (v any) {
+	v = config[strings.ToLower(key)]
+	return
 }
 
 func (config Config) Has(key string) (ok bool) {
@@ -227,35 +172,102 @@ func (config Config) GetChild(key string) Config {
 	return nil
 }
 
-func Struct2Config(s any) (config Config) {
+func Struct2Config(s any, prefix ...string) (config Config) {
 	config = make(Config)
 	var t reflect.Type
 	var v reflect.Value
 	if vv, ok := s.(reflect.Value); ok {
-		v = vv
-		t = vv.Type()
+		t, v = vv.Type(), vv
 	} else {
-		t = reflect.TypeOf(s)
-		v = reflect.ValueOf(s)
+		t, v = reflect.TypeOf(s), reflect.ValueOf(s)
 		if t.Kind() == reflect.Pointer {
-			v = v.Elem()
-			t = t.Elem()
+			t, v = t.Elem(), v.Elem()
 		}
 	}
 	for i, j := 0, t.NumField(); i < j; i++ {
-		ft := t.Field(i)
+		ft, fv := t.Field(i), v.Field(i)
 		if !ft.IsExported() {
 			continue
 		}
 		name := strings.ToLower(ft.Name)
+		var envPath []string
+		if len(prefix) > 0 {
+			envPath = append(prefix, strings.ToUpper(ft.Name))
+			envKey := strings.Join(envPath, "_")
+			if envValue := os.Getenv(envKey); envValue != "" {
+				yaml.Unmarshal([]byte(fmt.Sprintf("%s: %s", name, envValue)), config)
+				assign(envKey, fv, reflect.ValueOf(config[name]))
+				config[name] = fv.Interface()
+				return
+			}
+		}
 		switch ft.Type.Kind() {
 		case reflect.Struct:
-			config[name] = Struct2Config(v.Field(i))
+			config[name] = Struct2Config(fv, envPath...)
 		case reflect.Slice:
 			fallthrough
 		default:
-			reflect.ValueOf(config).SetMapIndex(reflect.ValueOf(name), v.Field(i))
+			reflect.ValueOf(config).SetMapIndex(reflect.ValueOf(name), fv)
 		}
 	}
 	return
+}
+
+func assign(k string, target reflect.Value, source reflect.Value) {
+	ft := target.Type()
+	if ft == durationType && target.CanSet() {
+		if source.Type() == durationType {
+			target.Set(source)
+		} else if source.IsZero() || !source.IsValid() {
+			target.SetInt(0)
+		} else if d, err := time.ParseDuration(source.String()); err == nil {
+			target.SetInt(int64(d))
+		} else {
+			if Global.LogLang == "zh" {
+				log.Errorf("%s 无效的时间值: %v 请添加单位（s,m,h,d），例如：100ms, 10s, 4m, 1h", k, source)
+			} else {
+				log.Errorf("%s invalid duration value: %v please add unit (s,m,h,d)，eg: 100ms, 10s, 4m, 1h", k, source)
+			}
+			os.Exit(1)
+		}
+		return
+	}
+	switch target.Kind() {
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		target.SetUint(uint64(source.Int()))
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		target.SetInt(source.Int())
+	case reflect.Float32, reflect.Float64:
+		if source.CanFloat() {
+			target.SetFloat(source.Float())
+		} else {
+			target.SetFloat(float64(source.Int()))
+		}
+	case reflect.Slice:
+		var s reflect.Value
+		if source.Kind() == reflect.Slice {
+			l := source.Len()
+			s = reflect.MakeSlice(ft, l, source.Cap())
+			for i := 0; i < l; i++ {
+				fv := source.Index(i)
+				item := s.Index(i)
+				if child, ok := fv.Interface().(Config); ok {
+					item.Set(child.CreateElem(ft.Elem()))
+				} else if fv.Kind() == reflect.Interface {
+					item.Set(reflect.ValueOf(fv.Interface()).Convert(item.Type()))
+				} else {
+					item.Set(fv)
+				}
+			}
+		} else {
+			//值是单值，但类型是数组，默认解析为一个元素的数组
+			s = reflect.MakeSlice(ft, 1, 1)
+			s.Index(0).Set(source)
+		}
+		target.Set(s)
+	default:
+		if source.IsValid() {
+			target.Set(source.Convert(ft))
+		}
+	}
 }

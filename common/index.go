@@ -23,20 +23,20 @@ const (
 
 // Base 基础Track类
 type Base struct {
-	Name     string
-	log.Zap  `json:"-" yaml:"-"`
-	Stream   IStream     `json:"-" yaml:"-"`
-	Attached atomic.Bool `json:"-" yaml:"-"`
-	State    TrackState
-	ts       time.Time
-	bytes    int
-	frames   int
-	drops    int //丢帧数
-	BPS      int
-	FPS      int
-	Drops    int   // 丢帧率
-	RawSize  int   // 裸数据长度
-	RawPart  []int // 裸数据片段用于UI上显示
+	Name      string
+	log.Zap   `json:"-" yaml:"-"`
+	Stream    IStream     `json:"-" yaml:"-"`
+	Attached  atomic.Bool `json:"-" yaml:"-"`
+	State     TrackState
+	ts        time.Time
+	bytes     int
+	frames    int
+	DropCount int `json:"-" yaml:"-"` //丢帧数
+	BPS       int
+	FPS       int
+	Drops     int   // 丢帧率
+	RawSize   int   // 裸数据长度
+	RawPart   []int // 裸数据片段用于UI上显示
 }
 
 func (bt *Base) ComputeBPS(bytes int) {
@@ -45,10 +45,10 @@ func (bt *Base) ComputeBPS(bytes int) {
 	if elapse := time.Since(bt.ts).Seconds(); elapse > 1 {
 		bt.BPS = int(float64(bt.bytes) / elapse)
 		bt.FPS = int(float64(bt.frames) / elapse)
-		bt.Drops = int(float64(bt.drops) / elapse)
+		bt.Drops = int(float64(bt.DropCount) / elapse)
 		bt.bytes = 0
 		bt.frames = 0
-		bt.drops = 0
+		bt.DropCount = 0
 		bt.ts = time.Now()
 	}
 }
