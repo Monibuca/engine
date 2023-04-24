@@ -17,7 +17,7 @@ var _ SpesificTrack = (*AAC)(nil)
 
 func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac = &AAC{
-		Mode:       2,
+		Mode: 2,
 	}
 	aac.SizeLength = 13
 	aac.IndexLength = 3
@@ -27,6 +27,9 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.SampleSize = 16
 	aac.SetStuff("aac", stream, int(256+128), byte(97), aac, time.Millisecond*10)
 	aac.SetStuff(stuff...)
+	if aac.BytesPool == nil {
+		aac.BytesPool = make(util.BytesPool, 17)
+	}
 	aac.AVCCHead = []byte{0xAF, 1}
 	return
 }
@@ -34,8 +37,8 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 type AAC struct {
 	Audio
 
-	Mode             int       // 1为lbr，2为hbr
-	fragments        *util.BLL // 用于处理不完整的AU,缺少的字节数
+	Mode      int       // 1为lbr，2为hbr
+	fragments *util.BLL // 用于处理不完整的AU,缺少的字节数
 }
 
 func (aac *AAC) WriteADTS(ts uint32, adts []byte) {

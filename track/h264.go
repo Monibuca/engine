@@ -21,6 +21,9 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 	vt.Video.CodecID = codec.CodecID_H264
 	vt.SetStuff("h264", int(256), byte(96), uint32(90000), stream, vt, time.Millisecond*10)
 	vt.SetStuff(stuff...)
+	if vt.BytesPool == nil {
+		vt.BytesPool = make(util.BytesPool, 17)
+	}
 	vt.ParamaterSets = make(ParamaterSets, 2)
 	vt.nalulenSize = 4
 	vt.dtsEst = NewDTSEstimator()
@@ -29,7 +32,7 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 
 func (vt *H264) WriteSliceBytes(slice []byte) {
 	naluType := codec.ParseH264NALUType(slice[0])
-	// vt.Info("naluType", zap.Uint8("naluType", naluType.Byte()))
+	vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))
 	switch naluType {
 	case codec.NALU_SPS:
 		spsInfo, _ := codec.ParseSPS(slice)

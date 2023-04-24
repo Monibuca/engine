@@ -241,7 +241,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s = &Stream{
 			Path:       streamPath,
 			AppName:    p[0],
-			StreamName: util.LastElement(p),
+			StreamName: strings.Join(p[1:], "/"),
 			StartTime:  time.Now(),
 			timeout:    time.NewTimer(waitTimeout),
 		}

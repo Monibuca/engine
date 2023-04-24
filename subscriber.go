@@ -3,7 +3,6 @@ package engine
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -292,7 +291,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			sendFlvFrame(codec.FLV_TAG_TYPE_VIDEO, s.VideoReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 		sendAudioFrame = func(frame *AVFrame) {
-			fmt.Println(frame.Sequence, s.AudioReader.AbsTime, s.AudioReader.Delay)
+			// fmt.Println(frame.Sequence, s.AudioReader.AbsTime, s.AudioReader.Delay)
 			sendFlvFrame(codec.FLV_TAG_TYPE_AUDIO, s.AudioReader.AbsTime, frame.AVCC.ToBuffers()...)
 		}
 	}

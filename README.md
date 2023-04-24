@@ -30,7 +30,7 @@
 - 获取系统基本情况 `/api/summary` 返回值Summary数据
 - 获取所有插件信息 `/api/plugins` 返回值Plugin数据
 - 获取指定的配置信息 `/api/getconfig?name=xxx` 返回xxx插件的配置信息，如果不带参数或参数为空则返回全局配置
-- 修改并保存配置信息 `/api/modifyconfig?name=xxx` 修改xxx插件的配置信息,在请求的body中传入修改后的配置json字符串
+- 修改并保存配置信息 `/api/modifyconfig?name=xxx&yaml=1` 修改xxx插件的配置信息,在请求的body中传入修改后的配置yaml字符串
 - 热更新配置信息 `/api/updateconfig?name=xxx` 热更新xxx插件的配置信息，如果不带参数或参数为空则热更新全局配置
 - 获取所有远端拉流信息 `/api/list/pull` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
 - 获取所有向远端推流信息 `/api/list/push` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
@@ -58,11 +58,23 @@ global:
       publishtimeout: 10s # 发布流默认过期时间，超过该时间发布者没有恢复流将被删除
       delayclosetimeout: 0 # 自动关闭触发后延迟的时间(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
       waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
+      key:                      # 发布鉴权key
+	    secretargname: secret     # 发布鉴权参数名
+	    expireargname:   expire   # 发布鉴权失效时间参数名
   subscribe:
       subaudio: true # 是否订阅音频流
       subvideo: true # 是否订阅视频流
+      subaudioargname: ats # 订阅音频轨道参数名
+      subvideoargname: vts # 订阅视频轨道参数名
+      subdataargname: dts # 订阅数据轨道参数名
+      subaudiotracks: [] # 订阅音频轨道名称列表
+      subvideotracks: [] # 订阅视频轨道名称列表
+      submode: 0 # 订阅模式，0为跳帧追赶模式，1为不追赶（多用于录制），2为时光回溯模式
       iframeonly: false # 只订阅关键帧
-      waittimeout: 10s # 等待发布者超时时间，用于订阅尚未发布的流
+      waittimeout: 10s # 等待发布者的超时时间，用于订阅尚未发布的流
+      key:                      # 订阅鉴权key
+	    secretargname: secret     # 订阅鉴权参数名
+	    expireargname:   expire   # 订阅鉴权失效时间参数名
   enableavcc : true  # 启用AVCC格式缓存，用于rtmp协议
   enablertp : true # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enableauth: true # 启用鉴权,详细查看鉴权机制
@@ -104,8 +116,31 @@ stateDiagram-v2
 ```
 
 # 鉴权机制
+## 默认鉴权
+
+在publish 和 subscribe 中配置 key 引擎会自动进行鉴权,
+推流或者拉流时需要在url中添加参数 secret=xxx&expire=xxx。
+
+- secret为鉴权前面，MD5(key+StreamPath+expire)
+- expire为鉴权失效时间，格式是十六进制 UNIX 时间戳
+
+### 时间戳计算
+```
+设置时间：2018.12.01 08:30:00
+十进制 UNIX 时间戳：1543624200
+十六进制 UNIX 时间戳：5C01D608（云直播鉴权配置使用十六进制 UNIX 时间戳，十六进制不区分字母大小写）
+```
+### 鉴权签名计算
+```
+secret = MD5(key+StreamPath+expire) 
+secret = MD5(ngoeiq03+test/01+5C01D608)
+secret = MD5(ngoeiq03test/015C01D608)
+secret = ce797dc6238156d548ef945e6ad1ea20
+```
 
 ## 单独鉴权
+
+如果需要自定义鉴权，可以在插件中实现鉴权接口，
 引擎中定义如下两个接口，插件中的发布者或者订阅者可以实现这两个接口，引擎会在发布或者订阅时调用这两个接口进行鉴权
 ```go
 type AuthSub interface {
@@ -120,6 +155,8 @@ type AuthPub interface {
 - Promise方便异步鉴权，可以后续调用其Resolve或Reject方法进行鉴权结果的返回
 
 ## 全局鉴权
+
+自定义鉴权也可以全局生效，
 引擎中定义如下两个全局函数的变量，插件中可以对这两个变量进行赋值，引擎会在发布或者订阅时调用这两个接口进行鉴权
 ```go
 var OnAuthSub func(p *util.Promise[ISubscriber]) error

@@ -86,14 +86,20 @@ func Run(ctx context.Context, configFile string) (err error) {
 			log.Error("parsing yml error:", err)
 		}
 	}
-	loglevel, err := zapcore.ParseLevel(EngineConfig.LogLevel)
 	var logger log.Logger
 	log.LocaleLogger = logger.Lang(lang.Get(EngineConfig.LogLang))
-	if err != nil {
-		logger.Error("parse log level error:", zap.Error(err))
-		loglevel = zapcore.InfoLevel
+	if EngineConfig.LogLevel == "trace" {
+		log.Trace = true
+		log.LogLevel.SetLevel(zap.DebugLevel)
+	} else {
+		loglevel, err := zapcore.ParseLevel(EngineConfig.LogLevel)
+		if err != nil {
+			logger.Error("parse log level error:", zap.Error(err))
+			loglevel = zapcore.InfoLevel
+		}
+		log.LogLevel.SetLevel(loglevel)
 	}
-	log.LogLevel.SetLevel(loglevel)
+
 	Engine.Logger = log.LocaleLogger.Named("engine")
 	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
 	Engine.RawConfig = config.Struct2Config(&EngineConfig.Engine, "GLOBAL")

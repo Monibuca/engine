@@ -1,7 +1,6 @@
 package track
 
 import (
-	"fmt"
 	"time"
 	"unsafe"
 
@@ -264,11 +263,7 @@ func (av *Media) Flush() {
 		}
 		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
 	}
-
-	if config.Global.PrintTs {
-		fmt.Println(av.Name, curValue.DTS, av.deltaDTSRange, curValue.DTS-preValue.DTS, curValue.Timestamp, curValue.DeltaTime)
-	}
-
+	av.Trace("write", zap.Uint32("seq", curValue.Sequence), zap.Duration("dts", curValue.DTS), zap.Duration("dts delta", curValue.DTS-preValue.DTS), zap.Uint32("delta", curValue.DeltaTime), zap.Duration("timestamp", curValue.Timestamp))
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
 	if bufferTime > 0 && av.IDRingList.Length > 1 && curValue.Timestamp-av.IDRingList.Next.Next.Value.Value.Timestamp > bufferTime {
 		av.ShiftIDR()

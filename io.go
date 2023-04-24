@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
 	"io"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +37,7 @@ type IO struct {
 	ID                 string
 	Type               string
 	context.Context    `json:"-" yaml:"-"` //不要直接设置，应当通过OnEvent传入父级Context
-	context.CancelFunc `json:"-" yaml:"-"`          //流关闭是关闭发布者或者订阅者
+	context.CancelFunc `json:"-" yaml:"-"` //流关闭是关闭发布者或者订阅者
 	*log.Logger        `json:"-" yaml:"-"`
 	StartTime          time.Time //创建时间
 	Stream             *Stream   `json:"-" yaml:"-"`
@@ -122,6 +124,7 @@ var (
 	ErrBadTrackName   = errors.New("Track Already Exist")
 	ErrStreamIsClosed = errors.New("Stream Is Closed")
 	ErrPublisherLost  = errors.New("Publisher Lost")
+	ErrAuth           = errors.New("Auth Failed")
 	OnAuthSub         func(p *util.Promise[ISubscriber]) error
 	OnAuthPub         func(p *util.Promise[IPublisher]) error
 )
@@ -202,6 +205,16 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				if err != nil {
 					return err
 				}
+			} else if conf.Key != "" {
+				secret := io.Args.Get(conf.SecretArgName)
+				t := io.Args.Get(conf.ExpireArgName)
+				if unixTime, err := strconv.ParseInt(t, 16, 64); err != nil || time.Now().Unix() > unixTime {
+					return ErrAuth
+				}
+				trueSecret := md5.Sum([]byte(conf.Key + s.StreamName + t))
+				if string(trueSecret[:]) != secret {
+					return ErrAuth
+				}
 			}
 		}
 		if promise := util.NewPromise(specific.(IPublisher)); s.Receive(promise) {
@@ -209,6 +222,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			return err
 		}
 	} else {
+
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		io.Info("subscribe")
 		if create {
@@ -231,6 +245,16 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				}
 				if err != nil {
 					return err
+				}
+			} else if conf := specific.(ISubscriber).GetSubscriber().Config; conf.Key != "" {
+				secret := io.Args.Get(conf.SecretArgName)
+				t := io.Args.Get(conf.ExpireArgName)
+				if unixTime, err := strconv.ParseInt(t, 16, 64); err != nil || time.Now().Unix() > unixTime {
+					return ErrAuth
+				}
+				trueSecret := md5.Sum([]byte(conf.Key + s.StreamName + t))
+				if string(trueSecret[:]) != secret {
+					return ErrAuth
 				}
 			}
 		}

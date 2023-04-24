@@ -35,6 +35,9 @@ type Publish struct {
 	WaitCloseTimeout  time.Duration `default:"0s"`  // 延迟自动关闭（等待重连）
 	DelayCloseTimeout time.Duration `default:"0s"`  // 延迟自动关闭（无订阅时）
 	BufferTime        time.Duration `default:"0s"`  // 缓冲长度(单位：秒)，0代表取最近关键帧
+	Key               string        // 发布鉴权key
+	SecretArgName     string        `default:"secret"` // 发布鉴权参数名
+	ExpireArgName     string        `default:"expire"` // 发布鉴权失效时间参数名
 }
 
 func (c Publish) GetPublishConfig() Publish {
@@ -56,6 +59,9 @@ type Subscribe struct {
 	WaitTimeout     time.Duration `default:"10s"`  // 等待流超时
 	WriteBufferSize int           `default:"0"`    // 写缓冲大小
 	Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
+	Key             string        // 订阅鉴权key
+	SecretArgName   string        `default:"secret"` // 订阅鉴权参数名
+	ExpireArgName   string        `default:"expire"` // 订阅鉴权失效时间参数名
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {
@@ -126,7 +132,6 @@ type Engine struct {
 	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
 	EventBusSize        int           `default:"10"`    //事件总线大小
 	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
-	PrintTs             bool          `default:"false"` //打印时间戳
 	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
 	reportStream        quic.Stream   // console server connection
 	instanceId          string        // instance id 来自console

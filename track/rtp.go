@@ -14,6 +14,9 @@ const RTPMTU = 1400
 // WriteRTPPack 写入已反序列化的RTP包，已经排序过了的
 func (av *Media) WriteRTPPack(p *rtp.Packet) {
 	var frame RTPFrame
+	p.SSRC = av.SSRC
+	p.Padding = false
+	p.PaddingSize = 0
 	frame.Packet = p
 	av.Value.BytesIn += len(frame.Payload) + 12
 	av.Value.RTP.PushValue(frame)
@@ -28,6 +31,7 @@ func (av *Media) WriteRTPPack(p *rtp.Packet) {
 // WriteRTPFrame 写入未反序列化的RTP包, 未排序的
 func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
 	for frame := av.recorderRTP(raw); frame != nil; frame = av.nextRTPFrame() {
+		frame.Value.SSRC = av.SSRC
 		av.Value.BytesIn += len(frame.Value.Payload) + 12
 		av.DropCount += int(av.lastSeq - av.lastSeq2 - 1)
 		if len(frame.Value.Payload) > 0 {

@@ -33,6 +33,7 @@ var engineConfig = zapcore.EncoderConfig{
 	},
 }
 var LogLevel = zap.NewAtomicLevelAt(zap.DebugLevel)
+var Trace bool
 var logger *zap.Logger = zap.New(
 	zapcore.NewCore(zapcore.NewConsoleEncoder(engineConfig), zapcore.AddSync(multipleWriter), LogLevel),
 )
@@ -47,6 +48,7 @@ type Zap interface {
 	Lang(lang map[string]string) *Logger
 	Named(name string) *Logger
 	With(fields ...zap.Field) *Logger
+	Trace(msg string, fields ...zap.Field)
 	Debug(msg string, fields ...zap.Field)
 	Info(msg string, fields ...zap.Field)
 	Warn(msg string, fields ...zap.Field)
@@ -89,6 +91,13 @@ func (l *Logger) formatLang(msg *string, fields []zapcore.Field) {
 				fields[i].Key = v
 			}
 		}
+	}
+}
+
+func (l *Logger) Trace(msg string, fields ...zap.Field) {
+	if Trace {
+		l.formatLang(&msg, fields)
+		l.Logger.Debug(msg, fields...)
 	}
 }
 
