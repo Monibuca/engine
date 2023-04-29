@@ -22,6 +22,11 @@ type GlobalConfig struct {
 	config.Engine
 }
 
+func ShouldYaml(r *http.Request) bool {
+	format := r.URL.Query().Get("format")
+	return r.URL.Query().Get("yaml") != "" || format == "yaml"
+}
+
 func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rw.Write([]byte("Monibuca API Server\n"))
 	for _, api := range apiList {
@@ -34,11 +39,11 @@ func fetchSummary() *Summary {
 }
 
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
-	format := r.URL.Query().Get("format")
+	y := ShouldYaml(r)
 	if r.Header.Get("Accept") == "text/event-stream" {
 		summary.Add()
 		defer summary.Done()
-		if format == "yaml" {
+		if y {
 			util.ReturnYaml(fetchSummary, time.Second, rw, r)
 		} else {
 			util.ReturnJson(fetchSummary, time.Second, rw, r)
@@ -47,7 +52,7 @@ func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 		if !summary.Running() {
 			summary.collect()
 		}
-		if format == "yaml" {
+		if y {
 			if err := yaml.NewEncoder(rw).Encode(&summary); err != nil {
 				http.Error(rw, err.Error(), http.StatusInternalServerError)
 			}
@@ -71,7 +76,11 @@ func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
 func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
-			util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
+			if ShouldYaml(r) {
+				util.ReturnYaml(func() *Stream { return s }, time.Second, rw, r)
+			} else {
+				util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
+			}
 		} else {
 			http.Error(rw, NO_SUCH_STREAM, http.StatusNotFound)
 		}
@@ -113,7 +122,7 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 	} else {
 		p = Engine
 	}
-	if q.Get("yaml") != "" {
+	if ShouldYaml(r) {
 		mm, err := yaml.Marshal(p.RawConfig)
 		if err != nil {
 			mm = []byte("")
@@ -145,7 +154,7 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 	} else {
 		p = Engine
 	}
-	if q.Has("yaml") {
+	if ShouldYaml(r) {
 		err = yaml.NewDecoder(r.Body).Decode(&p.Modified)
 	} else {
 		err = json.NewDecoder(r.Body).Decode(&p.Modified)
@@ -346,7 +355,7 @@ func (c *GlobalConfig) API_replay_ps(w http.ResponseWriter, r *http.Request) {
 		pub.SetIO(f)
 		if err = Engine.Publish(streamPath, &pub); err == nil {
 			go pub.Replay(f)
-				w.Write([]byte("ok"))
+			w.Write([]byte("ok"))
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

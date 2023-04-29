@@ -105,7 +105,7 @@ func (s *Subscribers) Delete(suber ISubscriber) {
 
 func (s *Subscribers) Add(suber ISubscriber, wait *waitTracks) {
 	io := suber.GetSubscriber()
-	if io.IsInternal {
+	if io.Config.Internal {
 		s.internal[suber] = wait
 		io.Info("innersuber +1", zap.Int("remains", len(s.internal)))
 	} else {

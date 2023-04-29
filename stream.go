@@ -416,9 +416,6 @@ func (s *Stream) run() {
 						s.Subscribers.Broadcast(event)
 					}
 				})
-				if s.State != STATE_PUBLISHING {
-					continue
-				}
 				if s.Tracks.Len() == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)
 				} else {
@@ -530,6 +527,8 @@ func (s *Stream) run() {
 						if _, ok := v.Value.(*track.Audio); ok && !s.GetPublisherConfig().PubVideo {
 							s.Subscribers.AbortWait()
 						}
+						// 这里重置的目的是当PublishTimeout设置很大的情况下，需要及时取消订阅者的等待
+						s.timeout.Reset(time.Second * 5)
 					} else {
 						v.Reject(ErrBadTrackName)
 					}

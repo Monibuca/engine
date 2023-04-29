@@ -62,6 +62,7 @@ type Subscribe struct {
 	Key             string        // 订阅鉴权key
 	SecretArgName   string        `default:"secret"` // 订阅鉴权参数名
 	ExpireArgName   string        `default:"expire"` // 订阅鉴权失效时间参数名
+	Internal        bool          `default:"false"`  // 是否内部订阅
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {

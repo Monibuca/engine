@@ -115,7 +115,6 @@ type TrackPlayer struct {
 // Subscriber 订阅者实体定义
 type Subscriber struct {
 	IO
-	IsInternal  bool //是否内部订阅,不放入订阅列表
 	Config      *config.Subscribe
 	TrackPlayer `json:"-" yaml:"-"`
 }
@@ -384,7 +383,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 func (s *Subscriber) onStop() {
 	if !s.Stream.IsClosed() {
 		s.Info("stop")
-		if !s.IsInternal {
+		if !s.Config.Internal {
 			s.Stream.Receive(s.Spesific)
 		}
 	}

@@ -129,6 +129,20 @@ var (
 	OnAuthPub         func(p *util.Promise[IPublisher]) error
 )
 
+func (io *IO) auth(key string, secret string, expire string) bool {
+	if unixTime, err := strconv.ParseInt(expire, 16, 64); err != nil || time.Now().Unix() > unixTime {
+		return false
+	}
+	trueSecret := md5.Sum([]byte(key + io.Stream.Path + expire))
+	for i := 0; i < 16; i++ {
+		hex, err := strconv.ParseInt(secret[i<<1:(i<<1)+2], 16, 16)
+		if trueSecret[i] != byte(hex) || err != nil {
+			return false
+		}
+	}
+	return true
+}
+
 // receive 用于接收发布或者订阅
 func (io *IO) receive(streamPath string, specific IIO) error {
 	streamPath = strings.Trim(streamPath, "/")
@@ -206,13 +220,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 					return err
 				}
 			} else if conf.Key != "" {
-				secret := io.Args.Get(conf.SecretArgName)
-				t := io.Args.Get(conf.ExpireArgName)
-				if unixTime, err := strconv.ParseInt(t, 16, 64); err != nil || time.Now().Unix() > unixTime {
-					return ErrAuth
-				}
-				trueSecret := md5.Sum([]byte(conf.Key + s.StreamName + t))
-				if string(trueSecret[:]) != secret {
+				if !io.auth(conf.Key, io.Args.Get(conf.SecretArgName), io.Args.Get(conf.ExpireArgName)) {
 					return ErrAuth
 				}
 			}
@@ -247,13 +255,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 					return err
 				}
 			} else if conf := specific.(ISubscriber).GetSubscriber().Config; conf.Key != "" {
-				secret := io.Args.Get(conf.SecretArgName)
-				t := io.Args.Get(conf.ExpireArgName)
-				if unixTime, err := strconv.ParseInt(t, 16, 64); err != nil || time.Now().Unix() > unixTime {
-					return ErrAuth
-				}
-				trueSecret := md5.Sum([]byte(conf.Key + s.StreamName + t))
-				if string(trueSecret[:]) != secret {
+				if !io.auth(conf.Key, io.Args.Get(conf.SecretArgName), io.Args.Get(conf.ExpireArgName)) {
 					return ErrAuth
 				}
 			}

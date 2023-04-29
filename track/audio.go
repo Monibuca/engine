@@ -85,8 +85,8 @@ func (a *Audio) CompleteRTP(value *AVFrame) {
 }
 
 func (a *Audio) Narrow() {
-	if a.HistoryRing == nil && a.IDRing != nil {
-		a.narrow(int(a.Value.Sequence - a.IDRing.Value.Sequence))
-	}
+	// if a.HistoryRing == nil && a.IDRing != nil {
+	// 	a.narrow(int(a.Value.Sequence - a.IDRing.Value.Sequence))
+	// }
 	a.AddIDR()
 }
