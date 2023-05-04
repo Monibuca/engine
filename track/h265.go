@@ -96,7 +96,7 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 	if isExtHeader := (b0 >> 4) & 0b1000; isExtHeader != 0 {
 		packetType := b0 & 0b1111
 		switch packetType {
-		case codec.PacketTypeMPEG2TSSequenceStart:
+		case codec.PacketTypeSequenceStart:
 			header := frame.ToBytes()
 			header[0] = 0x1c
 			header[1] = 0x00

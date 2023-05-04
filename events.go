@@ -78,7 +78,3 @@ type UnsubscribeEvent struct {
 type AddTrackEvent struct {
 	Event[common.Track]
 }
-
-type TrackTimeoutEvent struct {
-	Event[common.Track]
-}

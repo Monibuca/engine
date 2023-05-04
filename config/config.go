@@ -201,11 +201,12 @@ func Struct2Config(s any, prefix ...string) (config Config) {
 				return
 			}
 		}
+		if ft.Tag.Get("json") == "-" {
+			continue
+		}
 		switch ft.Type.Kind() {
 		case reflect.Struct:
 			config[name] = Struct2Config(fv, envPath...)
-		case reflect.Slice:
-			fallthrough
 		default:
 			reflect.ValueOf(config).SetMapIndex(reflect.ValueOf(name), fv)
 		}

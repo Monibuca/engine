@@ -402,21 +402,18 @@ func (s *Stream) run() {
 						s.onSuberClose(sub)
 					}
 				}
-				s.Tracks.ModifyRange(func(name string, t Track) {
+				hasTrackTimeout := false
+				s.Tracks.Range(func(name string, t Track) {
 					if _, ok := t.(*track.Data); ok {
 						return
 					}
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
 						s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
-						delete(s.Tracks.Map.Map, name)
-						var event TrackTimeoutEvent
-						event.Target = t
-						event.Time = time.Now()
-						s.Subscribers.Broadcast(event)
+						hasTrackTimeout = true
 					}
 				})
-				if s.Tracks.Len() == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
+				if hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)
 				} else {
 					s.timeout.Reset(time.Second * 5)

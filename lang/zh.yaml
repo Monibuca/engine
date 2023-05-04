@@ -49,6 +49,8 @@ reamins:  剩余
 "fu have no start": rtp的FU起始包丢了
 "disabled by env": 被环境变量禁用
 "event cost too much time": 事件处理耗时过长
+"run timeout": 流事件处理耗时过长
+"cost": 耗时
 firstTs:  第一帧时间戳
 firstSeq: 第一帧序列号
 skipSeq:  跳过序列号

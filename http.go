@@ -63,8 +63,7 @@ func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
-	format := r.URL.Query().Get("format")
-	if format == "yaml" {
+	if ShouldYaml(r) {
 		if err := yaml.NewEncoder(rw).Encode(Plugins); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 		}
