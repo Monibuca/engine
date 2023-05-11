@@ -332,31 +332,3 @@ func (conf *GlobalConfig) API_replay_mp4(w http.ResponseWriter, r *http.Request)
 		go pub.ReadMP4Data(f)
 	}
 }
-
-func (c *GlobalConfig) API_replay_ps(w http.ResponseWriter, r *http.Request) {
-	dump := r.URL.Query().Get("dump")
-	streamPath := r.URL.Query().Get("streamPath")
-	if dump == "" {
-		dump = "dump/ps"
-	}
-	f, err := os.OpenFile(dump, os.O_RDONLY, 0644)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	} else {
-		if streamPath == "" {
-			if strings.HasPrefix(dump, "/") {
-				streamPath = "replay" + dump
-			} else {
-				streamPath = "replay/" + dump
-			}
-		}
-		var pub PSPublisher
-		pub.SetIO(f)
-		if err = Engine.Publish(streamPath, &pub); err == nil {
-			go pub.Replay(f)
-			w.Write([]byte("ok"))
-		} else {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}
-}

@@ -124,7 +124,8 @@ func FilterStreams[T IPublisher]() (ss []*Stream) {
 
 type StreamTimeoutConfig struct {
 	PublishTimeout    time.Duration //发布者无数据后超时
-	DelayCloseTimeout time.Duration //发布者丢失后等待
+	DelayCloseTimeout time.Duration //无订阅者后超时,必须先有一次订阅才会激活
+	IdleTimeout       time.Duration //无订阅者后超时，不需要订阅即可激活
 }
 type Tracks struct {
 	util.Map[string, Track]
@@ -297,10 +298,18 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 				stateEvent = SEpublish{event}
 			}
 			r.Subscribers.Broadcast(stateEvent)
-			r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
+			if r.IdleTimeout > 0 && r.Subscribers.Len() == 0 {
+				return r.action(ACTION_LASTLEAVE)
+			} else {
+				r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
+			}
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
-			r.timeout.Reset(r.DelayCloseTimeout)
+			if r.IdleTimeout > 0 {
+				r.timeout.Reset(r.IdleTimeout)
+			} else {
+				r.timeout.Reset(r.DelayCloseTimeout)
+			}
 		case STATE_CLOSED:
 			for !r.actionChan.Close() {
 				// 等待channel发送完毕，伪自旋锁
@@ -361,7 +370,7 @@ func (s *Stream) onSuberClose(sub ISubscriber) {
 	if s.Publisher != nil {
 		s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 	}
-	if s.DelayCloseTimeout > 0 && s.Subscribers.Len() == 0 {
+	if (s.DelayCloseTimeout > 0 || s.IdleTimeout > 0) && s.Subscribers.Len() == 0 {
 		s.action(ACTION_LASTLEAVE)
 	}
 }
@@ -514,14 +523,23 @@ func (s *Stream) run() {
 					if s.State == STATE_WAITPUBLISH {
 						s.action(ACTION_PUBLISH)
 					}
+					pubConfig := s.GetPublisherConfig()
 					name := v.Value.GetBase().Name
+					if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubVideo {
+						v.Reject(ErrTrackMute)
+						return
+					}
+					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubAudio {
+						v.Reject(ErrTrackMute)
+						return
+					}
 					if s.Tracks.Add(name, v.Value) {
 						v.Resolve()
 						s.Subscribers.OnTrack(v.Value)
-						if _, ok := v.Value.(*track.Video); ok && !s.GetPublisherConfig().PubAudio {
+						if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubAudio {
 							s.Subscribers.AbortWait()
 						}
-						if _, ok := v.Value.(*track.Audio); ok && !s.GetPublisherConfig().PubVideo {
+						if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubVideo {
 							s.Subscribers.AbortWait()
 						}
 						// 这里重置的目的是当PublishTimeout设置很大的情况下，需要及时取消订阅者的等待

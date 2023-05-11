@@ -21,7 +21,7 @@ type AVRingReader struct {
 	ctx   context.Context
 	Track *Media
 	*util.Ring[common.AVFrame]
-	Poll       time.Duration
+	wait       func()
 	State      byte
 	FirstSeq   uint32
 	FirstTs    time.Duration
@@ -39,16 +39,28 @@ func (r *AVRingReader) DecConfChanged() bool {
 	return r.ConfSeq != r.Track.SequenceHeadSeq
 }
 
-func (r *AVRingReader) wait() {
-	if r.Poll == 0 {
-		runtime.Gosched()
-	} else {
-		time.Sleep(r.Poll)
+func NewAVRingReader(t *Media, poll time.Duration) *AVRingReader {
+	r := &AVRingReader{
+		Track: t,
 	}
+	if poll == 0 {
+		r.wait = runtime.Gosched
+	} else {
+		r.wait = func() {
+			time.Sleep(poll)
+		}
+	}
+	return r
 }
 
 func (r *AVRingReader) ReadFrame() *common.AVFrame {
 	for r.Frame = &r.Value; r.ctx.Err() == nil && !r.Frame.CanRead; r.wait() {
+	}
+	// 超过一半的缓冲区大小，说明Reader太慢，需要丢帧
+	if r.State == READSTATE_NORMAL && r.Track.LastValue.Sequence-r.Frame.Sequence > uint32(r.Track.Size/2) && r.Track.IDRing != nil && r.Track.IDRing.Value.Sequence > r.Frame.Sequence {
+		r.Warn("reader too slow", zap.Uint32("lastSeq", r.Track.LastValue.Sequence), zap.Uint32("seq", r.Frame.Sequence))
+		r.Ring = r.Track.IDRing
+		return r.ReadFrame()
 	}
 	return r.Frame
 }

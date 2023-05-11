@@ -122,6 +122,7 @@ func (io *IO) Stop() {
 var (
 	ErrBadStreamName  = errors.New("Stream Already Exist")
 	ErrBadTrackName   = errors.New("Track Already Exist")
+	ErrTrackMute      = errors.New("Track Mute")
 	ErrStreamIsClosed = errors.New("Stream Is Closed")
 	ErrPublisherLost  = errors.New("Publisher Lost")
 	ErrAuth           = errors.New("Auth Failed")
@@ -197,6 +198,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		}
 		s.PublishTimeout = conf.PublishTimeout
 		s.DelayCloseTimeout = conf.DelayCloseTimeout
+		s.IdleTimeout = conf.IdleTimeout
 		defer func() {
 			if err == nil {
 				if oldPublisher == nil {

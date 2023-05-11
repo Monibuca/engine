@@ -190,7 +190,7 @@ func (opt *Plugin) registerHandler() {
 }
 
 func (opt *Plugin) settingPath() string {
-	return filepath.Join(settingDir, strings.ToLower(opt.Name)+".yaml")
+	return filepath.Join(SettingDir, strings.ToLower(opt.Name)+".yaml")
 }
 
 func (opt *Plugin) Save() error {

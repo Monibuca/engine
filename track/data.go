@@ -33,6 +33,10 @@ func (dt *Data) Push(data any) {
 		dt.Lock()
 		defer dt.Unlock()
 	}
+	switch d := data.(type) {
+	case util.Recyclable:
+		d.Recycle()
+	}
 	dt.Value.WriteTime = time.Now()
 	dt.Write(data)
 }

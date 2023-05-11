@@ -41,13 +41,16 @@ var (
 	plugins      []*Plugin                  //插件列表
 	EngineConfig = &GlobalConfig{}
 	Engine       = InstallPlugin(EngineConfig)
-	settingDir   = filepath.Join(ExecDir, ".m7s")           //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
+	SettingDir   = filepath.Join(ExecDir, ".m7s")           //配置缓存目录，该目录按照插件名称作为文件名存储修改过的配置
 	MergeConfigs = []string{"Publish", "Subscribe", "HTTP"} //需要合并配置的属性项，插件若没有配置则使用全局配置
 	EventBus     chan any
 	apiList      []string //注册到引擎的API接口列表
 )
 
 func init() {
+	if setting_dir := os.Getenv("M7S_SETTING_DIR"); setting_dir != "" {
+		SettingDir = setting_dir
+	}
 	if conn, err := net.Dial("udp", "114.114.114.114:80"); err == nil {
 		SysInfo.LocalIP, _, _ = strings.Cut(conn.LocalAddr().String(), ":")
 	}
@@ -68,7 +71,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
 		log.Warn("read config file error:", err.Error())
 	}
-	if err = os.MkdirAll(settingDir, 0766); err != nil {
+	if err = os.MkdirAll(SettingDir, 0766); err != nil {
 		log.Error("create dir .m7s error:", err)
 		return
 	}
@@ -174,8 +177,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	fmt.Println()
 	fmt.Println(Bold(Cyan("官网地址: ")), Yellow("https://m7s.live"))
 	fmt.Println(Bold(Cyan("启动工程: ")), Yellow("https://github.com/langhuihui/monibuca"))
-	fmt.Println(Bold(Cyan("使用文档: ")), Yellow("https://m7s.live/guide/introduction.html"))
-	fmt.Println(Bold(Cyan("开发文档: ")), Yellow("https://m7s.live/devel/startup.html"))
+	fmt.Println(Bold(Cyan("文档地址: ")), Yellow("https://docs.m7s.live"))
 	fmt.Println(Bold(Cyan("视频教程: ")), Yellow("https://space.bilibili.com/328443019/channel/collectiondetail?sid=514619"))
 	fmt.Println(Bold(Cyan("远程界面: ")), Yellow("https://console.monibuca.com"))
 	rp := struct {

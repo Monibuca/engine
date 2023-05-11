@@ -32,9 +32,10 @@ type Publish struct {
 	PubVideo          bool          `default:"true"`
 	KickExist         bool          // 是否踢掉已经存在的发布者
 	PublishTimeout    time.Duration `default:"10s"` // 发布无数据超时
-	WaitCloseTimeout  time.Duration `default:"0s"`  // 延迟自动关闭（等待重连）
-	DelayCloseTimeout time.Duration `default:"0s"`  // 延迟自动关闭（无订阅时）
-	BufferTime        time.Duration `default:"0s"`  // 缓冲长度(单位：秒)，0代表取最近关键帧
+	WaitCloseTimeout  time.Duration // 延迟自动关闭（等待重连）
+	DelayCloseTimeout time.Duration // 延迟自动关闭（无订阅时）
+	IdleTimeout       time.Duration // 空闲(无订阅)超时
+	BufferTime        time.Duration // 缓冲长度(单位：秒)，0代表取最近关键帧
 	Key               string        // 发布鉴权key
 	SecretArgName     string        `default:"secret"` // 发布鉴权参数名
 	ExpireArgName     string        `default:"expire"` // 发布鉴权失效时间参数名

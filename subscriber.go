@@ -107,7 +107,7 @@ type ISubscriber interface {
 type TrackPlayer struct {
 	context.Context
 	context.CancelFunc
-	AudioReader, VideoReader track.AVRingReader
+	AudioReader, VideoReader *track.AVRingReader
 	Audio                    *track.Audio
 	Video                    *track.Video
 }
@@ -142,9 +142,8 @@ func (s *Subscriber) OnEvent(event any) {
 	}
 }
 
-func (s *Subscriber) CreateTrackReader(t *track.Media) (result track.AVRingReader) {
-	result.Poll = s.Config.Poll
-	result.Track = t
+func (s *Subscriber) CreateTrackReader(t *track.Media) (result *track.AVRingReader) {
+	result = track.NewAVRingReader(t, s.Config.Poll)
 	result.Logger = s.With(zap.String("track", t.Name))
 	return
 }
@@ -152,13 +151,13 @@ func (s *Subscriber) CreateTrackReader(t *track.Media) (result track.AVRingReade
 func (s *Subscriber) AddTrack(t Track) bool {
 	switch v := t.(type) {
 	case *track.Video:
-		if s.VideoReader.Track != nil || !s.Config.SubVideo {
+		if s.VideoReader != nil || !s.Config.SubVideo {
 			return false
 		}
 		s.VideoReader = s.CreateTrackReader(&v.Media)
 		s.Video = v
 	case *track.Audio:
-		if s.AudioReader.Track != nil || !s.Config.SubAudio {
+		if s.AudioReader != nil || !s.Config.SubAudio {
 			return false
 		}
 		s.AudioReader = s.CreateTrackReader(&v.Media)
