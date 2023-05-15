@@ -26,7 +26,7 @@ func (p *流速控制) 重置(绝对时间戳 time.Duration, dts time.Duration) 
 }
 func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) time.Duration {
 	if dts < p.起始dts {
-		dts += 0xFFFFFFFFF
+		dts += (1 << 32)
 	}
 	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
@@ -250,7 +250,7 @@ func (av *Media) Flush() {
 	} else {
 		if useDts {
 			deltaDts := curValue.DTS - preValue.DTS
-			if deltaDts <= 0 {
+			if deltaDts <= 0 && deltaDts > -(1<<15) {
 				// 生成一个无奈的deltaDts
 				deltaDts = 90
 				// 必须保证DTS递增

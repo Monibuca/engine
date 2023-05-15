@@ -119,14 +119,21 @@ func (opt *Plugin) assign() {
 		opt.registerHandler()
 		return
 	}
+	if EngineConfig.DisableAll {
+		opt.Disabled = true
+	}
 	if opt.RawConfig == nil {
 		opt.RawConfig = config.Config{}
 	} else if opt.RawConfig["enable"] == false {
-		opt.Warn("plugin disabled")
-		return
+		opt.Disabled = true
 	} else if opt.RawConfig["enable"] == true {
+		opt.Disabled = false
 		//移除这个属性防止反序列化报错
 		delete(opt.RawConfig, "enable")
+	} 
+	if opt.Disabled {
+		opt.Warn("plugin disabled")
+		return
 	}
 	t := reflect.TypeOf(opt.Config).Elem()
 	// 用全局配置覆盖没有设置的配置

@@ -150,8 +150,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	}
 	var enabledPlugins, disabledPlugins []string
 	for _, plugin := range plugins {
-		if plugin.Disabled || plugin.RawConfig["enable"] == false {
-			plugin.Disabled = true
+		if plugin.Disabled {
 			disabledPlugins = append(disabledPlugins, plugin.Name)
 		} else {
 			enabledPlugins = append(enabledPlugins, plugin.Name)
