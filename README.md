@@ -40,6 +40,7 @@
 # 引擎默认配置
 ```yaml
 global:
+  disableall: false # 是否禁用所有插件
   loglang: zh # 日志语言，可选值：zh,en
   loglevel: info # 日志级别，可选值：debug,info,warn,error,panic,fatal
   http:
@@ -60,6 +61,9 @@ global:
       publishtimeout: 10s # 发布流默认过期时间，超过该时间发布者没有恢复流将被删除
       delayclosetimeout: 0 # 自动关闭触发后延迟的时间(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
       waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
+      buffertime: 0 # 缓存时间，用于时光回溯，0为关闭缓存
+      idletimeout: 0 # 空闲超时时间，0为不限制
+      poll: 20ms # 订阅者轮询时间，伪自选锁等待周期
       key:                      # 发布鉴权key
 	    secretargname: secret     # 发布鉴权参数名
 	    expireargname:   expire   # 发布鉴权失效时间参数名
@@ -74,9 +78,12 @@ global:
       submode: 0 # 订阅模式，0为跳帧追赶模式，1为不追赶（多用于录制），2为时光回溯模式
       iframeonly: false # 只订阅关键帧
       waittimeout: 10s # 等待发布者的超时时间，用于订阅尚未发布的流
+      writebuffersize: 0 # 订阅者写缓存大小，用于减少io次数，但可能影响实时性
+      poll: 20ms # 订阅者轮询时间，伪自选锁等待周期
       key:                      # 订阅鉴权key
 	    secretargname: secret     # 订阅鉴权参数名
 	    expireargname:   expire   # 订阅鉴权失效时间参数名
+      internal: false # 是否内部订阅，内部订阅不会触发发布者自动断开功能
   enableavcc : true  # 启用AVCC格式缓存，用于rtmp协议
   enablertp : true # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enableauth: true # 启用鉴权,详细查看鉴权机制
