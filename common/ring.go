@@ -39,3 +39,14 @@ func (rb *RingBuffer[T]) Reduce(size int) (newItem *util.Ring[T]) {
 	rb.Size -= size
 	return
 }
+
+// Do calls function f on each element of the ring, in forward order.
+// The behavior of Do is undefined if f changes *r.
+func (rb *RingBuffer[T]) Do(f func(*T)) {
+	if rb != nil {
+		f(&rb.Value)
+		for p := rb.Next(); p != rb.Ring; p = rb.Next() {
+			f(&p.Value)
+		}
+	}
+}

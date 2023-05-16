@@ -12,13 +12,16 @@ type LockFrame[T any] struct {
 
 type LockRing[T any] struct {
 	RingBuffer[LockFrame[T]]
-	Flag *int32
+	Reset func(*DataFrame[T])
+	Flag  *int32
 }
 
 func (lr *LockRing[T]) Init(n int) *LockRing[T] {
 	var flag int32
 	if lr == nil {
 		lr = &LockRing[T]{}
+	}
+	lr.Reset = func(*DataFrame[T]) {
 	}
 	lr.RingBuffer.Init(n)
 	lr.Flag = &flag
@@ -33,23 +36,27 @@ func (rb *LockRing[T]) Read() *DataFrame[T] {
 	return &current.DataFrame
 }
 
-func (rb *LockRing[T]) Step() {
-	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
-		current := rb.RingBuffer.MoveNext()
-		current.Lock()
-		rb.RingBuffer.LastValue.Unlock()
-		//Flag不为1代表被Dispose了，但尚未处理Done
-		if !atomic.CompareAndSwapInt32(rb.Flag, 1, 0) {
-			current.Unlock()
-		}
-	}
-}
+// func (rb *LockRing[T]) Step() {
+// 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
+// 		current := rb.RingBuffer.MoveNext()
+// 		current.Lock()
+// 		rb.RingBuffer.LastValue.Unlock()
+// 		//Flag不为1代表被Dispose了，但尚未处理Done
+// 		if !atomic.CompareAndSwapInt32(rb.Flag, 1, 0) {
+// 			current.Unlock()
+// 		}
+// 	}
+// }
 
 func (rb *LockRing[T]) Write(value T) {
 	rb.Value.Value = value
 	if atomic.CompareAndSwapInt32(rb.Flag, 0, 1) {
 		current := rb.RingBuffer.MoveNext()
 		current.Lock()
+		if current.Sequence != 0 {
+			rb.Reset(&current.DataFrame)
+		}
+		current.Sequence = rb.RingBuffer.MoveCount
 		rb.LastValue.Unlock()
 		//Flag不为1代表被Dispose了，但尚未处理Done
 		if !atomic.CompareAndSwapInt32(rb.Flag, 1, 0) {

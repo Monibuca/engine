@@ -162,7 +162,6 @@ func (s *Subscriber) AddTrack(t Track) bool {
 		}
 		s.AudioReader = s.CreateTrackReader(&v.Media)
 		s.Audio = v
-	case *track.Data:
 	default:
 		return false
 	}

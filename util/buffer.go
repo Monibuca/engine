@@ -65,6 +65,11 @@ func (b *Buffer) Write(a []byte) (n int, err error) {
 	*b = append(*b, a...)
 	return len(a), nil
 }
+
+func (b Buffer) Clone() (result Buffer) {
+	return append(result, b...)
+}
+
 func (b Buffer) Len() int {
 	return len(b)
 }

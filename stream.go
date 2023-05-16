@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -413,7 +412,7 @@ func (s *Stream) run() {
 				}
 				hasTrackTimeout := false
 				s.Tracks.Range(func(name string, t Track) {
-					if _, ok := t.(*track.Data); ok {
+					if _, ok := t.(track.Custom); ok {
 						return
 					}
 					// track 超过一定时间没有更新数据了
@@ -514,7 +513,7 @@ func (s *Stream) run() {
 						if s.Tracks.Len() == 0 {
 							s.action(ACTION_PUBLISHLOST)
 						}
-						if dt, ok := t.(*track.Data); ok {
+						if dt, ok := t.(track.Custom); ok {
 							dt.Dispose()
 						}
 					}
@@ -559,7 +558,7 @@ func (s *Stream) run() {
 			} else {
 				s.Subscribers.Dispose()
 				s.Tracks.Range(func(_ string, t Track) {
-					if dt, ok := t.(*track.Data); ok {
+					if dt, ok := t.(track.Custom); ok {
 						dt.Dispose()
 					}
 				})
@@ -589,12 +588,3 @@ type SubPulse struct {
 
 type Unsubscribe ISubscriber
 type NoMoreTrack struct{}
-
-func (r *Stream) NewDataTrack(name string, locker sync.Locker) (dt *track.Data) {
-	dt = &track.Data{
-		Locker: locker,
-	}
-	dt.Init(10)
-	dt.SetStuff(name, r)
-	return
-}
