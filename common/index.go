@@ -23,52 +23,50 @@ const (
 
 // Base 基础Track类
 type Base struct {
-	Name     string
-	log.Zap  `json:"-"`
-	Stream   IStream     `json:"-"`
-	Attached atomic.Bool `json:"-"`
-	State    TrackState
-	ts       time.Time
-	bytes    int
-	frames   int
-	BPS      int
-	FPS      int
-	RawSize  int                 // 裸数据长度
-	RawPart  []int               // 裸数据片段用于UI上显示
-	BPSs     []TimelineData[int] // 10s码率统计
-	FPSs     []TimelineData[int] // 10s帧率统计
+	Name      string
+	log.Zap   `json:"-" yaml:"-"`
+	Stream    IStream     `json:"-" yaml:"-"`
+	Attached  atomic.Bool `json:"-" yaml:"-"`
+	State     TrackState
+	ts        time.Time
+	bytes     int
+	frames    int
+	DropCount int `json:"-" yaml:"-"` //丢帧数
+	BPS       int
+	FPS       int
+	Drops     int   // 丢帧率
+	RawSize   int   // 裸数据长度
+	RawPart   []int // 裸数据片段用于UI上显示
 }
 
 func (bt *Base) ComputeBPS(bytes int) {
 	bt.bytes += bytes
 	bt.frames++
 	if elapse := time.Since(bt.ts).Seconds(); elapse > 1 {
-		bt.BPS = bt.bytes / int(elapse)
-		bt.FPS = bt.frames / int(elapse)
+		bt.BPS = int(float64(bt.bytes) / elapse)
+		bt.FPS = int(float64(bt.frames) / elapse)
+		bt.Drops = int(float64(bt.DropCount) / elapse)
 		bt.bytes = 0
 		bt.frames = 0
+		bt.DropCount = 0
 		bt.ts = time.Now()
-		bt.BPSs = append(bt.BPSs, TimelineData[int]{Timestamp: bt.ts, Value: bt.BPS})
-		if len(bt.BPSs) > 9 {
-			copy(bt.BPSs, bt.BPSs[1:])
-			bt.BPSs = bt.BPSs[:10]
-		}
-		bt.FPSs = append(bt.FPSs, TimelineData[int]{Timestamp: bt.ts, Value: bt.FPS})
-		if len(bt.FPSs) > 10 {
-			copy(bt.FPSs, bt.FPSs[1:])
-			bt.FPSs = bt.FPSs[:10]
-		}
 	}
 }
 
 func (bt *Base) GetBase() *Base {
 	return bt
 }
+
+// GetRBSize 获取缓冲区大小
+func (bt *Base) GetRBSize() int {
+	return 0
+}
+
 func (bt *Base) SnapForJson() {
 }
 func (bt *Base) Flush(bf *BaseFrame) {
 	bt.ComputeBPS(bf.BytesIn)
-	bf.Timestamp = time.Now()
+	bf.WriteTime = time.Now()
 }
 func (bt *Base) SetStuff(stuff ...any) {
 	for _, s := range stuff {
@@ -89,6 +87,7 @@ type Track interface {
 	LastWriteTime() time.Time
 	SnapForJson()
 	SetStuff(stuff ...any)
+	GetRBSize() int
 }
 
 type AVTrack interface {

@@ -3,6 +3,8 @@ package util
 import (
 	"errors"
 	"io"
+	"strconv"
+	"strings"
 )
 
 /*
@@ -381,4 +383,25 @@ func ToFloat64(num interface{}) float64 {
 		return float64(v)
 	}
 	return 0
+}
+
+func Conf2Listener(conf string) (protocol string, ports []uint16) {
+	var port string
+	protocol, port, _ = strings.Cut(conf, ":")
+	if r := strings.Split(port, "-"); len(r) == 2 {
+		min, err := strconv.Atoi(r[0])
+		if err != nil {
+			return
+		}
+		max, err := strconv.Atoi(r[1])
+		if err != nil {
+			return
+		}
+		if min < max {
+			ports = append(ports, uint16(min), uint16(max))
+		}
+	} else if p, err := strconv.Atoi(port); err == nil {
+		ports = append(ports, uint16(p))
+	}
+	return
 }

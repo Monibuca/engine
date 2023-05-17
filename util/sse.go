@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -58,6 +60,9 @@ func NewSSE(w http.ResponseWriter, ctx context.Context) *SSE {
 
 func (sse *SSE) WriteJSON(data any) error {
 	return json.NewEncoder(sse).Encode(data)
+}
+func (sse *SSE) WriteYAML(data any) error {
+	return yaml.NewEncoder(sse).Encode(data)
 }
 func (sse *SSE) WriteExec(cmd *exec.Cmd) error {
 	cmd.Stderr = sse

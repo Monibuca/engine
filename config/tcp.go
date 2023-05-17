@@ -42,7 +42,11 @@ func (tcp *TCP) listen(l net.Listener, handler func(*net.TCPConn)) {
 func (tcp *TCP) Listen(ctx context.Context, plugin TCPPlugin) error {
 	l, err := net.Listen("tcp", tcp.ListenAddr)
 	if err != nil {
-		log.Fatalf("%s: Listen error: %v", tcp.ListenAddr, err)
+		if Global.LogLang == "zh" {
+			log.Fatalf("%s: 监听失败: %v", tcp.ListenAddr, err)
+		} else {
+			log.Fatalf("%s: Listen error: %v", tcp.ListenAddr, err)
+		}
 		return err
 	}
 	count := tcp.ListenNum

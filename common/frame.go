@@ -46,8 +46,7 @@ func (r *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 
 type BaseFrame struct {
 	DeltaTime uint32    // 相对上一帧时间戳，毫秒
-	AbsTime   uint32    // 绝对时间戳，毫秒
-	Timestamp time.Time // 写入时间,可用于比较两个帧的先后
+	WriteTime time.Time // 写入时间,可用于比较两个帧的先后
 	Sequence  uint32    // 在一个Track中的序号
 	BytesIn   int       // 输入字节数用于计算BPS
 }
@@ -59,21 +58,23 @@ type DataFrame[T any] struct {
 
 type AVFrame struct {
 	BaseFrame
-	IFrame  bool
-	CanRead bool `json:"-"`
-	PTS     uint32
-	DTS     uint32
-	ADTS    *util.ListItem[util.Buffer] `json:"-"` // ADTS头
-	AVCC    util.BLL                    `json:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
-	RTP     util.List[RTPFrame]         `json:"-"`
-	AUList  util.BLLs                   `json:"-"` // 裸数据
+	IFrame    bool
+	CanRead   bool `json:"-" yaml:"-"`
+	PTS       time.Duration
+	DTS       time.Duration
+	Timestamp time.Duration               // 绝对时间戳
+	ADTS      *util.ListItem[util.Buffer] `json:"-" yaml:"-"` // ADTS头
+	AVCC      util.BLL                    `json:"-" yaml:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
+	RTP       util.List[RTPFrame]         `json:"-" yaml:"-"`
+	AUList    util.BLLs                   `json:"-" yaml:"-"` // 裸数据
+	Extras    any                         `json:"-" yaml:"-"` // 任意扩展数据
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {
 	if ts == 0 {
 		ts = 1
 	}
-	av.AbsTime = ts
+	av.Timestamp = time.Duration(ts) * time.Millisecond
 	av.BytesIn += frame.ByteLength
 	for {
 		item := frame.Shift()
@@ -96,7 +97,7 @@ func (av *AVFrame) Reset() {
 		av.ADTS = nil
 	}
 	av.BytesIn = 0
-	av.AbsTime = 0
+	av.Timestamp = 0
 	av.DeltaTime = 0
 }
 

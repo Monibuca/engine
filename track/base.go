@@ -5,27 +5,34 @@ import (
 	"unsafe"
 
 	"github.com/pion/rtp"
+	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/util"
 )
 
 type 流速控制 struct {
-	起始时间戳 uint32
-	起始时间  time.Time
+	起始时间戳 time.Duration
+	起始dts time.Duration
 	等待上限  time.Duration
+	起始时间  time.Time
 }
 
-func (p *流速控制) 重置(绝对时间戳 uint32) {
+func (p *流速控制) 重置(绝对时间戳 time.Duration, dts time.Duration) {
 	p.起始时间 = time.Now()
 	p.起始时间戳 = 绝对时间戳
+	p.起始dts = dts
 	// println("重置", p.起始时间.Format("2006-01-02 15:04:05"), p.起始时间戳)
 }
-func (p *流速控制) 时间戳差(绝对时间戳 uint32) time.Duration {
-	return time.Duration(绝对时间戳-p.起始时间戳) * time.Millisecond
+func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) time.Duration {
+	if dts < p.起始dts {
+		dts += (1 << 32)
+	}
+	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
-func (p *流速控制) 控制流速(绝对时间戳 uint32) {
-	数据时间差, 实际时间差 := p.时间戳差(绝对时间戳), time.Since(p.起始时间)
+
+func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Duration) {
+	数据时间差, 实际时间差 := 绝对时间戳-p.起始时间戳, time.Since(p.起始时间)
 	// println("数据时间差", 数据时间差, "实际时间差", 实际时间差, "绝对时间戳", 绝对时间戳, "起始时间戳", p.起始时间戳, "起始时间", p.起始时间.Format("2006-01-02 15:04:05"))
 	// if 实际时间差 > 数据时间差 {
 	// 	p.重置(绝对时间戳)
@@ -41,6 +48,8 @@ func (p *流速控制) 控制流速(绝对时间戳 uint32) {
 			time.Sleep(过快)
 		}
 	} else if 过快 < -100*time.Millisecond {
+		// fmt.Println("过慢毫秒", 过快.Milliseconds())
+		// p.重置(绝对时间戳, dts)
 		// println("过慢毫秒", p.name, 过快.Milliseconds())
 	}
 }
@@ -76,18 +85,22 @@ type Media struct {
 	Base
 	RingBuffer[AVFrame]
 	PayloadType     byte
-	IDRingList      `json:"-"` //最近的关键帧位置，首屏渲染
+	IDRingList      `json:"-" yaml:"-"` //最近的关键帧位置，首屏渲染
 	SSRC            uint32
 	SampleRate      uint32
-	BytesPool       util.BytesPool      `json:"-"`
-	RtpPool         util.Pool[RTPFrame] `json:"-"`
-	SequenceHead    []byte              `json:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
+	BytesPool       util.BytesPool      `json:"-" yaml:"-"`
+	RtpPool         util.Pool[RTPFrame] `json:"-" yaml:"-"`
+	SequenceHead    []byte              `json:"-" yaml:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	SequenceHeadSeq int
-	RTPMuxer
 	RTPDemuxer
-	SpesificTrack `json:"-"`
-	deltaTs       int64 //用于接续发布后时间戳连续
+	SpesificTrack `json:"-" yaml:"-"`
+	deltaTs       time.Duration //用于接续发布后时间戳连续
+	deltaDTSRange time.Duration //DTS差的范围
 	流速控制
+}
+
+func (av *Media) GetRBSize() int {
+	return av.RingBuffer.Size
 }
 
 func (av *Media) GetRTPFromPool() (result *util.ListItem[RTPFrame]) {
@@ -101,20 +114,6 @@ func (av *Media) GetRTPFromPool() (result *util.ListItem[RTPFrame]) {
 		result.Value.Payload = result.Value.Raw[:0]
 	}
 	return
-}
-
-// 毫秒转换为Mpeg时间戳
-func (av *Media) Ms2MpegTs(ms uint32) uint32 {
-	return uint32(uint64(ms) * 90)
-}
-
-// Mpeg时间戳转换为毫秒
-func (av *Media) MpegTs2Ms(mpegTs uint32) uint32 {
-	return uint32(uint64(mpegTs) / 90)
-}
-
-func (av *Media) MpegTs2RTPTs(mpegTs uint32) uint32 {
-	return uint32(uint64(mpegTs) * uint64(av.SampleRate) / 90000)
 }
 
 // 为json序列化而计算的数据
@@ -158,7 +157,7 @@ func (av *Media) SetStuff(stuff ...any) {
 }
 
 func (av *Media) LastWriteTime() time.Time {
-	return av.LastValue.Timestamp
+	return av.LastValue.WriteTime
 }
 
 // func (av *Media) Play(ctx context.Context, onMedia func(*AVFrame) error) error {
@@ -180,8 +179,8 @@ func (av *Media) PreFrame() *AVFrame {
 }
 
 func (av *Media) generateTimestamp(ts uint32) {
-	av.Value.PTS = ts
-	av.Value.DTS = ts
+	av.Value.PTS = time.Duration(ts)
+	av.Value.DTS = time.Duration(ts)
 }
 
 func (av *Media) WriteSequenceHead(sh []byte) {
@@ -197,10 +196,10 @@ func (av *Media) AppendAuBytes(b ...[]byte) {
 }
 
 func (av *Media) narrow(gop int) {
-	if l := av.Size - gop - 5; l > 5 {
-		// av.Stream.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-l), zap.String("name", av.Name))
+	if l := av.Size - gop; l > 12 {
+		// av.Debug("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-5))
 		//缩小缓冲环节省内存
-		av.Reduce(l).Do(func(v AVFrame) {
+		av.Reduce(5).Do(func(v AVFrame) {
 			v.Reset()
 		})
 	}
@@ -219,19 +218,54 @@ func (av *Media) AddIDR() {
 
 func (av *Media) Flush() {
 	curValue, preValue, nextValue := &av.Value, av.LastValue, av.Next()
+	useDts := curValue.Timestamp == 0
 	if av.State == TrackStateOffline {
 		av.State = TrackStateOnline
-		av.deltaTs = int64(preValue.AbsTime) - int64(curValue.AbsTime) + int64(preValue.DeltaTime)
-		av.Info("track back online")
+		if useDts {
+			av.deltaTs = curValue.DTS - preValue.DTS
+		} else {
+			av.deltaTs = curValue.Timestamp - preValue.Timestamp
+		}
+		curValue.DTS = preValue.DTS + 90
+		curValue.PTS = preValue.PTS + 90
+		curValue.Timestamp = preValue.Timestamp + time.Millisecond
+		av.Info("track back online", zap.Duration("delta", av.deltaTs))
+	} else if av.deltaTs != 0 {
+		if useDts {
+			curValue.DTS -= av.deltaTs
+			curValue.PTS -= av.deltaTs
+		} else {
+			rtpts := av.deltaTs * 90 / time.Millisecond
+			curValue.DTS -= rtpts
+			curValue.PTS -= rtpts
+			curValue.Timestamp -= av.deltaTs
+		}
 	}
-	if av.deltaTs != 0 {
-		rtpts := int64(av.deltaTs) * 90
-		curValue.DTS = uint32(int64(curValue.DTS) + rtpts)
-		curValue.PTS = uint32(int64(curValue.PTS) + rtpts)
-		curValue.AbsTime = 0
+	if av.起始时间.IsZero() {
+		curValue.DeltaTime = 0
+		if useDts {
+			curValue.Timestamp = time.Since(av.Stream.GetStartTime())
+		}
+		av.重置(curValue.Timestamp, curValue.DTS)
+	} else {
+		if useDts {
+			deltaDts := curValue.DTS - preValue.DTS
+			if deltaDts <= 0 && deltaDts > -(1<<15) {
+				// 生成一个无奈的deltaDts
+				deltaDts = 90
+				// 必须保证DTS递增
+				curValue.DTS = preValue.DTS + deltaDts
+			} else if deltaDts != 90 {
+				// 正常情况下生成容错范围
+				av.deltaDTSRange = deltaDts * 2
+			}
+			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
+		}
+		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
 	}
+	av.Trace("write", zap.Uint32("seq", curValue.Sequence), zap.Duration("dts", curValue.DTS), zap.Duration("dts delta", curValue.DTS-preValue.DTS), zap.Uint32("delta", curValue.DeltaTime), zap.Duration("timestamp", curValue.Timestamp))
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
-	if bufferTime > 0 && av.IDRingList.Length > 1 && time.Duration(curValue.AbsTime-av.IDRingList.Next.Next.Value.Value.AbsTime)*time.Millisecond > bufferTime {
+	if bufferTime > 0 && av.IDRingList.Length > 1 && curValue.Timestamp-av.IDRingList.Next.Next.Value.Value.Timestamp > bufferTime {
 		av.ShiftIDR()
 		av.narrow(int(curValue.Sequence - av.HistoryRing.Value.Sequence))
 	}
@@ -245,19 +279,6 @@ func (av *Media) Flush() {
 		// }
 	}
 
-	if av.起始时间.IsZero() {
-		curValue.DeltaTime = 0
-		if curValue.AbsTime == 0 {
-			curValue.AbsTime = uint32(time.Since(av.Stream.GetStartTime()).Milliseconds())
-		}
-		av.重置(curValue.AbsTime)
-	} else if curValue.AbsTime == 0 {
-		curValue.DeltaTime = (curValue.DTS - preValue.DTS) / 90
-		curValue.AbsTime = preValue.AbsTime + curValue.DeltaTime
-	} else {
-		curValue.DeltaTime = curValue.AbsTime - preValue.AbsTime
-	}
-	// fmt.Println(av.Name, curValue.DTS, curValue.AbsTime, curValue.DeltaTime)
 	if curValue.AUList.Length > 0 {
 		// 补完RTP
 		if config.Global.EnableRTP && curValue.RTP.Length == 0 {
@@ -270,7 +291,7 @@ func (av *Media) Flush() {
 	}
 	av.Base.Flush(&curValue.BaseFrame)
 	if av.等待上限 > 0 {
-		av.控制流速(curValue.AbsTime)
+		av.控制流速(curValue.Timestamp, curValue.DTS)
 	}
 	preValue = curValue
 	curValue = av.MoveNext()

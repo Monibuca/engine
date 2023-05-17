@@ -102,9 +102,10 @@ const (
 //
 
 type MpegTsStream struct {
-	PAT     MpegTsPAT // PAT表信息
-	PMT     MpegTsPMT // PMT表信息
-	PESChan chan *MpegTsPESPacket
+	PAT       MpegTsPAT // PAT表信息
+	PMT       MpegTsPMT // PMT表信息
+	PESBuffer map[uint16]*MpegTsPESPacket
+	PESChan   chan *MpegTsPESPacket
 }
 
 // ios13818-1-CN.pdf 33/165
@@ -521,15 +522,16 @@ func (s *MpegTsStream) Feed(ts io.Reader) (err error) {
 	var reader bytes.Reader
 	var lr io.LimitedReader
 	lr.R = &reader
-	var pesPkt *MpegTsPESPacket
 	var tsHeader MpegTsHeader
 	tsData := make([]byte, TS_PACKET_SIZE)
 	for {
 		_, err = io.ReadFull(ts, tsData)
 		if err == io.EOF {
 			// 文件结尾 把最后面的数据发出去
-			if pesPkt != nil {
-				s.PESChan <- pesPkt
+			for _, pesPkt := range s.PESBuffer {
+				if pesPkt != nil {
+					s.PESChan <- pesPkt
+				}
 			}
 			return nil
 		} else if err != nil {
@@ -555,23 +557,24 @@ func (s *MpegTsStream) Feed(ts io.Reader) (err error) {
 					if s.PMT, err = ReadPMT(&lr); err != nil {
 						return
 					}
+					for _, v := range s.PMT.Stream {
+						s.PESBuffer[v.ElementaryPID] = nil
+					}
 				}
 				continue
 			}
-		}
-		for _, v := range s.PMT.Stream {
-			if v.ElementaryPID == tsHeader.Pid {
-				if tsHeader.PayloadUnitStartIndicator == 1 {
-					if pesPkt != nil {
-						s.PESChan <- pesPkt
-					}
-					pesPkt = &MpegTsPESPacket{}
-					if pesPkt.Header, err = ReadPESHeader(&lr); err != nil {
-						return
-					}
+		} else if pesPkt, ok := s.PESBuffer[tsHeader.Pid]; ok {
+			if tsHeader.PayloadUnitStartIndicator == 1 {
+				if pesPkt != nil {
+					s.PESChan <- pesPkt
 				}
-				io.Copy(&pesPkt.Payload, &lr)
+				pesPkt = &MpegTsPESPacket{}
+				s.PESBuffer[tsHeader.Pid] = pesPkt
+				if pesPkt.Header, err = ReadPESHeader(&lr); err != nil {
+					return
+				}
 			}
+			io.Copy(&pesPkt.Payload, &lr)
 		}
 	}
 }

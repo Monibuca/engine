@@ -6,14 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mcuadros/go-defaults"
+	"github.com/quic-go/quic-go"
 	"golang.org/x/net/websocket"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
 type PublishConfig interface {
-	GetPublishConfig() *Publish
+	GetPublishConfig() Publish
 }
 
 type SubscribeConfig interface {
@@ -32,12 +32,16 @@ type Publish struct {
 	PubVideo          bool          `default:"true"`
 	KickExist         bool          // 是否踢掉已经存在的发布者
 	PublishTimeout    time.Duration `default:"10s"` // 发布无数据超时
-	WaitCloseTimeout  time.Duration `default:"0s"`  // 延迟自动关闭（等待重连）
-	DelayCloseTimeout time.Duration `default:"0s"`  // 延迟自动关闭（无订阅时）
-	BufferTime        time.Duration `default:"0s"`  // 缓冲长度(单位：秒)，0代表取最近关键帧
+	WaitCloseTimeout  time.Duration // 延迟自动关闭（等待重连）
+	DelayCloseTimeout time.Duration // 延迟自动关闭（无订阅时）
+	IdleTimeout       time.Duration // 空闲(无订阅)超时
+	BufferTime        time.Duration // 缓冲长度(单位：秒)，0代表取最近关键帧
+	Key               string        // 发布鉴权key
+	SecretArgName     string        `default:"secret"` // 发布鉴权参数名
+	ExpireArgName     string        `default:"expire"` // 发布鉴权失效时间参数名
 }
 
-func (c *Publish) GetPublishConfig() *Publish {
+func (c Publish) GetPublishConfig() Publish {
 	return c
 }
 
@@ -54,7 +58,12 @@ type Subscribe struct {
 	SubMode         int           // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
 	IFrameOnly      bool          // 只要关键帧
 	WaitTimeout     time.Duration `default:"10s"`  // 等待流超时
+	WriteBufferSize int           `default:"0"`    // 写缓冲大小
 	Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
+	Key             string        // 订阅鉴权key
+	SecretArgName   string        `default:"secret"` // 订阅鉴权参数名
+	ExpireArgName   string        `default:"expire"` // 订阅鉴权失效时间参数名
+	Internal        bool          `default:"false"`  // 是否内部订阅
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {
@@ -65,6 +74,7 @@ type Pull struct {
 	RePull      int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
 	PullOnStart map[string]string // 启动时拉流的列表
 	PullOnSub   map[string]string // 订阅时自动拉流的列表
+	Proxy       string            // 代理地址
 }
 
 func (p *Pull) GetPullConfig() *Pull {
@@ -88,6 +98,7 @@ func (p *Pull) AddPullOnSub(streamPath string, url string) {
 type Push struct {
 	RePush   int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
 	PushList map[string]string // 自动推流列表
+	Proxy    string            // 代理地址
 }
 
 func (p *Push) GetPushConfig() *Push {
@@ -117,43 +128,32 @@ type Engine struct {
 	EnableSubEvent bool `default:"true"` //启用订阅事件,禁用可以提高性能
 	EnableAuth     bool `default:"true"` //启用鉴权
 	Console
-	LogLevel            string        `default:"info"`
+	LogLang             string        `default:"zh"`    //日志语言
+	LogLevel            string        `default:"info"`  //日志级别
 	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
 	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
 	EventBusSize        int           `default:"10"`    //事件总线大小
+	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
+	DisableAll          bool          `default:"false"` //禁用所有插件
+	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
+	reportStream        quic.Stream   // console server connection
+	instanceId          string        // instance id 来自console
 }
 
-var Global = &Engine{
-	// Publish: Publish{true, true, false, 10, 0, 0, 0},
-	// Subscribe: Subscribe{
-	// 	SubAudio:        true,
-	// 	SubVideo:        true,
-	// 	SubVideoArgName: "vts",
-	// 	SubAudioArgName: "ats",
-	// 	SubDataArgName:  "dts",
-	// 	SubAudioTracks:  nil,
-	// 	SubVideoTracks:  nil,
-	// 	SubMode:         0,
-	// 	IFrameOnly:      false,
-	// 	WaitTimeout:     10,
-	// },
-	HTTP: HTTP{ListenAddr: ":8080", CORS: true, mux: http.DefaultServeMux},
-	// RTPReorder:     true,
-	// EnableAVCC:     true,
-	// EnableRTP:      true,
-	// EnableSubEvent: true,
-	// EnableAuth:     true,
-	// Console: Console{
-	// 	"console.monibuca.com:4242", "", "", "",
-	// },
-	// LogLevel:            "info",
-	// RTPReorderBufferLen: 50,
-	// SpeedLimit:          500,
-	// EventBusSize:        10,
+func (cfg *Engine) GetEnableReport() bool {
+	return cfg.enableReport
 }
 
-func init() {
-	defaults.SetDefaults(Global)
+func (cfg *Engine) GetInstanceId() string {
+	return cfg.instanceId
+}
+
+var Global *Engine
+
+func (cfg *Engine) InitDefaultHttp() {
+	Global = cfg
+	cfg.HTTP.mux = http.DefaultServeMux
+	cfg.HTTP.ListenAddr = ":8080"
 }
 
 type myResponseWriter struct {
@@ -233,6 +233,11 @@ func (cfg *Engine) WsRemote() {
 
 func (cfg *Engine) OnEvent(event any) {
 	switch v := event.(type) {
+	case []byte:
+		if cfg.reportStream != nil {
+			cfg.reportStream.Write(v)
+			cfg.reportStream.Write([]byte{0})
+		}
 	case context.Context:
 		util.RTPReorderBufferLen = uint16(cfg.RTPReorderBufferLen)
 		if strings.HasPrefix(cfg.Console.Server, "wss") {

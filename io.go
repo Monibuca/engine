@@ -2,15 +2,18 @@ package engine
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
 	"io"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/config"
+	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
@@ -33,16 +36,16 @@ type AuthPub interface {
 type IO struct {
 	ID                 string
 	Type               string
-	context.Context    `json:"-"` //不要直接设置，应当通过OnEvent传入父级Context
-	context.CancelFunc `json:"-"` //流关闭是关闭发布者或者订阅者
-	*zap.Logger        `json:"-"`
+	context.Context    `json:"-" yaml:"-"` //不要直接设置，应当通过OnEvent传入父级Context
+	context.CancelFunc `json:"-" yaml:"-"` //流关闭是关闭发布者或者订阅者
+	*log.Logger        `json:"-" yaml:"-"`
 	StartTime          time.Time //创建时间
-	Stream             *Stream   `json:"-"`
-	io.Reader          `json:"-"`
-	io.Writer          `json:"-"`
-	io.Closer          `json:"-"`
+	Stream             *Stream   `json:"-" yaml:"-"`
+	io.Reader          `json:"-" yaml:"-"`
+	io.Writer          `json:"-" yaml:"-"`
+	io.Closer          `json:"-" yaml:"-"`
 	Args               url.Values
-	Spesific           IIO `json:"-"`
+	Spesific           IIO `json:"-" yaml:"-"`
 }
 
 func (io *IO) IsClosed() bool {
@@ -67,19 +70,14 @@ func (i *IO) SetParentCtx(parent context.Context) {
 	i.Context, i.CancelFunc = context.WithCancel(parent)
 }
 
-func (i *IO) SetLogger(logger *zap.Logger) {
+func (i *IO) SetLogger(logger *log.Logger) {
 	i.Logger = logger
 }
 
 func (i *IO) OnEvent(event any) {
 	switch event.(type) {
 	case SEclose, SEKick:
-		if i.Closer != nil {
-			i.Closer.Close()
-		}
-		if i.CancelFunc != nil {
-			i.CancelFunc()
-		}
+		i.close()
 	}
 }
 
@@ -97,32 +95,65 @@ type IIO interface {
 	Stop()
 	SetIO(any)
 	SetParentCtx(context.Context)
-	SetLogger(*zap.Logger)
+	SetLogger(*log.Logger)
 	IsShutdown() bool
+}
+
+func (i *IO) close() bool {
+	if i.IsClosed() {
+		return false
+	}
+	if i.Closer != nil {
+		i.Closer.Close()
+	}
+	if i.CancelFunc != nil {
+		i.CancelFunc()
+	}
+	return true
 }
 
 // Stop 停止订阅或者发布，由订阅者或者发布者调用
 func (io *IO) Stop() {
-	if io.CancelFunc != nil {
-		io.CancelFunc()
+	if io.close() {
+		io.Debug("stop", zap.Stack("stack"))
 	}
 }
 
 var (
 	ErrBadStreamName  = errors.New("Stream Already Exist")
 	ErrBadTrackName   = errors.New("Track Already Exist")
+	ErrTrackMute      = errors.New("Track Mute")
 	ErrStreamIsClosed = errors.New("Stream Is Closed")
 	ErrPublisherLost  = errors.New("Publisher Lost")
+	ErrAuth           = errors.New("Auth Failed")
 	OnAuthSub         func(p *util.Promise[ISubscriber]) error
 	OnAuthPub         func(p *util.Promise[IPublisher]) error
 )
+
+func (io *IO) auth(key string, secret string, expire string) bool {
+	if unixTime, err := strconv.ParseInt(expire, 16, 64); err != nil || time.Now().Unix() > unixTime {
+		return false
+	}
+	trueSecret := md5.Sum([]byte(key + io.Stream.Path + expire))
+	for i := 0; i < 16; i++ {
+		hex, err := strconv.ParseInt(secret[i<<1:(i<<1)+2], 16, 16)
+		if trueSecret[i] != byte(hex) || err != nil {
+			return false
+		}
+	}
+	return true
+}
 
 // receive 用于接收发布或者订阅
 func (io *IO) receive(streamPath string, specific IIO) error {
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {
-		io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
+		if EngineConfig.LogLang == "zh" {
+			io.Error("接收流路径(流唯一标识)格式错误,必须形如 live/test ", zap.String("流路径", streamPath), zap.Error(err))
+		} else {
+			io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
+		}
 		return err
 	}
 	io.Args = u.Query()
@@ -152,6 +183,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if v, ok := specific.(IPublisher); ok {
 		conf := v.GetPublisher().Config
 		io.Type = strings.TrimSuffix(io.Type, "Publisher")
+		io.Info("publish")
 		oldPublisher := s.Publisher
 		if oldPublisher != nil && !oldPublisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者
@@ -166,6 +198,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		}
 		s.PublishTimeout = conf.PublishTimeout
 		s.DelayCloseTimeout = conf.DelayCloseTimeout
+		s.IdleTimeout = conf.IdleTimeout
 		defer func() {
 			if err == nil {
 				if oldPublisher == nil {
@@ -188,6 +221,10 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				if err != nil {
 					return err
 				}
+			} else if conf.Key != "" {
+				if !io.auth(conf.Key, io.Args.Get(conf.SecretArgName), io.Args.Get(conf.ExpireArgName)) {
+					return ErrAuth
+				}
 			}
 		}
 		if promise := util.NewPromise(specific.(IPublisher)); s.Receive(promise) {
@@ -195,7 +232,9 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			return err
 		}
 	} else {
+
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
+		io.Info("subscribe")
 		if create {
 			EventBus <- s // 通知发布者按需拉流
 		}
@@ -216,6 +255,10 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				}
 				if err != nil {
 					return err
+				}
+			} else if conf := specific.(ISubscriber).GetSubscriber().Config; conf.Key != "" {
+				if !io.auth(conf.Key, io.Args.Get(conf.SecretArgName), io.Args.Get(conf.ExpireArgName)) {
+					return ErrAuth
 				}
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -18,7 +19,12 @@ const (
 )
 
 type GlobalConfig struct {
-	*config.Engine
+	config.Engine
+}
+
+func ShouldYaml(r *http.Request) bool {
+	format := r.URL.Query().Get("format")
+	return r.URL.Query().Get("yaml") != "" || format == "yaml"
 }
 
 func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -28,25 +34,40 @@ func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func fetchSummary() *Summary {
+	return &summary
+}
+
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
+	y := ShouldYaml(r)
 	if r.Header.Get("Accept") == "text/event-stream" {
 		summary.Add()
 		defer summary.Done()
-		util.ReturnJson(func() *Summary {
-			return &summary
-		}, time.Second, rw, r)
+		if y {
+			util.ReturnYaml(fetchSummary, time.Second, rw, r)
+		} else {
+			util.ReturnJson(fetchSummary, time.Second, rw, r)
+		}
 	} else {
 		if !summary.Running() {
 			summary.collect()
 		}
-		if err := json.NewEncoder(rw).Encode(&summary); err != nil {
+		if y {
+			if err := yaml.NewEncoder(rw).Encode(&summary); err != nil {
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			}
+		} else if err := json.NewEncoder(rw).Encode(&summary); err != nil {
 			http.Error(rw, err.Error(), http.StatusInternalServerError)
 		}
 	}
 }
 
 func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(rw).Encode(Plugins); err != nil {
+	if ShouldYaml(r) {
+		if err := yaml.NewEncoder(rw).Encode(Plugins); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
+	} else if err := json.NewEncoder(rw).Encode(Plugins); err != nil {
 		http.Error(rw, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -54,7 +75,11 @@ func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
 func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
-			util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
+			if ShouldYaml(r) {
+				util.ReturnYaml(func() *Stream { return s }, time.Second, rw, r)
+			} else {
+				util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
+			}
 		} else {
 			http.Error(rw, NO_SUCH_STREAM, http.StatusNotFound)
 		}
@@ -96,7 +121,7 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 	} else {
 		p = Engine
 	}
-	if q.Get("yaml") != "" {
+	if ShouldYaml(r) {
 		mm, err := yaml.Marshal(p.RawConfig)
 		if err != nil {
 			mm = []byte("")
@@ -128,7 +153,7 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 	} else {
 		p = Engine
 	}
-	if q.Has("yaml") {
+	if ShouldYaml(r) {
 		err = yaml.NewDecoder(r.Body).Decode(&p.Modified)
 	} else {
 		err = json.NewDecoder(r.Body).Decode(&p.Modified)
@@ -227,11 +252,34 @@ func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Requ
 	default:
 		pub.ACodec = codec.CodecID_AAC
 	}
-	pub.DumpFile = dumpFile
-	if err := Engine.Publish(streamPath, &pub); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	ss := strings.Split(dumpFile, ",")
+	if len(ss) > 1 {
+		if err := Engine.Publish(streamPath, &pub); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		} else {
+			for _, s := range ss {
+				f, err := os.Open(s)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				go pub.Feed(f)
+			}
+			w.Write([]byte("ok"))
+		}
 	} else {
-		w.Write([]byte("ok"))
+		f, err := os.Open(dumpFile)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := Engine.Publish(streamPath, &pub); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		} else {
+			pub.SetIO(f)
+			w.Write([]byte("ok"))
+			go pub.Feed(f)
+		}
 	}
 }
 
@@ -245,12 +293,42 @@ func (conf *GlobalConfig) API_replay_ts(w http.ResponseWriter, r *http.Request) 
 	if dumpFile == "" {
 		dumpFile = streamPath + ".ts"
 	}
+	f, err := os.Open(dumpFile)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	var pub TSPublisher
 	if err := Engine.Publish(streamPath, &pub); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	} else {
-		f, _ := os.Open(dumpFile)
+		pub.SetIO(f)
 		go pub.Feed(f)
 		w.Write([]byte("ok"))
+	}
+}
+
+func (conf *GlobalConfig) API_replay_mp4(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	if streamPath == "" {
+		streamPath = "dump/mp4"
+	}
+	dumpFile := q.Get("dump")
+	if dumpFile == "" {
+		dumpFile = streamPath + ".mp4"
+	}
+	var pub MP4Publisher
+	f, err := os.Open(dumpFile)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := Engine.Publish(streamPath, &pub); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else {
+		pub.SetIO(f)
+		w.Write([]byte("ok"))
+		go pub.ReadMP4Data(f)
 	}
 }

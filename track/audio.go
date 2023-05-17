@@ -3,7 +3,6 @@ package track
 import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
-	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/util"
 )
@@ -22,9 +21,7 @@ type Audio struct {
 
 func (a *Audio) Attach() {
 	if a.Attached.CompareAndSwap(false, true) {
-		promise := util.NewPromise(common.Track(a))
-		a.Stream.AddTrack(promise)
-		if err := promise.Await(); err != nil {
+		if err := a.Stream.AddTrack(a).Await(); err != nil {
 			a.Error("attach audio track failed", zap.Error(err))
 		} else {
 			a.Info("audio track attached", zap.Uint32("sample rate", a.SampleRate))
@@ -61,7 +58,7 @@ func (av *Audio) Flush() {
 func (av *Audio) WriteRaw(pts uint32, raw []byte) {
 	curValue := &av.Value
 	curValue.BytesIn += len(raw)
-	curValue.AUList.Push(av.BytesPool.GetShell(raw))
+	av.AppendAuBytes(raw)
 	av.generateTimestamp(pts)
 	av.Flush()
 }
@@ -88,8 +85,8 @@ func (a *Audio) CompleteRTP(value *AVFrame) {
 }
 
 func (a *Audio) Narrow() {
-	if a.HistoryRing == nil && a.IDRing != nil {
-		a.narrow(int(a.Value.Sequence - a.IDRing.Value.Sequence))
-	}
+	// if a.HistoryRing == nil && a.IDRing != nil {
+	// 	a.narrow(int(a.Value.Sequence - a.IDRing.Value.Sequence))
+	// }
 	a.AddIDR()
 }

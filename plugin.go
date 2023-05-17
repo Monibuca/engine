@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -41,11 +40,12 @@ func InstallPlugin(config config.Plugin) *Plugin {
 	if _, ok := Plugins[name]; ok {
 		return nil
 	}
-	if config != EngineConfig {
-		plugin.Logger = log.With(zap.String("plugin", name))
+	switch v := config.(type) {
+	case *GlobalConfig:
+		v.InitDefaultHttp()
+	default:
 		Plugins[name] = plugin
 		plugins = append(plugins, plugin)
-		plugin.Info("install", zap.String("version", plugin.Version))
 	}
 	return plugin
 }
@@ -55,22 +55,25 @@ type DefaultYaml string
 
 // Plugin 插件信息
 type Plugin struct {
-	context.Context    `json:"-"`
-	context.CancelFunc `json:"-"`
+	context.Context    `json:"-" yaml:"-"`
+	context.CancelFunc `json:"-" yaml:"-"`
 	Name               string        //插件名称
-	Config             config.Plugin `json:"-"` //类型化的插件配置
+	Config             config.Plugin `json:"-" yaml:"-"` //类型化的插件配置
 	Version            string        //插件版本
 	Yaml               string        //配置文件中的配置项
 	modifiedYaml       string        //修改过的配置的yaml文件内容
 	RawConfig          config.Config //最终合并后的配置的map形式方便查询
 	Modified           config.Config //修改过的配置项
-	*zap.Logger        `json:"-"`
+	*log.Logger        `json:"-" yaml:"-"`
 	saveTimer          *time.Timer //用于保存的时候的延迟，防抖
+	Disabled           bool
 }
 
 func (opt *Plugin) logHandler(pattern string, handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		opt.Debug("visit", zap.String("path", r.URL.String()), zap.String("remote", r.RemoteAddr))
+		name := strings.ToLower(opt.Name)
+		r.URL.Path = strings.TrimPrefix(r.URL.Path, "/"+name)
 		handler.ServeHTTP(rw, r)
 	})
 }
@@ -83,12 +86,12 @@ func (opt *Plugin) handle(pattern string, handler http.Handler) {
 		pattern = "/" + pattern
 	}
 	if ok {
-		opt.Debug("http handle added:" + pattern)
+		opt.Debug("http handle added", zap.String("pattern", pattern))
 		conf.Handle(pattern, opt.logHandler(pattern, handler))
 	}
 	if opt != Engine {
 		pattern = "/" + strings.ToLower(opt.Name) + pattern
-		opt.Debug("http handle added to engine:" + pattern)
+		opt.Debug("http handle added to engine", zap.String("pattern", pattern))
 		EngineConfig.Handle(pattern, opt.logHandler(pattern, handler))
 	}
 	apiList = append(apiList, pattern)
@@ -111,18 +114,26 @@ func (opt *Plugin) assign() {
 			opt.Warn("assign config failed", zap.Error(err))
 		}
 	}
+
 	if opt == Engine {
 		opt.registerHandler()
 		return
 	}
+	if EngineConfig.DisableAll {
+		opt.Disabled = true
+	}
 	if opt.RawConfig == nil {
 		opt.RawConfig = config.Config{}
 	} else if opt.RawConfig["enable"] == false {
-		opt.Warn("disabled")
-		return
+		opt.Disabled = true
 	} else if opt.RawConfig["enable"] == true {
+		opt.Disabled = false
 		//移除这个属性防止反序列化报错
 		delete(opt.RawConfig, "enable")
+	} 
+	if opt.Disabled {
+		opt.Warn("plugin disabled")
+		return
 	}
 	t := reflect.TypeOf(opt.Config).Elem()
 	// 用全局配置覆盖没有设置的配置
@@ -144,16 +155,17 @@ func (opt *Plugin) assign() {
 func (opt *Plugin) run() {
 	opt.Context, opt.CancelFunc = context.WithCancel(Engine)
 	opt.RawConfig.Unmarshal(opt.Config)
+	opt.RawConfig = config.Struct2Config(opt.Config, strings.ToUpper(opt.Name))
+	// var buffer bytes.Buffer
+	// err := yaml.NewEncoder(&buffer).Encode(opt.Config)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// err = yaml.NewDecoder(&buffer).Decode(&opt.RawConfig)
+	// if err != nil {
+	// 	panic(err)
+	// }
 	opt.Config.OnEvent(FirstConfig(opt.RawConfig))
-	var buffer bytes.Buffer
-	err := yaml.NewEncoder(&buffer).Encode(opt.Config)
-	if err != nil {
-		panic(err)
-	}
-	err = yaml.NewDecoder(&buffer).Decode(&opt.RawConfig)
-	if err != nil {
-		panic(err)
-	}
 	delete(opt.RawConfig, "defaultyaml")
 	opt.Debug("config", zap.Any("config", opt.Config))
 	// opt.RawConfig = config.Struct2Config(opt.Config)
@@ -164,7 +176,7 @@ func (opt *Plugin) run() {
 
 // Update 热更新配置
 func (opt *Plugin) Update(conf config.Config) {
-	conf.Unmarshal(&opt.Config)
+	conf.Unmarshal(opt.Config)
 	opt.Config.OnEvent(conf)
 }
 
@@ -185,7 +197,7 @@ func (opt *Plugin) registerHandler() {
 }
 
 func (opt *Plugin) settingPath() string {
-	return filepath.Join(settingDir, strings.ToLower(opt.Name)+".yaml")
+	return filepath.Join(SettingDir, strings.ToLower(opt.Name)+".yaml")
 }
 
 func (opt *Plugin) Save() error {
@@ -210,13 +222,23 @@ func (opt *Plugin) Save() error {
 }
 
 func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
-	opt.Info("publish", zap.String("path", streamPath))
-	conf, ok := opt.Config.(config.PublishConfig)
-	if !ok {
-		conf = EngineConfig
+	puber := pub.GetPublisher()
+	if puber == nil {
+		if EngineConfig.LogLang == "zh" {
+			return errors.New("不是发布者")
+		} else {
+			return errors.New("not publisher")
+		}
 	}
-	pub.GetPublisher().Config = conf.GetPublishConfig()
-	return pub.receive(streamPath, pub)
+	if puber.Config == nil {
+		conf, ok := opt.Config.(config.PublishConfig)
+		if !ok {
+			conf = EngineConfig
+		}
+		copyConfig := conf.GetPublishConfig()
+		puber.Config = &copyConfig
+	}
+	return pub.Publish(streamPath, pub)
 }
 
 var ErrStreamNotExist = errors.New("stream not exist")
@@ -229,23 +251,28 @@ func (opt *Plugin) SubscribeExist(streamPath string, sub ISubscriber) error {
 		opt.Warn("stream not exist", zap.String("path", streamPath))
 		return ErrStreamNotExist
 	}
-	conf, ok := opt.Config.(config.SubscribeConfig)
-	if !ok {
-		conf = EngineConfig
-	}
-	sub.GetSubscriber().Config = conf.GetSubscribeConfig()
-	return sub.receive(streamPath, sub)
+	return opt.Subscribe(streamPath, sub)
 }
 
 // Subscribe 订阅一个流，如果流不存在则创建一个等待流
 func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
-	opt.Info("subscribe", zap.String("path", streamPath))
-	conf, ok := opt.Config.(config.SubscribeConfig)
-	if !ok {
-		conf = EngineConfig
+	suber := sub.GetSubscriber()
+	if suber == nil {
+		if EngineConfig.LogLang == "zh" {
+			return errors.New("不是订阅者")
+		} else {
+			return errors.New("not subscriber")
+		}
 	}
-	sub.GetSubscriber().Config = conf.GetSubscribeConfig()
-	return sub.receive(streamPath, sub)
+	if suber.Config == nil {
+		conf, ok := opt.Config.(config.SubscribeConfig)
+		if !ok {
+			conf = EngineConfig
+		}
+		copyConfig := *conf.GetSubscribeConfig()
+		suber.Config = &copyConfig
+	}
+	return sub.Subscribe(streamPath, sub)
 }
 
 // SubscribeBlock 阻塞订阅一个流，直到订阅结束

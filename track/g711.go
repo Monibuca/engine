@@ -31,6 +31,9 @@ func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
 	g711.AVCCHead = []byte{(byte(g711.CodecID) << 4) | (1 << 1)}
 	g711.SetStuff(stream, int(32), uint32(8000), g711, time.Millisecond*10)
 	g711.SetStuff(stuff...)
+	if g711.BytesPool == nil {
+		g711.BytesPool = make(util.BytesPool, 17)
+	}
 	g711.Attach()
 	return
 }
@@ -44,9 +47,13 @@ func (g711 *G711) WriteAVCC(ts uint32, frame *util.BLL) error {
 		g711.Error("AVCC data too short", zap.Int("len", l))
 		return io.ErrShortWrite
 	}
-	g711.Value.AUList.Push(g711.BytesPool.GetShell(frame.Next.Value[1:]))
+	i := 0
 	frame.Range(func(v util.Buffer) bool {
+		if i == 0 {
+			v = v.SubBuf(1, v.Len()-1)
+		}
 		g711.Value.AUList.Push(g711.BytesPool.GetShell(v))
+		i++
 		return true
 	})
 	g711.Audio.WriteAVCC(ts, frame)

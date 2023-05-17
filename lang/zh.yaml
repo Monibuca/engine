@@ -1,0 +1,57 @@
+engine:    引擎
+config:    配置
+stream:    流
+publish:   发布
+subscribe: 订阅
+pull:      拉取
+push:      推送
+action:    动作
+type:      类型
+enable:    启用
+listenaddr: 监听地址
+kick:     踢出
+stop:     停止
+start:    开始
+install:  安装
+version:  版本
+name:     名称
+state:    状态
+initialize: 初始化
+"start read": 开始读取
+"start pull": 开始从远端拉流
+"pull failed": 拉取失败
+"wait publisher": 等待发布者发布
+"wait timeout": 等待超时
+created:  已创建
+create:   创建
+timeout:  超时
+track:    轨道
+"track timeout": 轨道超时
+"last writetime": 最后写入时间
+track+1:  轨道+1
+playblock: 阻塞式播放
+"play neither video nor audio": 播放既没有视频也没有音频
+"play before subscribe": 播放之前需要先订阅
+"suber -1": 订阅者-1
+"suber +1": 订阅者+1
+"innersuber +1": 内部订阅者+1
+reamins:  剩余
+"need sequence frame": 需要序列帧
+"video codecID not support": 视频编码不支持
+"http handle added": http处理器已添加
+"http handle added to engine": http处理器已添加到引擎
+"plugin disabled": 插件已禁用
+"audio codec not support yet": 音频编码暂不支持
+"video track attached": 视频轨道已附加
+"audio track attached": 音频轨道已附加
+"data track attached": 数据轨道已附加
+"first frame read": 第一帧已读取
+"fu have no start": rtp的FU起始包丢了
+"disabled by env": 被环境变量禁用
+"event cost too much time": 事件处理耗时过长
+"run timeout": 流事件处理耗时过长
+"cost": 耗时
+firstTs:  第一帧时间戳
+firstSeq: 第一帧序列号
+skipSeq:  跳过序列号
+skipTs:   跳过时间戳

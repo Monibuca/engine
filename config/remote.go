@@ -47,20 +47,36 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 
 	conn, err := quic.DialAddr(cfg.Server, tlsConf, &quic.Config{
 		KeepAlivePeriod: time.Second * 10,
+		EnableDatagrams: true,
 	})
 	wasConnected := err == nil
 	if stream := quic.Stream(nil); err == nil {
 		if stream, err = conn.OpenStreamSync(ctx); err == nil {
-			_, err = stream.Write([]byte(cfg.Secret + "\n"))
+			_, err = stream.Write(append([]byte{1}, (cfg.Secret + "\n")...))
 			if msg := []byte(nil); err == nil {
-				if msg, err = io.ReadAll(stream); err == nil {
-					var rMessage map[string]interface{}
-					if err = json.Unmarshal(msg, &rMessage); err == nil {
+				if msg, err = bufio.NewReader(stream).ReadSlice(0); err == nil {
+					var rMessage map[string]any
+					if err = json.Unmarshal(msg[:len(msg)-1], &rMessage); err == nil {
 						if rMessage["code"].(float64) != 0 {
-							log.Error("response from console server ", cfg.Server, " ", rMessage["msg"])
+							if Global.LogLang == "zh" {
+								log.Error("控制台服务器", cfg.Server, "返回错误", rMessage["msg"])
+							} else {
+								log.Error("response from console server ", cfg.Server, " ", rMessage["msg"])
+							}
 							return nil
 						} else {
-							log.Info("response from console server ", cfg.Server, " success")
+							cfg.reportStream = stream
+							if Global.LogLang == "zh" {
+								log.Info("连接到控制台服务器", cfg.Server, "成功", rMessage)
+							} else {
+								log.Info("response from console server ", cfg.Server, " success ", rMessage)
+							}
+							if v, ok := rMessage["enableReport"]; ok {
+								cfg.enableReport = v.(bool)
+							}
+							if v, ok := rMessage["instanceId"]; ok {
+								cfg.instanceId = v.(string)
+							}
 						}
 					}
 				}
@@ -77,7 +93,11 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 
 	if err != nil {
 		if wasConnected {
-			log.Error("connect to console server ", cfg.Server, " ", err)
+			if Global.LogLang == "zh" {
+				log.Error("连接到控制台服务器", cfg.Server, "失败", err)
+			} else {
+				log.Error("connect to console server ", cfg.Server, " ", err)
+			}
 		}
 		if ctx.Err() == nil {
 			go cfg.Remote(ctx)

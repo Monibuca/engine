@@ -9,7 +9,7 @@ import (
 )
 
 type IStream interface {
-	AddTrack(*util.Promise[Track])
+	AddTrack(Track) *util.Promise[Track]
 	RemoveTrack(Track)
 	Close()
 	IsClosed() bool

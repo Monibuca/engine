@@ -4,6 +4,9 @@ import (
 
 	// . "github.com/logrusorgru/aurora"
 
+	"time"
+
+	"github.com/pion/rtp"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/common"
@@ -20,16 +23,14 @@ type Video struct {
 	dtsEst      *DTSEstimator
 	lostFlag    bool // 是否丢帧
 	codec.SPSInfo
-	ParamaterSets `json:"-"`
-	SPS           []byte `json:"-"`
-	PPS           []byte `json:"-"`
+	ParamaterSets `json:"-" yaml:"-"`
+	SPS           []byte `json:"-" yaml:"-"`
+	PPS           []byte `json:"-" yaml:"-"`
 }
 
 func (v *Video) Attach() {
 	if v.Attached.CompareAndSwap(false, true) {
-		promise := util.NewPromise(common.Track(v))
-		v.Stream.AddTrack(promise)
-		if err := promise.Await(); err != nil {
+		if err := v.Stream.AddTrack(v).Await(); err != nil {
 			v.Error("attach video track failed", zap.Error(err))
 		} else {
 			v.Info("video track attached", zap.Uint("width", v.Width), zap.Uint("height", v.Height))
@@ -95,8 +96,8 @@ func (vt *Video) WriteNalu(pts uint32, dts uint32, nalu []byte) {
 	if dts == 0 {
 		vt.generateTimestamp(pts)
 	} else {
-		vt.Value.PTS = pts
-		vt.Value.DTS = dts
+		vt.Value.PTS = time.Duration(pts)
+		vt.Value.DTS = time.Duration(dts)
 	}
 	vt.Value.BytesIn += len(nalu)
 	vt.WriteSliceBytes(nalu)
@@ -106,8 +107,8 @@ func (vt *Video) WriteAnnexB(pts uint32, dts uint32, frame []byte) {
 	if dts == 0 {
 		vt.generateTimestamp(pts)
 	} else {
-		vt.Value.PTS = pts
-		vt.Value.DTS = dts
+		vt.Value.PTS = time.Duration(pts)
+		vt.Value.DTS = time.Duration(dts)
 	}
 	vt.Value.BytesIn += len(frame)
 	common.SplitAnnexB(frame, vt.writeAnnexBSlice, codec.NALU_Delimiter2)
@@ -123,15 +124,15 @@ func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) (e error) {
 	if err != nil {
 		return err
 	}
-	b = b >> 4
+	b = (b >> 4) & 0b0111
 	vt.Value.IFrame = b == 1 || b == 4
 	r.ReadByte() //sequence frame flag
 	cts, err := r.ReadBE(3)
 	if err != nil {
 		return err
 	}
-	vt.Value.PTS = vt.Ms2MpegTs(ts + cts)
-	vt.Value.DTS = vt.Ms2MpegTs(ts)
+	vt.Value.PTS = time.Duration(ts+cts) * 90
+	vt.Value.DTS = time.Duration(ts) * 90
 	// println(":", vt.Value.Sequence)
 	var nalulen uint32
 	for nalulen, e = r.ReadBE(vt.nalulenSize); e == nil; nalulen, e = r.ReadBE(vt.nalulenSize) {
@@ -184,28 +185,24 @@ func (vt *Video) WriteSliceByte(b ...byte) {
 // 在I帧前面插入sps pps webrtc需要
 func (vt *Video) insertDCRtp() {
 	head := vt.Value.RTP.Next
-	seq := head.Value.SequenceNumber
 	for _, nalu := range vt.ParamaterSets {
-		var packet RTPFrame
+		var packet rtp.Packet
 		packet.Version = 2
 		packet.PayloadType = vt.PayloadType
 		packet.Payload = nalu
 		packet.SSRC = vt.SSRC
-		packet.Timestamp = vt.Value.PTS
+		packet.Timestamp = uint32(vt.Value.PTS)
 		packet.Marker = false
-		head.InsertBeforeValue(packet)
-		vt.rtpSequence++
+		head.InsertBeforeValue(RTPFrame{&packet, nil})
 	}
-	vt.Value.RTP.RangeItem(func(item *util.ListItem[RTPFrame]) bool {
-		item.Value.SequenceNumber = seq
-		seq++
-		return true
-	})
 }
 
 func (vt *Video) generateTimestamp(ts uint32) {
-	vt.Value.PTS = ts
-	vt.Value.DTS = vt.dtsEst.Feed(ts)
+	if vt.State == TrackStateOffline {
+		vt.dtsEst = NewDTSEstimator()
+	}
+	vt.Value.PTS = time.Duration(ts)
+	vt.Value.DTS = time.Duration(vt.dtsEst.Feed(ts))
 }
 
 func (vt *Video) SetLostFlag() {
@@ -222,7 +219,7 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	b[1] = 1
 	// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
 	// 写入CTS
-	util.PutBE(b[2:5], vt.MpegTs2Ms(rv.PTS-rv.DTS))
+	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
 	rv.AVCC.Push(mem)
 	// if rv.AVCC.ByteLength != 5 {
 	// 	panic("error")

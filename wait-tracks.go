@@ -75,7 +75,7 @@ func (w *waitTracks) Accept(t Track) bool {
 		if w.video.Accept(t.GetBase().Name) {
 			suber.OnEvent(t)
 		}
-	case *track.Data:
+	case track.Custom:
 		w.data.Accept(t.GetBase().Name)
 		suber.OnEvent(t)
 	}

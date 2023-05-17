@@ -72,6 +72,23 @@ func (r *BLLReader) ReadN(n int) (result net.Buffers) {
 	return
 }
 
+func (r *BLLReader) WriteNTo(n int, result *net.Buffers) (actual int) {
+	actual = n
+	for r.CanRead() {
+		l := r.Value.Len() - r.pos
+		if l > n {
+			*result = append(*result, r.Value[r.pos:r.pos+n])
+			r.pos += n
+			return
+		}
+		*result = append(*result, r.Value[r.pos:])
+		n -= l
+		r.ListItem = r.Next
+		r.pos = 0
+	}
+	return actual - n
+}
+
 func (r *BLLReader) GetOffset() int {
 	return r.pos
 }
@@ -123,8 +140,8 @@ func (list *BLLs) Push(item *ListItem[Buffer]) {
 		list.PushValue(&bll)
 	} else {
 		list.Pre.Value.Push(item)
+		list.ByteLength += item.Value.Len()
 	}
-	list.ByteLength += item.Value.Len()
 }
 
 func (list *BLLs) ToList() (result [][][]byte) {

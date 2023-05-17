@@ -61,7 +61,9 @@ func (d *DTSEstimator) Feed(pts uint32) uint32 {
 	if d.prevDTS > dts {
 		dts = d.prevDTS
 	}
-
+	// if d.prevDTS >= dts {
+	// 	dts = d.prevDTS + 90
+	// }
 	d.prevPTS = pts
 	d.prevDTS = dts
 	return dts

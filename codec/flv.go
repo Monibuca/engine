@@ -14,7 +14,14 @@ const (
 	FLV_TAG_TYPE_VIDEO  = 0x09
 	FLV_TAG_TYPE_SCRIPT = 0x12
 )
-
+const (
+	PacketTypeSequenceStart = iota
+	PacketTypeCodedFrames
+	PacketTypeSequenceEnd
+	PacketTypeCodedFramesX
+	PacketTypeMetadata
+	PacketTypeMPEG2TSSequenceStart
+)
 var (
 	Codec2SoundFormat = map[string]byte{
 		"aac":  10,

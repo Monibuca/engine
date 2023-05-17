@@ -21,6 +21,9 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 	vt.Video.CodecID = codec.CodecID_H264
 	vt.SetStuff("h264", int(256), byte(96), uint32(90000), stream, vt, time.Millisecond*10)
 	vt.SetStuff(stuff...)
+	if vt.BytesPool == nil {
+		vt.BytesPool = make(util.BytesPool, 17)
+	}
 	vt.ParamaterSets = make(ParamaterSets, 2)
 	vt.nalulenSize = 4
 	vt.dtsEst = NewDTSEstimator()
@@ -29,11 +32,14 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 
 func (vt *H264) WriteSliceBytes(slice []byte) {
 	naluType := codec.ParseH264NALUType(slice[0])
-	// vt.Info("naluType", zap.Uint8("naluType", naluType.Byte()))
+	vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))
 	switch naluType {
 	case codec.NALU_SPS:
-		vt.SPSInfo, _ = codec.ParseSPS(slice)
-		vt.Debug("SPS", zap.Any("SPSInfo", vt.SPSInfo))
+		spsInfo, _ := codec.ParseSPS(slice)
+		if spsInfo.Width != vt.SPSInfo.Width || spsInfo.Height != vt.SPSInfo.Height {
+			vt.Debug("SPS", zap.Any("SPSInfo", spsInfo))
+		}
+		vt.SPSInfo = spsInfo
 		vt.Video.SPS = slice
 		vt.ParamaterSets[0] = slice
 	case codec.NALU_PPS:
@@ -132,44 +138,40 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 			}
 		}
 	}
-	frame.SequenceNumber += vt.rtpSequence //增加偏移，需要增加rtp包后需要顺延
-	if frame.Marker {
+	if frame.Marker && rv.AUList.ByteLength > 0 {
 		vt.generateTimestamp(frame.Timestamp)
+		if !vt.dcChanged && rv.IFrame {
+			vt.insertDCRtp()
+		}
 		vt.Flush()
 	}
 }
 
 // RTP格式补完
 func (vt *H264) CompleteRTP(value *AVFrame) {
-	if value.RTP.Length > 0 {
-		if !vt.dcChanged && value.IFrame {
-			vt.insertDCRtp()
-		}
-	} else {
-		var out [][][]byte
-		if value.IFrame {
-			out = append(out, [][]byte{vt.SPS}, [][]byte{vt.PPS})
-		}
-		vt.Value.AUList.Range(func(au *util.BLL) bool {
-			if au.ByteLength < RTPMTU {
-				out = append(out, au.ToBuffers())
-			} else {
-				var naluType codec.H264NALUType
-				r := au.NewReader()
-				b0, _ := r.ReadByte()
-				naluType = naluType.Parse(b0)
-				b0 = codec.NALU_FUA.Or(b0 & 0x60)
-				buf := [][]byte{{b0, naluType.Or(1 << 7)}}
-				buf = append(buf, r.ReadN(RTPMTU-2)...)
-				out = append(out, buf)
-				for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
-					buf = append([][]byte{{b0, naluType.Byte()}}, bufs...)
-					out = append(out, buf)
-				}
-				buf[0][1] |= 1 << 6 // set end bit
-			}
-			return true
-		})
-		vt.PacketizeRTP(out...)
+	var out [][][]byte
+	if value.IFrame {
+		out = append(out, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 	}
+	vt.Value.AUList.Range(func(au *util.BLL) bool {
+		if au.ByteLength < RTPMTU {
+			out = append(out, au.ToBuffers())
+		} else {
+			var naluType codec.H264NALUType
+			r := au.NewReader()
+			b0, _ := r.ReadByte()
+			naluType = naluType.Parse(b0)
+			b0 = codec.NALU_FUA.Or(b0 & 0x60)
+			buf := [][]byte{{b0, naluType.Or(1 << 7)}}
+			buf = append(buf, r.ReadN(RTPMTU-2)...)
+			out = append(out, buf)
+			for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
+				buf = append([][]byte{{b0, naluType.Byte()}}, bufs...)
+				out = append(out, buf)
+			}
+			buf[0][1] |= 1 << 6 // set end bit
+		}
+		return true
+	})
+	vt.PacketizeRTP(out...)
 }

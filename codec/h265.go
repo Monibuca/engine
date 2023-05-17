@@ -95,7 +95,8 @@ const (
 
 var AudNalu = []byte{0x00, 0x00, 0x00, 0x01, 0x46, 0x01, 0x10}
 var ErrHevc = errors.New("hevc parse config error")
-
+var FourCC_H265 = []byte{'h', 'v', 'c', '1'}
+var FourCC_H265_32 = util.BigEndian.Uint32(FourCC_H265)
 // HVCC
 type HVCDecoderConfigurationRecord struct {
 	PicWidthInLumaSamples  uint32 // sps

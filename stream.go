@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 	"unsafe"
 
@@ -20,40 +19,11 @@ import (
 type StreamState byte
 type StreamAction byte
 
-type StateEvent struct {
-	Action StreamAction
-	From   StreamState
-	Stream *Stream `json:"-"`
+func (s StreamState) String() string {
+	return StateNames[s]
 }
-
-func (se StateEvent) Next() (next StreamState, ok bool) {
-	next, ok = StreamFSM[se.From][se.Action]
-	return
-}
-
-type SEwaitPublish struct {
-	StateEvent
-	Publisher IPublisher
-}
-type SEpublish struct {
-	StateEvent
-}
-
-type SErepublish struct {
-	StateEvent
-}
-
-type SEwaitClose struct {
-	StateEvent
-}
-type SEclose struct {
-	StateEvent
-}
-
-type SEKick struct {
-}
-type UnsubscribeEvent struct {
-	Subscriber ISubscriber
+func (s StreamAction) String() string {
+	return ActionNames[s]
 }
 
 // 四状态机
@@ -153,7 +123,8 @@ func FilterStreams[T IPublisher]() (ss []*Stream) {
 
 type StreamTimeoutConfig struct {
 	PublishTimeout    time.Duration //发布者无数据后超时
-	DelayCloseTimeout time.Duration //发布者丢失后等待
+	DelayCloseTimeout time.Duration //无订阅者后超时,必须先有一次订阅才会激活
+	IdleTimeout       time.Duration //无订阅者后超时，不需要订阅即可激活
 }
 type Tracks struct {
 	util.Map[string, Track]
@@ -196,7 +167,7 @@ func (tracks *Tracks) MarshalJSON() ([]byte, error) {
 type Stream struct {
 	timeout    *time.Timer //当前状态的超时定时器
 	actionChan util.SafeChan[any]
-	*zap.Logger
+	*log.Logger
 	StartTime time.Time //创建时间
 	StreamTimeoutConfig
 	Path        string
@@ -270,12 +241,12 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s = &Stream{
 			Path:       streamPath,
 			AppName:    p[0],
-			StreamName: util.LastElement(p),
+			StreamName: strings.Join(p[1:], "/"),
 			StartTime:  time.Now(),
 			timeout:    time.NewTimer(waitTimeout),
 		}
 		s.Subscribers.Init()
-		s.Logger = log.With(zap.String("stream", streamPath))
+		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath))
 		s.Info("created")
 		Streams.Map[streamPath] = s
 		s.actionChan.Init(1)
@@ -286,14 +257,18 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 }
 
 func (r *Stream) action(action StreamAction) (ok bool) {
-	event := StateEvent{action, r.State, r}
+	var event StateEvent
+	event.Target = r
+	event.Action = action
+	event.From = r.State
+	event.Time = time.Now()
 	var next StreamState
 	if next, ok = event.Next(); ok {
 		r.State = next
 		r.SEHistory = append(r.SEHistory, event)
 		// 给Publisher状态变更的回调，方便进行远程拉流等操作
 		var stateEvent any
-		r.Info(Sprintf("%s%s%s", StateNames[event.From], Yellow("->"), StateNames[next]), zap.String("action", ActionNames[action]))
+		r.Info(Sprintf("%s%s%s", event.From.String(), Yellow("->"), next.String()), zap.String("action", action.String()))
 		switch next {
 		case STATE_WAITPUBLISH:
 			stateEvent = SEwaitPublish{event, r.Publisher}
@@ -314,6 +289,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 				waitTime = time.Millisecond * 10 //没有订阅者也没有配置发布者等待重连时间，默认10ms后关闭流
 			}
 			r.timeout.Reset(waitTime)
+			r.Debug("wait publisher", zap.Duration("wait timeout", waitTime))
 		case STATE_PUBLISHING:
 			if len(r.SEHistory) > 1 {
 				stateEvent = SErepublish{event}
@@ -321,10 +297,18 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 				stateEvent = SEpublish{event}
 			}
 			r.Subscribers.Broadcast(stateEvent)
-			r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
+			if r.IdleTimeout > 0 && r.Subscribers.Len() == 0 {
+				return r.action(ACTION_LASTLEAVE)
+			} else {
+				r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
+			}
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
-			r.timeout.Reset(r.DelayCloseTimeout)
+			if r.IdleTimeout > 0 {
+				r.timeout.Reset(r.IdleTimeout)
+			} else {
+				r.timeout.Reset(r.DelayCloseTimeout)
+			}
 		case STATE_CLOSED:
 			for !r.actionChan.Close() {
 				// 等待channel发送完毕，伪自旋锁
@@ -340,7 +324,7 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.Publisher.OnEvent(stateEvent)
 		}
 	} else {
-		r.Debug("wrong action", zap.String("action", ActionNames[action]))
+		r.Debug("wrong action", zap.String("action", action.String()))
 	}
 	return
 }
@@ -385,16 +369,35 @@ func (s *Stream) onSuberClose(sub ISubscriber) {
 	if s.Publisher != nil {
 		s.Publisher.OnEvent(sub) // 通知Publisher有订阅者离开，在回调中可以去获取订阅者数量
 	}
-	if s.DelayCloseTimeout > 0 && s.Subscribers.Len() == 0 {
+	if (s.DelayCloseTimeout > 0 || s.IdleTimeout > 0) && s.Subscribers.Len() == 0 {
 		s.action(ACTION_LASTLEAVE)
+	}
+}
+
+func (s *Stream) checkRunCost(timeStart time.Time, timeOutInfo zap.Field) {
+	if cost := time.Since(timeStart); cost > 100*time.Millisecond {
+		s.Warn("run timeout", timeOutInfo, zap.Duration("cost", cost))
 	}
 }
 
 // 流状态处理中枢，包括接收订阅发布指令等
 func (s *Stream) run() {
-	for {
+	EventBus <- SEcreate{StreamEvent{Event[*Stream]{Target: s, Time: time.Now()}}}
+	pulseTicker := time.NewTicker(EngineConfig.PulseInterval)
+	defer pulseTicker.Stop()
+	var timeOutInfo zap.Field
+	var timeStart time.Time
+	for pulseSuber := make(map[ISubscriber]struct{}); ; s.checkRunCost(timeStart, timeOutInfo) {
 		select {
+		case <-pulseTicker.C:
+			timeStart = time.Now()
+			timeOutInfo = zap.String("type", "pulse")
+			for sub := range pulseSuber {
+				sub.OnEvent(PulseEvent{CreateEvent(struct{}{})})
+			}
 		case <-s.timeout.C:
+			timeStart = time.Now()
+			timeOutInfo = zap.String("state", s.State.String())
 			if s.State == STATE_PUBLISHING {
 				for sub := range s.Subscribers.internal {
 					if sub.IsClosed() {
@@ -407,18 +410,18 @@ func (s *Stream) run() {
 						s.onSuberClose(sub)
 					}
 				}
-				s.Tracks.ModifyRange(func(name string, t Track) {
+				hasTrackTimeout := false
+				s.Tracks.Range(func(name string, t Track) {
+					if _, ok := t.(track.Custom); ok {
+						return
+					}
 					// track 超过一定时间没有更新数据了
 					if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
-						s.Warn("track timeout", zap.String("name", name), zap.Time("lastWriteTime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
-						delete(s.Tracks.Map.Map, name)
-						s.Subscribers.Broadcast(TrackRemoved{t})
+						s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
+						hasTrackTimeout = true
 					}
 				})
-				if s.State != STATE_PUBLISHING {
-					continue
-				}
-				if s.Tracks.Len() == 0 || (s.Publisher != nil && s.Publisher.IsClosed()) {
+				if hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)
 				} else {
 					s.timeout.Reset(time.Second * 5)
@@ -426,13 +429,18 @@ func (s *Stream) run() {
 					s.Subscribers.AbortWait()
 				}
 			} else {
-				s.Debug("timeout", zap.String("state", StateNames[s.State]))
+				s.Debug("timeout", timeOutInfo)
 				s.action(ACTION_TIMEOUT)
 			}
 		case action, ok := <-s.actionChan.C:
+			timeStart = time.Now()
 			if ok {
 				switch v := action.(type) {
+				case SubPulse:
+					timeOutInfo = zap.String("action", "SubPulse")
+					pulseSuber[v] = struct{}{}
 				case *util.Promise[IPublisher]:
+					timeOutInfo = zap.String("action", "Publish")
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
@@ -446,6 +454,7 @@ func (s *Stream) run() {
 						v.Reject(ErrBadStreamName)
 					}
 				case *util.Promise[ISubscriber]:
+					timeOutInfo = zap.String("action", "Subscribe")
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
@@ -491,9 +500,12 @@ func (s *Stream) run() {
 					if s.Subscribers.Len() == 1 && s.State == STATE_WAITCLOSE {
 						s.action(ACTION_FIRSTENTER)
 					}
-				case ISubscriber:
+				case Unsubscribe:
+					timeOutInfo = zap.String("action", "Unsubscribe")
+					delete(pulseSuber, v)
 					s.onSuberClose(v)
 				case TrackRemoved:
+					timeOutInfo = zap.String("action", "TrackRemoved")
 					name := v.GetBase().Name
 					if t, ok := s.Tracks.Delete(name); ok {
 						s.Info("track -1", zap.String("name", name))
@@ -501,30 +513,52 @@ func (s *Stream) run() {
 						if s.Tracks.Len() == 0 {
 							s.action(ACTION_PUBLISHLOST)
 						}
-						if dt, ok := t.(*track.Data); ok {
+						if dt, ok := t.(track.Custom); ok {
 							dt.Dispose()
 						}
 					}
 				case *util.Promise[Track]:
+					timeOutInfo = zap.String("action", "Track")
 					if s.State == STATE_WAITPUBLISH {
 						s.action(ACTION_PUBLISH)
 					}
+					pubConfig := s.GetPublisherConfig()
 					name := v.Value.GetBase().Name
+					if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubVideo {
+						v.Reject(ErrTrackMute)
+						return
+					}
+					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubAudio {
+						v.Reject(ErrTrackMute)
+						return
+					}
 					if s.Tracks.Add(name, v.Value) {
 						v.Resolve()
 						s.Subscribers.OnTrack(v.Value)
+						if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubAudio {
+							s.Subscribers.AbortWait()
+						}
+						if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubVideo {
+							s.Subscribers.AbortWait()
+						}
+						// 这里重置的目的是当PublishTimeout设置很大的情况下，需要及时取消订阅者的等待
+						s.timeout.Reset(time.Second * 5)
 					} else {
 						v.Reject(ErrBadTrackName)
 					}
+				case NoMoreTrack:
+					s.Subscribers.AbortWait()
 				case StreamAction:
+					timeOutInfo = zap.String("action", "StreamAction"+v.String())
 					s.action(v)
 				default:
-					s.Error("unknown action", zap.Any("action", action))
+					timeOutInfo = zap.String("action", "unknown")
+					s.Error("unknown action", timeOutInfo)
 				}
 			} else {
 				s.Subscribers.Dispose()
 				s.Tracks.Range(func(_ string, t Track) {
-					if dt, ok := t.(*track.Data); ok {
+					if dt, ok := t.(track.Custom); ok {
 						dt.Dispose()
 					}
 				})
@@ -534,23 +568,23 @@ func (s *Stream) run() {
 	}
 }
 
-func (s *Stream) AddTrack(t *util.Promise[Track]) {
-	s.Receive(t)
-}
-
-type TrackRemoved struct {
-	Track
+func (s *Stream) AddTrack(t Track) (promise *util.Promise[Track]) {
+	promise = util.NewPromise(t)
+	s.Receive(promise)
+	return
 }
 
 func (s *Stream) RemoveTrack(t Track) {
 	s.Receive(TrackRemoved{t})
 }
 
-func (r *Stream) NewDataTrack(name string, locker sync.Locker) (dt *track.Data) {
-	dt = &track.Data{
-		Locker: locker,
-	}
-	dt.Init(10)
-	dt.SetStuff(name, r)
-	return
+type TrackRemoved struct {
+	Track
 }
+
+type SubPulse struct {
+	ISubscriber
+}
+
+type Unsubscribe ISubscriber
+type NoMoreTrack struct{}

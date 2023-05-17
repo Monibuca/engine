@@ -1,6 +1,8 @@
 package track
 
 import (
+	"time"
+
 	"github.com/pion/rtp"
 	"go.uber.org/zap"
 	. "m7s.live/engine/v4/common"
@@ -12,9 +14,15 @@ const RTPMTU = 1400
 // WriteRTPPack 写入已反序列化的RTP包，已经排序过了的
 func (av *Media) WriteRTPPack(p *rtp.Packet) {
 	var frame RTPFrame
+	p.SSRC = av.SSRC
+	p.Padding = false
+	p.PaddingSize = 0
 	frame.Packet = p
 	av.Value.BytesIn += len(frame.Payload) + 12
 	av.Value.RTP.PushValue(frame)
+	av.lastSeq2 = av.lastSeq
+	av.lastSeq = frame.SequenceNumber
+	av.DropCount += int(av.lastSeq - av.lastSeq2 - 1)
 	if len(p.Payload) > 0 {
 		av.WriteRTPFrame(&frame)
 	}
@@ -23,7 +31,9 @@ func (av *Media) WriteRTPPack(p *rtp.Packet) {
 // WriteRTPFrame 写入未反序列化的RTP包, 未排序的
 func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
 	for frame := av.recorderRTP(raw); frame != nil; frame = av.nextRTPFrame() {
+		frame.Value.SSRC = av.SSRC
 		av.Value.BytesIn += len(frame.Value.Payload) + 12
+		av.DropCount += int(av.lastSeq - av.lastSeq2 - 1)
 		if len(frame.Value.Payload) > 0 {
 			av.Value.RTP.Push(frame)
 			av.WriteRTPFrame(&frame.Value)
@@ -38,24 +48,24 @@ func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
 // https://www.cnblogs.com/moonwalk/p/15903760.html
 // Packetize packetizes the payload of an RTP packet and returns one or more RTP packets
 func (av *Media) PacketizeRTP(payloads ...[][]byte) {
-	packetCount := len(payloads)
-	for i, pp := range payloads {
-		av.rtpSequence++
-		rtpItem := av.GetRTPFromPool()
+	var rtpItem *util.ListItem[RTPFrame]
+	for _, pp := range payloads {
+		rtpItem = av.GetRTPFromPool()
 		packet := &rtpItem.Value
 		packet.Payload = packet.Payload[:0]
-		packet.SequenceNumber = av.rtpSequence
 		if av.SampleRate != 90000 {
-			packet.Timestamp = uint32(uint64(av.SampleRate) * uint64(av.Value.PTS) / 90000)
+			packet.Timestamp = uint32(time.Duration(av.SampleRate) * av.Value.PTS / 90000)
 		} else {
-			packet.Timestamp = av.Value.PTS
+			packet.Timestamp = uint32(av.Value.PTS)
 		}
-		packet.Marker = i == packetCount-1
+		packet.Marker = false
 		for _, p := range pp {
 			packet.Payload = append(packet.Payload, p...)
 		}
 		av.Value.RTP.Push(rtpItem)
 	}
+	// 最后一个rtp包标记为true
+	rtpItem.Value.Marker = true
 }
 
 type RTPDemuxer struct {
@@ -84,8 +94,4 @@ func (av *RTPDemuxer) recorderRTP(item *util.ListItem[RTPFrame]) (frame *util.Li
 	av.lastSeq2 = av.lastSeq
 	av.lastSeq = frame.Value.SequenceNumber
 	return
-}
-
-type RTPMuxer struct {
-	rtpSequence uint16 //用于生成下一个rtp包的序号
 }
