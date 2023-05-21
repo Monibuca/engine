@@ -23,6 +23,7 @@ func (a *Audio) Attach() {
 	if a.Attached.CompareAndSwap(false, true) {
 		if err := a.Stream.AddTrack(a).Await(); err != nil {
 			a.Error("attach audio track failed", zap.Error(err))
+			a.Attached.Store(false)
 		} else {
 			a.Info("audio track attached", zap.Uint32("sample rate", a.SampleRate))
 		}

@@ -80,8 +80,14 @@ func (config Config) Unmarshal(s any) {
 	//字段映射，小写对应的大写
 	nameMap := make(map[string]string)
 	for i, j := 0, t.NumField(); i < j; i++ {
-		name := t.Field(i).Name
-		nameMap[strings.ToLower(name)] = name
+		field := t.Field(i)
+		name := field.Name
+		if tag := field.Tag.Get("yaml"); tag != "" {
+			name, _, _ = strings.Cut(tag, ",")
+		} else {
+			name = strings.ToLower(name)
+		}
+		nameMap[name] = field.Name
 	}
 	for k, v := range config {
 		name, ok := nameMap[k]
@@ -190,6 +196,12 @@ func Struct2Config(s any, prefix ...string) (config Config) {
 			continue
 		}
 		name := strings.ToLower(ft.Name)
+		if tag := ft.Tag.Get("yaml"); tag != "" {
+			if tag == "-" {
+				continue
+			}
+			name, _, _ = strings.Cut(tag, ",")
+		}
 		var envPath []string
 		if len(prefix) > 0 {
 			envPath = append(prefix, strings.ToUpper(ft.Name))
@@ -200,9 +212,6 @@ func Struct2Config(s any, prefix ...string) (config Config) {
 				config[name] = fv.Interface()
 				return
 			}
-		}
-		if ft.Tag.Get("json") == "-" {
-			continue
 		}
 		switch ft.Type.Kind() {
 		case reflect.Struct:

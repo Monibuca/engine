@@ -109,7 +109,7 @@ func (p *Push) AddPush(url string, streamPath string) {
 	if p.PushList == nil {
 		p.PushList = make(map[string]string)
 	}
-	p.PushList[url] = streamPath
+	p.PushList[streamPath] = url
 }
 
 type Console struct {

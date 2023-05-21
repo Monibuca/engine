@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -233,14 +234,18 @@ func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Requ
 	}
 	cv := q.Get("vcodec")
 	ca := q.Get("acodec")
+	cvp := q.Get("vpayload")
+	cap := q.Get("apayload")
 	var pub RTPDumpPublisher
+	i, _ := strconv.ParseInt(cvp, 10, 64)
+	pub.VPayloadType = byte(i)
+	i, _ = strconv.ParseInt(cap, 10, 64)
+	pub.APayloadType = byte(i)
 	switch cv {
 	case "h264":
 		pub.VCodec = codec.CodecID_H264
 	case "h265":
 		pub.VCodec = codec.CodecID_H265
-	default:
-		pub.VCodec = codec.CodecID_H264
 	}
 	switch ca {
 	case "aac":
@@ -249,8 +254,6 @@ func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Requ
 		pub.ACodec = codec.CodecID_PCMA
 	case "pcmu":
 		pub.ACodec = codec.CodecID_PCMU
-	default:
-		pub.ACodec = codec.CodecID_AAC
 	}
 	ss := strings.Split(dumpFile, ",")
 	if len(ss) > 1 {

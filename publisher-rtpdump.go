@@ -16,14 +16,16 @@ import (
 
 type RTPDumpPublisher struct {
 	Publisher
-	VCodec codec.VideoCodecID
-	ACodec codec.AudioCodecID
-	other  *rtpdump.Packet
+	VCodec       codec.VideoCodecID
+	ACodec       codec.AudioCodecID
+	VPayloadType uint8
+	APayloadType uint8
+	other        *rtpdump.Packet
 	sync.Mutex
 }
 
 func (t *RTPDumpPublisher) Feed(file *os.File) {
-	
+
 	r, h, err := rtpdump.NewReader(file)
 	if err != nil {
 		t.Stream.Error("RTPDumpPublisher open file error", zap.Error(err))
@@ -38,7 +40,9 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 		case codec.CodecID_H265:
 			t.VideoTrack = track.NewH265(t.Publisher.Stream)
 		}
-		t.VideoTrack.SetSpeedLimit(500 * time.Millisecond)
+		if t.VideoTrack != nil {
+			t.VideoTrack.SetSpeedLimit(500 * time.Millisecond)
+		}
 	}
 	if t.AudioTrack == nil {
 		switch t.ACodec {
@@ -55,7 +59,9 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 		case codec.CodecID_PCMU:
 			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
 		}
-		t.AudioTrack.SetSpeedLimit(500 * time.Millisecond)
+		if t.AudioTrack != nil {
+			t.AudioTrack.SetSpeedLimit(500 * time.Millisecond)
+		}
 	}
 	t.Unlock()
 	needLock := true
@@ -92,9 +98,9 @@ func (t *RTPDumpPublisher) WriteRTP(raw []byte) {
 	var frame common.RTPFrame
 	frame.Unmarshal(raw)
 	switch frame.PayloadType {
-	case 96:
+	case t.VPayloadType:
 		t.VideoTrack.WriteRTP(&util.ListItem[common.RTPFrame]{Value: frame})
-	case 97, 0, 8:
+	case t.APayloadType:
 		t.AudioTrack.WriteRTP(&util.ListItem[common.RTPFrame]{Value: frame})
 	default:
 		t.Stream.Warn("RTPDumpPublisher unknown payload type", zap.Uint8("payloadType", frame.PayloadType))

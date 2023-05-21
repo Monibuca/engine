@@ -121,6 +121,8 @@ func (av *Media) SnapForJson() {
 	v := av.LastValue
 	if av.RawPart != nil {
 		av.RawPart = av.RawPart[:0]
+	} else {
+		av.RawPart = make([]int, 0, 10)
 	}
 	if av.RawSize = v.AUList.ByteLength; av.RawSize > 0 {
 		r := v.AUList.NewReader()

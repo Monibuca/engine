@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -127,8 +128,15 @@ type StreamTimeoutConfig struct {
 	IdleTimeout       time.Duration //无订阅者后超时，不需要订阅即可激活
 }
 type Tracks struct {
-	util.Map[string, Track]
+	sync.Map
 	MainVideo *track.Video
+}
+
+func (tracks *Tracks) Range(f func(name string, t Track)) {
+	tracks.Map.Range(func(k, v any) bool {
+		f(k.(string), v.(Track))
+		return true
+	})
 }
 
 func (tracks *Tracks) Add(name string, t Track) bool {
@@ -143,12 +151,13 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 			v.Narrow()
 		}
 	}
-	return tracks.Map.Add(name, t)
+	_, loaded := tracks.LoadOrStore(name, t)
+	return !loaded
 }
 
 func (tracks *Tracks) SetIDR(video Track) {
 	if video == tracks.MainVideo {
-		tracks.Map.Range(func(_ string, t Track) {
+		tracks.Range(func(_ string, t Track) {
 			if v, ok := t.(*track.Audio); ok {
 				v.Narrow()
 			}
@@ -157,10 +166,12 @@ func (tracks *Tracks) SetIDR(video Track) {
 }
 
 func (tracks *Tracks) MarshalJSON() ([]byte, error) {
-	return json.Marshal(util.MapList(&tracks.Map, func(_ string, t Track) Track {
+	var trackList []Track
+	tracks.Range(func(_ string, t Track) {
 		t.SnapForJson()
-		return t
-	}))
+		trackList = append(trackList, t)
+	})
+	return json.Marshal(trackList)
 }
 
 // Stream 流定义
@@ -209,10 +220,10 @@ func (s *Stream) Summary() (r StreamSummay) {
 	if s.Publisher != nil {
 		r.Type = s.Publisher.GetPublisher().Type
 	}
-	r.Tracks = util.MapList(&s.Tracks.Map, func(name string, t Track) string {
+	s.Tracks.Range(func(name string, t Track) {
 		b := t.GetBase()
 		r.BPS += b.BPS
-		return name
+		r.Tracks = append(r.Tracks, name)
 	})
 	r.Path = s.Path
 	r.State = s.State
@@ -250,7 +261,6 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s.Info("created")
 		Streams.Map[streamPath] = s
 		s.actionChan.Init(1)
-		s.Tracks.Init()
 		go s.run()
 		return s, true
 	}
@@ -411,7 +421,9 @@ func (s *Stream) run() {
 					}
 				}
 				hasTrackTimeout := false
+				trackCount := 0
 				s.Tracks.Range(func(name string, t Track) {
+					trackCount++
 					if _, ok := t.(track.Custom); ok {
 						return
 					}
@@ -421,7 +433,7 @@ func (s *Stream) run() {
 						hasTrackTimeout = true
 					}
 				})
-				if hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
+				if trackCount == 0 || hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
 					s.action(ACTION_PUBLISHLOST)
 				} else {
 					s.timeout.Reset(time.Second * 5)
@@ -444,11 +456,12 @@ func (s *Stream) run() {
 					if s.IsClosed() {
 						v.Reject(ErrStreamIsClosed)
 					}
-					republish := s.Publisher == v.Value // 重复发布
+					republish := s.Publisher == v.Value                                  // 重复发布
+					kicked := !republish && s.Publisher != nil && s.Publisher.IsClosed() // 被踢下线
 					if !republish {
 						s.Publisher = v.Value
 					}
-					if s.action(ACTION_PUBLISH) || republish {
+					if s.action(ACTION_PUBLISH) || republish || kicked {
 						v.Resolve()
 					} else {
 						v.Reject(ErrBadStreamName)
@@ -507,12 +520,9 @@ func (s *Stream) run() {
 				case TrackRemoved:
 					timeOutInfo = zap.String("action", "TrackRemoved")
 					name := v.GetBase().Name
-					if t, ok := s.Tracks.Delete(name); ok {
+					if t, ok := s.Tracks.LoadAndDelete(name); ok {
 						s.Info("track -1", zap.String("name", name))
 						s.Subscribers.Broadcast(t)
-						if s.Tracks.Len() == 0 {
-							s.action(ACTION_PUBLISHLOST)
-						}
 						if dt, ok := t.(track.Custom); ok {
 							dt.Dispose()
 						}
@@ -526,11 +536,11 @@ func (s *Stream) run() {
 					name := v.Value.GetBase().Name
 					if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubVideo {
 						v.Reject(ErrTrackMute)
-						return
+						continue
 					}
 					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubAudio {
 						v.Reject(ErrTrackMute)
-						return
+						continue
 					}
 					if s.Tracks.Add(name, v.Value) {
 						v.Resolve()
