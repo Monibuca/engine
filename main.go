@@ -215,7 +215,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 			return
 		case <-reportTimer.C:
 			contentBuf.Reset()
-			contentBuf.WriteString(fmt.Sprintf(`{"uuid":"`+UUID+`","streams":%d}`, len(Streams.Map)))
+			contentBuf.WriteString(fmt.Sprintf(`{"uuid":"`+UUID+`","streams":%d}`, Streams.Len()))
 			req.Body = ioutil.NopCloser(contentBuf)
 			c.Do(req)
 		}

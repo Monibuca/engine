@@ -16,7 +16,6 @@ var summary Summary
 var children util.Map[string, *Summary]
 
 func init() {
-	children.Init()
 	go summary.Start()
 }
 

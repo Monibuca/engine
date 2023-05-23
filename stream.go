@@ -85,7 +85,7 @@ var StreamFSM = [len(StateNames)]map[StreamAction]StreamState{
 }
 
 // Streams 所有的流集合
-var Streams = util.Map[string, *Stream]{Map: make(map[string]*Stream)}
+var Streams util.Map[string, *Stream]
 
 type StreamList []*Stream
 
@@ -112,13 +112,11 @@ func GetSortedStreamList() StreamList {
 }
 
 func FilterStreams[T IPublisher]() (ss []*Stream) {
-	Streams.RLock()
-	defer Streams.RUnlock()
-	for _, s := range Streams.Map {
+	Streams.Range(func(_ string, s *Stream) {
 		if _, ok := s.Publisher.(T); ok {
 			ss = append(ss, s)
 		}
-	}
+	})
 	return
 }
 
@@ -244,7 +242,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		log.Warn(Red("Stream Path Format Error:"), streamPath)
 		return nil, false
 	}
-	if s, ok := Streams.Map[streamPath]; ok {
+	if s := Streams.Get(streamPath); s != nil {
 		s.Debug("Stream Found")
 		return s, false
 	} else {
@@ -259,7 +257,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		s.Subscribers.Init()
 		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath))
 		s.Info("created")
-		Streams.Map[streamPath] = s
+		Streams.Set(streamPath, s)
 		s.actionChan.Init(1)
 		go s.run()
 		return s, true

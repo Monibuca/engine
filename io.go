@@ -164,9 +164,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if io.Context == nil {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
-	Streams.Lock()
 	s, create := findOrCreateStream(u.Path, wt)
-	Streams.Unlock()
 	if s == nil {
 		return ErrBadStreamName
 	}
