@@ -52,7 +52,8 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 	for _, pp := range payloads {
 		rtpItem = av.GetRTPFromPool()
 		packet := &rtpItem.Value
-		packet.Payload = packet.Payload[:0]
+		br := util.LimitBuffer{Buffer: packet.Payload}
+		br.Reset()
 		if av.SampleRate != 90000 {
 			packet.Timestamp = uint32(time.Duration(av.SampleRate) * av.Value.PTS / 90000)
 		} else {
@@ -60,8 +61,9 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 		}
 		packet.Marker = false
 		for _, p := range pp {
-			packet.Payload = append(packet.Payload, p...)
+			br.Write(p)
 		}
+		packet.Payload = br.Bytes()
 		av.Value.RTP.Push(rtpItem)
 	}
 	// 最后一个rtp包标记为true

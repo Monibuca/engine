@@ -6,6 +6,7 @@ import (
 	"github.com/yapingcat/gomedia/go-mp4"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/track"
+	"m7s.live/engine/v4/util"
 )
 
 type MP4Publisher struct {
@@ -52,9 +53,9 @@ func (p *MP4Publisher) ReadMP4Data(source io.ReadSeeker) error {
 			case mp4.MP4_CODEC_H264, mp4.MP4_CODEC_H265:
 				p.VideoTrack.WriteAnnexB(uint32(pkg.Pts*90), uint32(pkg.Dts*90), pkg.Data)
 			case mp4.MP4_CODEC_AAC:
-				p.AudioTrack.WriteADTS(uint32(pkg.Pts*90), pkg.Data)
+				p.AudioTrack.WriteADTS(uint32(pkg.Pts*90), util.Buffer(pkg.Data))
 			case mp4.MP4_CODEC_G711A, mp4.MP4_CODEC_G711U:
-				p.AudioTrack.WriteRaw(uint32(pkg.Pts*90), pkg.Data)
+				p.AudioTrack.WriteRawBytes(uint32(pkg.Pts*90), util.Buffer(pkg.Data))
 			}
 		}
 	}

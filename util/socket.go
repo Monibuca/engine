@@ -21,8 +21,11 @@ func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWr
 				return
 			}
 		}
-	} else if err := json.NewEncoder(rw).Encode(fetch()); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
+	} else {
+		rw.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(rw).Encode(fetch()); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -36,8 +39,11 @@ func ReturnYaml[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWr
 				return
 			}
 		}
-	} else if err := yaml.NewEncoder(rw).Encode(fetch()); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
+	} else {
+		rw.Header().Set("Content-Type", "application/yaml")
+		if err := yaml.NewEncoder(rw).Encode(fetch()); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 

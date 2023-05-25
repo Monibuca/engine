@@ -85,7 +85,7 @@ func (t *TSPublisher) ReadPES() {
 				case *track.AAC:
 					t.AudioTrack.WriteADTS(uint32(pes.Header.Pts), pes.Payload)
 				case *track.G711:
-					t.AudioTrack.WriteRaw(uint32(pes.Header.Pts), pes.Payload)
+					t.AudioTrack.WriteRawBytes(uint32(pes.Header.Pts), pes.Payload)
 				}
 			}
 		}

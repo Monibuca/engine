@@ -43,7 +43,7 @@ func (a *Audio) GetName() string {
 	return a.Name
 }
 
-func (av *Audio) WriteADTS(pts uint32, adts []byte) {
+func (av *Audio) WriteADTS(pts uint32, adts util.IBytes) {
 
 }
 
@@ -56,10 +56,10 @@ func (av *Audio) Flush() {
 	av.Media.Flush()
 }
 
-func (av *Audio) WriteRaw(pts uint32, raw []byte) {
+func (av *Audio) WriteRawBytes(pts uint32, raw util.IBytes) {
 	curValue := &av.Value
-	curValue.BytesIn += len(raw)
-	av.AppendAuBytes(raw)
+	curValue.BytesIn += raw.Len()
+	av.Value.AUList.Push(av.GetFromPool(raw))
 	av.generateTimestamp(pts)
 	av.Flush()
 }

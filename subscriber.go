@@ -77,6 +77,11 @@ func (a AudioFrame) GetADTS() (r net.Buffers) {
 	return
 }
 
+func (a AudioFrame) WriteRawTo(w io.Writer) (n int64, err error) {
+	aulist := a.AUList.ToBuffers()
+	return aulist.WriteTo(w)
+}
+
 func (v VideoFrame) GetAnnexB() (r net.Buffers) {
 	if v.IFrame {
 		r = v.ParamaterSets.GetAnnexB()

@@ -41,7 +41,8 @@ type AAC struct {
 	fragments *util.BLL // 用于处理不完整的AU,缺少的字节数
 }
 
-func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
+func (aac *AAC) WriteADTS(ts uint32, b util.IBytes) {
+	adts := b.Bytes()
 	if aac.SequenceHead == nil {
 		profile := ((adts[2] & 0xc0) >> 6) + 1
 		sampleRate := (adts[2] & 0x3c) >> 2
@@ -64,7 +65,7 @@ func (aac *AAC) WriteADTS(ts uint32, adts []byte) {
 		}
 		frameLen = (int(adts[3]&3) << 11) | (int(adts[4]) << 3) | (int(adts[5]) >> 5)
 	}
-	aac.Value.ADTS = aac.BytesPool.GetShell(adts)
+	aac.Value.ADTS = aac.GetFromPool(b)
 	aac.Flush()
 }
 

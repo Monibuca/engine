@@ -2,12 +2,77 @@ package util
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"net"
 )
 
+// Buffer 用于方便自动扩容的内存写入，已经读取
 type Buffer []byte
+
+// ReuseBuffer 重用buffer，内容可能会被覆盖，要尽早复制
+type ReuseBuffer struct {
+	Buffer
+}
+
+func (ReuseBuffer) Reuse() bool {
+	return true
+}
+
+// LimitBuffer 限制buffer的长度，不会改变原来的buffer，防止内存泄漏
+type LimitBuffer struct {
+	Buffer
+}
+
+func (b *LimitBuffer) ReadN(n int) (result LimitBuffer) {
+	result.Buffer = b.Buffer.ReadN(n)
+	return
+}
+
+func (b LimitBuffer) Clone() (result LimitBuffer) {
+	result.Buffer = b.Buffer.Clone()
+	return
+}
+
+func (b LimitBuffer) SubBuf(start int, length int) (result LimitBuffer) {
+	result.Buffer = b.Buffer.SubBuf(start, length)
+	return
+}
+
+func (b *LimitBuffer) Malloc(count int) (result LimitBuffer) {
+	l := b.Len()
+	newL := l + count
+	if c := b.Cap(); newL > c {
+		panic(fmt.Sprintf("LimitBuffer Malloc %d > %d", newL, c))
+	} else {
+		*b = b.SubBuf(0, newL)
+	}
+	return b.SubBuf(l, count)
+}
+
+func (b *LimitBuffer) Write(a []byte) (n int, err error) {
+	l := b.Len()
+	newL := l + len(a)
+	if c := b.Cap(); newL > c {
+		panic(fmt.Sprintf("LimitBuffer Write %d > %d", newL, c))
+	} else {
+		b.Buffer = b.Buffer.SubBuf(0, newL)
+		copy(b.Buffer[l:], a)
+	}
+	return len(a), nil
+}
+
+// IBytes 用于区分传入的内存是否是复用内存，例如从网络中读取的数据，如果是复用内存，需要尽早复制
+type IBytes interface {
+	Len() int
+	Bytes() []byte
+	Reuse() bool
+}
+
+func (Buffer) Reuse() bool {
+	return false
+}
 
 func (b *Buffer) Read(buf []byte) (n int, err error) {
 	if !b.CanReadN(len(buf)) {
@@ -62,12 +127,23 @@ func (b *Buffer) WriteString(a string) {
 	*b = append(*b, a...)
 }
 func (b *Buffer) Write(a []byte) (n int, err error) {
-	*b = append(*b, a...)
+	l := b.Len()
+	newL := l + len(a)
+	if newL > b.Cap() {
+		*b = append(*b, a...)
+	} else {
+		*b = b.SubBuf(0, newL)
+		copy((*b)[l:], a)
+	}
 	return len(a), nil
 }
 
 func (b Buffer) Clone() (result Buffer) {
 	return append(result, b...)
+}
+
+func (b Buffer) Bytes() []byte {
+	return b
 }
 
 func (b Buffer) Len() int {
@@ -128,16 +204,6 @@ func (b *Buffer) Split(n int) (result net.Buffers) {
 func (b *Buffer) MarshalAMFs(v ...any) {
 	amf := AMF{*b}
 	*b = amf.Marshals(v...)
-}
-
-// MallocSlice 用来对容量够的slice进行长度扩展+1，并返回新的位置的指针，用于写入
-func MallocSlice[T any](slice *[]T) *T {
-	oslice := *slice
-	if rawLen := len(oslice); cap(oslice) > rawLen {
-		*slice = oslice[:rawLen+1]
-		return &(*slice)[rawLen]
-	}
-	return nil
 }
 
 // ConcatBuffers 合并碎片内存为一个完整内存

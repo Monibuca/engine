@@ -102,6 +102,7 @@ type AVTrack interface {
 	Flush()
 	SetSpeedLimit(time.Duration)
 	GetRTPFromPool() *util.ListItem[RTPFrame]
+	GetFromPool(util.IBytes) *util.ListItem[util.Buffer]
 }
 type VideoTrack interface {
 	AVTrack
@@ -113,6 +114,6 @@ type VideoTrack interface {
 
 type AudioTrack interface {
 	AVTrack
-	WriteADTS(uint32, []byte)
-	WriteRaw(uint32, []byte)
+	WriteADTS(uint32, util.IBytes)
+	WriteRawBytes(uint32, util.IBytes)
 }

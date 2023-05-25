@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 )
 
@@ -45,4 +46,13 @@ func WaitTerm(cancel context.CancelFunc) {
 	defer signal.Stop(sigc)
 	<-sigc
 	cancel()
+}
+
+// 判断目录是否是基础目录的子目录
+func IsSubdir(baseDir, joinedDir string) bool {
+	rel, err := filepath.Rel(baseDir, joinedDir)
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, "..") && !strings.HasPrefix(rel, "/")
 }
