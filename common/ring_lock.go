@@ -12,7 +12,7 @@ type LockFrame[T any] struct {
 
 type LockRing[T any] struct {
 	RingBuffer[LockFrame[T]]
-	Reset func(*DataFrame[T])
+	Reset func(*DataFrame[T]) `json:"-" yaml:"-"`
 	Flag  *int32
 }
 

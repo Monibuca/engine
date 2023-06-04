@@ -36,7 +36,6 @@ func (r *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 	if r.Packet == nil {
 		r.Packet = &rtp.Packet{}
 	}
-	r.Raw = raw
 	if err := r.Packet.Unmarshal(raw); err != nil {
 		log.Error(err)
 		return nil
@@ -53,7 +52,7 @@ type BaseFrame struct {
 
 type DataFrame[T any] struct {
 	BaseFrame
-	Value T
+	Value T `json:"-" yaml:"-"`
 }
 
 type AVFrame struct {

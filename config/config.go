@@ -24,7 +24,7 @@ type Plugin interface {
 
 type TCPPlugin interface {
 	Plugin
-	ServeTCP(*net.TCPConn)
+	ServeTCP(net.Conn)
 }
 
 type HTTPPlugin interface {

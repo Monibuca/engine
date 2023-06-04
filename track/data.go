@@ -56,6 +56,7 @@ func (d *Data[T]) Play(ctx context.Context, onData func(*DataFrame[T]) error) er
 }
 
 func (d *Data[T]) Attach(s IStream) {
+	d.SetStuff(s)
 	if err := s.AddTrack(d).Await(); err != nil {
 		d.Error("attach data track failed", zap.Error(err))
 	} else {

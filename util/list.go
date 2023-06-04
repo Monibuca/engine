@@ -10,8 +10,8 @@ type IList[T any] interface {
 
 type ListItem[T any] struct {
 	Value     T
-	Next, Pre *ListItem[T]
-	Pool      *List[T] // 回收池
+	Next, Pre *ListItem[T] `json:"-" yaml:"-"`
+	Pool      *List[T]     `json:"-" yaml:"-"` // 回收池
 	list      *List[T]
 }
 

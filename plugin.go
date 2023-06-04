@@ -130,7 +130,7 @@ func (opt *Plugin) assign() {
 		opt.Disabled = false
 		//移除这个属性防止反序列化报错
 		delete(opt.RawConfig, "enable")
-	} 
+	}
 	if opt.Disabled {
 		opt.Warn("plugin disabled")
 		return
@@ -171,6 +171,9 @@ func (opt *Plugin) run() {
 	// opt.RawConfig = config.Struct2Config(opt.Config)
 	if conf, ok := opt.Config.(config.HTTPConfig); ok {
 		go conf.Listen(opt)
+	}
+	if conf, ok := opt.Config.(config.TCPConfig); ok {
+		go conf.ListenTCP(opt, opt.Config.(config.TCPPlugin))
 	}
 }
 

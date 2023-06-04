@@ -2,6 +2,8 @@ package config
 
 import (
 	"context"
+	"crypto/tls"
+	_ "embed"
 	"net"
 	"runtime"
 	"time"
@@ -9,12 +11,28 @@ import (
 	"m7s.live/engine/v4/log"
 )
 
-type TCP struct {
-	ListenAddr string
-	ListenNum  int //同时并行监听数量，0为CPU核心数量
+//go:embed local.monibuca.com_bundle.pem
+var LocalCert []byte
+
+//go:embed local.monibuca.com.key
+var LocalKey []byte
+
+var _ TCPConfig = (*TCP)(nil)
+
+type TCPConfig interface {
+	ListenTCP(context.Context, TCPPlugin) error
 }
 
-func (tcp *TCP) listen(l net.Listener, handler func(*net.TCPConn)) {
+type TCP struct {
+	ListenAddr    string
+	ListenAddrTLS string
+	CertFile      string
+	KeyFile       string
+	ListenNum     int  //同时并行监听数量，0为CPU核心数量
+	NoDelay       bool //是否禁用Nagle算法
+}
+
+func (tcp *TCP) listen(l net.Listener, handler func(net.Conn)) {
 	var tempDelay time.Duration
 	for {
 		conn, err := l.Accept()
@@ -34,12 +52,21 @@ func (tcp *TCP) listen(l net.Listener, handler func(*net.TCPConn)) {
 			}
 			return
 		}
-		conn.(*net.TCPConn).SetNoDelay(false)
+		var tcpConn *net.TCPConn
+		switch v := conn.(type) {
+		case *net.TCPConn:
+			tcpConn = v
+		case *tls.Conn:
+			tcpConn = v.NetConn().(*net.TCPConn)
+		}
+		if !tcp.NoDelay {
+			tcpConn.SetNoDelay(false)
+		}
 		tempDelay = 0
-		go handler(conn.(*net.TCPConn))
+		go handler(conn)
 	}
 }
-func (tcp *TCP) Listen(ctx context.Context, plugin TCPPlugin) error {
+func (tcp *TCP) ListenTCP(ctx context.Context, plugin TCPPlugin) error {
 	l, err := net.Listen("tcp", tcp.ListenAddr)
 	if err != nil {
 		if Global.LogLang == "zh" {
@@ -53,8 +80,38 @@ func (tcp *TCP) Listen(ctx context.Context, plugin TCPPlugin) error {
 	if count == 0 {
 		count = runtime.NumCPU()
 	}
+	log.Infof("tcp listen %d at %s", count, tcp.ListenAddr)
 	for i := 0; i < count; i++ {
 		go tcp.listen(l, plugin.ServeTCP)
+	}
+	if tcp.ListenAddrTLS != "" {
+		keyPair, _ := tls.X509KeyPair(LocalCert, LocalKey)
+		if tcp.CertFile != "" || tcp.KeyFile != "" {
+			keyPair, err = tls.LoadX509KeyPair(tcp.CertFile, tcp.KeyFile)
+		}
+		if err != nil {
+			if Global.LogLang == "zh" {
+				log.Fatalf("加载证书失败: %v", err)
+			} else {
+				log.Fatalf("LoadX509KeyPair error: %v", err)
+			}
+			return err
+		}
+		l, err = tls.Listen("tcp", tcp.ListenAddrTLS, &tls.Config{
+			Certificates: []tls.Certificate{keyPair},
+		})
+		if err != nil {
+			if Global.LogLang == "zh" {
+				log.Fatalf("%s: 监听失败: %v", tcp.ListenAddrTLS, err)
+			} else {
+				log.Fatalf("%s: Listen error: %v", tcp.ListenAddrTLS, err)
+			}
+			return err
+		}
+		log.Infof("tls tcp listen %d at %s", count, tcp.ListenAddrTLS)
+		for i := 0; i < count; i++ {
+			go tcp.listen(l, plugin.ServeTCP)
+		}
 	}
 	<-ctx.Done()
 	return l.Close()

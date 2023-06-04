@@ -53,7 +53,6 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 		rtpItem = av.GetRTPFromPool()
 		packet := &rtpItem.Value
 		br := util.LimitBuffer{Buffer: packet.Payload}
-		br.Reset()
 		if av.SampleRate != 90000 {
 			packet.Timestamp = uint32(time.Duration(av.SampleRate) * av.Value.PTS / 90000)
 		} else {

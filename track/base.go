@@ -121,8 +121,9 @@ func (av *Media) GetRTPFromPool() (result *util.ListItem[RTPFrame]) {
 		result.Value.SSRC = av.SSRC
 		result.Value.Version = 2
 		result.Value.Raw = make([]byte, 1460)
-		result.Value.Payload = result.Value.Raw[:0]
 	}
+	result.Value.Raw = result.Value.Raw[:1460]
+	result.Value.Payload = result.Value.Raw[:0]
 	return
 }
 
@@ -273,11 +274,12 @@ func (av *Media) Flush() {
 			}
 			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
 		}
-		curValue.DeltaTime = uint32((curValue.Timestamp - preValue.Timestamp) / time.Millisecond)
+
+		curValue.DeltaTime = uint32(deltaTS(curValue.Timestamp, preValue.Timestamp) / time.Millisecond)
 	}
 	av.Trace("write", zap.Uint32("seq", curValue.Sequence), zap.Duration("dts", curValue.DTS), zap.Duration("dts delta", curValue.DTS-preValue.DTS), zap.Uint32("delta", curValue.DeltaTime), zap.Duration("timestamp", curValue.Timestamp))
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
-	if bufferTime > 0 && av.IDRingList.Length > 1 && curValue.Timestamp-av.IDRingList.Next.Next.Value.Value.Timestamp > bufferTime {
+	if bufferTime > 0 && av.IDRingList.Length > 1 && deltaTS(curValue.Timestamp, av.IDRingList.Next.Next.Value.Value.Timestamp) > bufferTime {
 		av.ShiftIDR()
 		av.narrow(int(curValue.Sequence - av.HistoryRing.Value.Sequence))
 	}
@@ -311,4 +313,11 @@ func (av *Media) Flush() {
 	curValue.Reset()
 	curValue.Sequence = av.MoveCount
 	preValue.CanRead = true
+}
+
+func deltaTS(curTs time.Duration, preTs time.Duration) time.Duration {
+	if curTs < preTs {
+		return curTs + (1<<32)*time.Millisecond - preTs
+	}
+	return curTs - preTs
 }

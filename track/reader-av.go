@@ -16,7 +16,11 @@ const (
 	READSTATE_FIRST
 	READSTATE_NORMAL
 )
-
+const (
+	SUBMODE_REAL = iota
+	SUBMODE_NOJUMP
+	SUBMODE_BUFFER
+)
 type AVRingReader struct {
 	ctx   context.Context
 	Track *Media
@@ -88,15 +92,15 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 			r.Warn("no IDRring")
 		}
 		switch mode {
-		case 0:
+		case SUBMODE_REAL:
 			if r.Track.IDRing != nil {
 				r.State = READSTATE_FIRST
 			} else {
 				r.State = READSTATE_NORMAL
 			}
-		case 1:
+		case SUBMODE_NOJUMP:
 			r.State = READSTATE_NORMAL
-		case 2:
+		case SUBMODE_BUFFER:
 			if r.Track.HistoryRing != nil {
 				startRing = r.Track.HistoryRing
 			}

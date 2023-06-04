@@ -25,7 +25,7 @@
 - 提供配置热更新机制
 ## 引擎自带HTTP接口
 - 获取某一个流的详情 `/api/stream?streamPath=xxx`
-- 终止某一个流 `/api/closeStream?streamPath=xxx`
+- 终止某一个流 `/api/closestream?streamPath=xxx`
 - 获取engine信息 `/api/sysInfo` 返回值{Version:xxx,StartTime:xxx,IP:[xxx.xxx.xxx.xxx]}
 - 获取系统基本情况 `/api/summary` 返回值Summary数据
 - 获取所有插件信息 `/api/plugins` 返回值Plugin数据
