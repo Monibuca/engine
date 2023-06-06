@@ -124,6 +124,7 @@ type StreamTimeoutConfig struct {
 	PublishTimeout    time.Duration //发布者无数据后超时
 	DelayCloseTimeout time.Duration //无订阅者后超时,必须先有一次订阅才会激活
 	IdleTimeout       time.Duration //无订阅者后超时，不需要订阅即可激活
+	PauseTimeout      time.Duration //暂停后超时
 	NeverTimeout      bool          // 永不超时
 }
 type Tracks struct {
@@ -188,6 +189,7 @@ type Stream struct {
 	Tracks      Tracks
 	AppName     string
 	StreamName  string
+	IsPause     bool // 是否处于暂停状态
 }
 type StreamSummay struct {
 	Path        string
@@ -422,21 +424,25 @@ func (s *Stream) run() {
 				if !s.NeverTimeout {
 					hasTrackTimeout := false
 					trackCount := 0
+					timeout := s.PublishTimeout
+					if s.IsPause {
+						timeout = s.PauseTimeout
+					}
 					s.Tracks.Range(func(name string, t Track) {
 						trackCount++
 						if _, ok := t.(track.Custom); ok {
 							return
 						}
 						// track 超过一定时间没有更新数据了
-						if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > s.PublishTimeout {
-							s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", s.PublishTimeout))
+						if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > timeout {
+							s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", timeout))
 							hasTrackTimeout = true
 						}
 					})
 					if trackCount == 0 || hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
 						s.action(ACTION_PUBLISHLOST)
 						continue
-					} 
+					}
 				}
 				s.timeout.Reset(time.Second * 5)
 				//订阅者等待音视频轨道超时了，放弃等待，订阅成功
@@ -587,6 +593,14 @@ func (s *Stream) AddTrack(t Track) (promise *util.Promise[Track]) {
 
 func (s *Stream) RemoveTrack(t Track) {
 	s.Receive(TrackRemoved{t})
+}
+
+func (s *Stream) Pause() {
+	s.IsPause = true
+}
+
+func (s *Stream) Resume() {
+	s.IsPause = false
 }
 
 type TrackRemoved struct {

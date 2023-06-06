@@ -197,6 +197,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		s.PublishTimeout = conf.PublishTimeout
 		s.DelayCloseTimeout = conf.DelayCloseTimeout
 		s.IdleTimeout = conf.IdleTimeout
+		s.PauseTimeout = conf.PauseTimeout
 		defer func() {
 			if err == nil {
 				if oldPublisher == nil {

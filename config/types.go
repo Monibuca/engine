@@ -35,6 +35,7 @@ type Publish struct {
 	WaitCloseTimeout  time.Duration // 延迟自动关闭（等待重连）
 	DelayCloseTimeout time.Duration // 延迟自动关闭（无订阅时）
 	IdleTimeout       time.Duration // 空闲(无订阅)超时
+	PauseTimeout      time.Duration `default:"30s"` // 暂停超时
 	BufferTime        time.Duration // 缓冲长度(单位：秒)，0代表取最近关键帧
 	Key               string        // 发布鉴权key
 	SecretArgName     string        `default:"secret"` // 发布鉴权参数名
@@ -123,8 +124,8 @@ type Engine struct {
 	Publish
 	Subscribe
 	HTTP
-	EnableAVCC     bool `default:"true"` //启用AVCC格式，rtmp协议使用
-	EnableRTP      bool `default:"true"` //启用RTP格式，rtsp、gb18181等协议使用
+	EnableAVCC     bool `default:"true"` //启用AVCC格式，rtmp、http-flv协议使用
+	EnableRTP      bool `default:"true"` //启用RTP格式，rtsp、webrtc等协议使用
 	EnableSubEvent bool `default:"true"` //启用订阅事件,禁用可以提高性能
 	EnableAuth     bool `default:"true"` //启用鉴权
 	Console
