@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ type Summary struct {
 	Streams     []StreamSummay
 	lastNetWork []net.IOCountersStat
 	ref         atomic.Int32
+	rw          sync.RWMutex
 }
 
 // NetWorkInfo 网速信息
@@ -92,6 +94,8 @@ func (s *Summary) Report(slave *Summary) {
 }
 
 func (s *Summary) collect() *Summary {
+	s.rw.Lock()
+	defer s.rw.Unlock()
 	v, _ := mem.VirtualMemory()
 	d, _ := disk.Usage("/")
 	nv, _ := net.IOCounters(true)

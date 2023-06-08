@@ -58,7 +58,7 @@ func NewAVRingReader(t *Media, poll time.Duration) *AVRingReader {
 }
 
 func (r *AVRingReader) ReadFrame() *common.AVFrame {
-	for r.Frame = &r.Value; r.ctx.Err() == nil && !r.Frame.CanRead; r.wait() {
+	for r.Frame = &r.Value; r.ctx.Err() == nil && !r.Frame.CanRead; r.Frame.WG.Wait() {
 	}
 	// 超过一半的缓冲区大小，说明Reader太慢，需要丢帧
 	if r.State == READSTATE_NORMAL && r.Track.LastValue.Sequence-r.Frame.Sequence > uint32(r.Track.Size/2) && r.Track.IDRing != nil && r.Track.IDRing.Value.Sequence > r.Frame.Sequence {

@@ -53,6 +53,8 @@ func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 		if !summary.Running() {
 			summary.collect()
 		}
+		summary.rw.RLock()
+		defer summary.rw.RUnlock()
 		if y {
 			if err := yaml.NewEncoder(rw).Encode(&summary); err != nil {
 				http.Error(rw, err.Error(), http.StatusInternalServerError)

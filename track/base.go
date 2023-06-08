@@ -153,6 +153,7 @@ func (av *Media) SetStuff(stuff ...any) {
 		switch v := s.(type) {
 		case int:
 			av.Init(v)
+			av.CurrentFrame().WG.Add(1)
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
 			av.等待上限 = config.Global.SpeedLimit
 		case uint32:
@@ -310,9 +311,11 @@ func (av *Media) Flush() {
 	preValue = curValue
 	curValue = av.MoveNext()
 	curValue.CanRead = false
+	curValue.WG.Add(1)
 	curValue.Reset()
 	curValue.Sequence = av.MoveCount
 	preValue.CanRead = true
+	preValue.WG.Done()
 }
 
 func deltaTS(curTs time.Duration, preTs time.Duration) time.Duration {
