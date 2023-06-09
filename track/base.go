@@ -11,6 +11,11 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
+type EmptyLocker struct{}
+
+func (EmptyLocker) Lock()   {}
+func (EmptyLocker) Unlock() {}
+
 type 流速控制 struct {
 	起始时间戳 time.Duration
 	起始dts time.Duration
@@ -153,7 +158,7 @@ func (av *Media) SetStuff(stuff ...any) {
 		switch v := s.(type) {
 		case int:
 			av.Init(v)
-			av.CurrentFrame().WG.Add(1)
+			av.Value.L = EmptyLocker{}
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
 			av.等待上限 = config.Global.SpeedLimit
 		case uint32:
@@ -311,11 +316,13 @@ func (av *Media) Flush() {
 	preValue = curValue
 	curValue = av.MoveNext()
 	curValue.CanRead = false
-	curValue.WG.Add(1)
 	curValue.Reset()
+	if curValue.L == nil {
+		curValue.L = EmptyLocker{}
+	}
 	curValue.Sequence = av.MoveCount
 	preValue.CanRead = true
-	preValue.WG.Done()
+	preValue.Broadcast()
 }
 
 func deltaTS(curTs time.Duration, preTs time.Duration) time.Duration {

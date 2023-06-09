@@ -59,8 +59,8 @@ type DataFrame[T any] struct {
 type AVFrame struct {
 	BaseFrame
 	IFrame    bool
-	CanRead   bool           `json:"-" yaml:"-"`
-	WG        sync.WaitGroup `json:"-" yaml:"-"`
+	CanRead   bool `json:"-" yaml:"-"`
+	sync.Cond `json:"-" yaml:"-"`
 	PTS       time.Duration
 	DTS       time.Duration
 	Timestamp time.Duration               // 绝对时间戳
