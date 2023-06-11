@@ -29,6 +29,10 @@ func ShouldYaml(r *http.Request) bool {
 }
 
 func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/favicon.ico" {
+		http.ServeFile(rw, r, "favicon.ico")
+		return
+	}
 	rw.Write([]byte("Monibuca API Server\n"))
 	for _, api := range apiList {
 		rw.Write([]byte(api + "\n"))
