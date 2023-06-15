@@ -148,7 +148,7 @@ func (s *Subscriber) OnEvent(event any) {
 }
 
 func (s *Subscriber) CreateTrackReader(t *track.Media) (result *track.AVRingReader) {
-	result = track.NewAVRingReader(t, s.Config.Poll)
+	result = track.NewAVRingReader(t)
 	result.Logger = s.With(zap.String("track", t.Name))
 	return
 }
@@ -170,7 +170,7 @@ func (s *Subscriber) AddTrack(t Track) bool {
 	default:
 		return false
 	}
-	s.Info("track+1", zap.String("name", t.GetBase().Name))
+	s.Info("track+1", zap.String("name", t.GetName()))
 	return true
 }
 
@@ -236,11 +236,12 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		var videoSeq, audioSeq uint16
 		sendVideoFrame = func(frame *AVFrame) {
 			// fmt.Println("v", frame.Sequence, frame.AbsTime, s.VideoReader.AbsTime, frame.IFrame)
+			delta := uint32(s.VideoReader.SkipTs * 90 / time.Millisecond)
 			frame.RTP.Range(func(vp RTPFrame) bool {
 				videoSeq++
 				copy := *vp.Packet
 				vp.Packet = &copy
-				vp.Header.Timestamp = vp.Header.Timestamp - uint32(s.VideoReader.SkipTs*90/time.Millisecond)
+				vp.Header.Timestamp = vp.Header.Timestamp - delta
 				vp.Header.SequenceNumber = videoSeq
 				spesic.OnEvent((VideoRTP)(vp))
 				return true
@@ -249,12 +250,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 
 		sendAudioFrame = func(frame *AVFrame) {
 			// fmt.Println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
+			delta := uint32(s.AudioReader.SkipTs / time.Millisecond * time.Duration(s.AudioReader.Track.SampleRate) / 1000)
 			frame.RTP.Range(func(ap RTPFrame) bool {
 				audioSeq++
 				copy := *ap.Packet
 				ap.Packet = &copy
 				ap.Header.SequenceNumber = audioSeq
-				ap.Header.Timestamp = ap.Header.Timestamp - uint32(s.AudioReader.SkipTs/time.Millisecond*time.Duration(s.AudioReader.Track.SampleRate)/1000)
+				ap.Header.Timestamp = ap.Header.Timestamp - delta
 				spesic.OnEvent((AudioRTP)(ap))
 				return true
 			})

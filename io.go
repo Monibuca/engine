@@ -165,9 +165,6 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
 	s, create := findOrCreateStream(u.Path, wt)
-	if s == nil {
-		return ErrBadStreamName
-	}
 	io.Stream = s
 	io.Spesific = specific
 	io.StartTime = time.Now()
@@ -182,6 +179,8 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		conf := v.GetPublisher().Config
 		io.Type = strings.TrimSuffix(io.Type, "Publisher")
 		io.Info("publish")
+		s.pubLocker.Lock()
+		defer s.pubLocker.Unlock()
 		oldPublisher := s.Publisher
 		if oldPublisher != nil && !oldPublisher.IsClosed() {
 			// 根据配置是否剔出原来的发布者

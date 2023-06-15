@@ -24,8 +24,9 @@ type Video struct {
 	lostFlag    bool // 是否丢帧
 	codec.SPSInfo
 	ParamaterSets `json:"-" yaml:"-"`
-	SPS           []byte `json:"-" yaml:"-"`
-	PPS           []byte `json:"-" yaml:"-"`
+	SPS           []byte              `json:"-" yaml:"-"`
+	PPS           []byte              `json:"-" yaml:"-"`
+	SEIReader     *DataReader[[]byte] `json:"-" yaml:"-"`
 }
 
 func (v *Video) Attach() {
@@ -196,7 +197,7 @@ func (vt *Video) insertDCRtp() {
 		packet.SSRC = vt.SSRC
 		packet.Timestamp = uint32(vt.Value.PTS)
 		packet.Marker = false
-		head.InsertBeforeValue(RTPFrame{&packet, nil})
+		head.InsertBeforeValue(RTPFrame{Packet: &packet})
 	}
 }
 
@@ -247,6 +248,15 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 
 func (vt *Video) Flush() {
 	rv := &vt.Value
+	if vt.SEIReader != nil {
+		if seiFrame := vt.SEIReader.TryRead(); seiFrame != nil {
+			var au util.BLL
+			content := vt.BytesPool.GetShell(seiFrame.Data)
+			au.Push(content)
+			vt.Value.AUList.UnshiftValue(&au)
+			vt.SEIReader.MoveNext()
+		}
+	}
 	if rv.IFrame {
 		vt.computeGOP()
 		vt.Stream.SetIDR(vt)

@@ -95,10 +95,8 @@ func (l *Logger) formatLang(msg *string, fields []zapcore.Field) {
 }
 
 func (l *Logger) Trace(msg string, fields ...zap.Field) {
-	if Trace {
-		l.formatLang(&msg, fields)
-		l.Logger.Debug(msg, fields...)
-	}
+	l.formatLang(&msg, fields)
+	l.Logger.Debug(msg, fields...)
 }
 
 func (l *Logger) Debug(msg string, fields ...zap.Field) {

@@ -30,6 +30,7 @@ type PushConfig interface {
 type Publish struct {
 	PubAudio          bool          `default:"true"`
 	PubVideo          bool          `default:"true"`
+	InsertSEI         bool          // 是否启用SEI插入
 	KickExist         bool          // 是否踢掉已经存在的发布者
 	PublishTimeout    time.Duration `default:"10s"` // 发布无数据超时
 	WaitCloseTimeout  time.Duration // 延迟自动关闭（等待重连）
@@ -60,7 +61,7 @@ type Subscribe struct {
 	IFrameOnly      bool          // 只要关键帧
 	WaitTimeout     time.Duration `default:"10s"`  // 等待流超时
 	WriteBufferSize int           `default:"0"`    // 写缓冲大小
-	Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
+	// Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
 	Key             string        // 订阅鉴权key
 	SecretArgName   string        `default:"secret"` // 订阅鉴权参数名
 	ExpireArgName   string        `default:"expire"` // 订阅鉴权失效时间参数名
@@ -114,7 +115,7 @@ func (p *Push) AddPush(url string, streamPath string) {
 }
 
 type Console struct {
-	Server        string `default:"console.monibuca.com:4242"` //远程控制台地址
+	Server        string `default:"console.monibuca.com:44944"` //远程控制台地址
 	Secret        string //远程控制台密钥
 	PublicAddr    string //公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
 	PublicAddrTLS string
@@ -154,6 +155,7 @@ var Global *Engine
 func (cfg *Engine) InitDefaultHttp() {
 	Global = cfg
 	cfg.HTTP.mux = http.DefaultServeMux
+	cfg.HTTP.ListenAddrTLS = ":8443"
 	cfg.HTTP.ListenAddr = ":8080"
 }
 
@@ -244,7 +246,7 @@ func (cfg *Engine) OnEvent(event any) {
 		if strings.HasPrefix(cfg.Console.Server, "wss") {
 			go cfg.WsRemote()
 		} else {
-			go cfg.Remote(v)
+			go cfg.WtRemote(v)
 		}
 	}
 }

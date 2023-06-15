@@ -44,23 +44,24 @@ func (r *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 	return r
 }
 
-type BaseFrame struct {
+type DataFrame[T any] struct {
 	DeltaTime uint32    // 相对上一帧时间戳，毫秒
 	WriteTime time.Time // 写入时间,可用于比较两个帧的先后
 	Sequence  uint32    // 在一个Track中的序号
 	BytesIn   int       // 输入字节数用于计算BPS
+	CanRead   bool      `json:"-" yaml:"-"`
+	Data      T         `json:"-" yaml:"-"`
+	sync.Cond `json:"-" yaml:"-"`
 }
 
-type DataFrame[T any] struct {
-	BaseFrame
-	Value T `json:"-" yaml:"-"`
+func (df *DataFrame[T]) Reset() {
+	df.BytesIn = 0
+	df.DeltaTime = 0
 }
 
 type AVFrame struct {
-	BaseFrame
+	DataFrame[any]
 	IFrame    bool
-	CanRead   bool `json:"-" yaml:"-"`
-	sync.Cond `json:"-" yaml:"-"`
 	PTS       time.Duration
 	DTS       time.Duration
 	Timestamp time.Duration               // 绝对时间戳
@@ -68,7 +69,6 @@ type AVFrame struct {
 	AVCC      util.BLL                    `json:"-" yaml:"-"` // 打包好的AVCC格式(MPEG-4格式、Byte-Stream Format)
 	RTP       util.List[RTPFrame]         `json:"-" yaml:"-"`
 	AUList    util.BLLs                   `json:"-" yaml:"-"` // 裸数据
-	Extras    any                         `json:"-" yaml:"-"` // 任意扩展数据
 }
 
 func (av *AVFrame) WriteAVCC(ts uint32, frame *util.BLL) {
@@ -97,9 +97,8 @@ func (av *AVFrame) Reset() {
 		av.ADTS.Recycle()
 		av.ADTS = nil
 	}
-	av.BytesIn = 0
 	av.Timestamp = 0
-	av.DeltaTime = 0
+	av.DataFrame.Reset()
 }
 
 type ParamaterSets [][]byte

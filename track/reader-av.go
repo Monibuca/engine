@@ -2,7 +2,6 @@ package track
 
 import (
 	"context"
-	"runtime"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,9 +23,10 @@ const (
 
 type AVRingReader struct {
 	ctx   context.Context
+	mode  int
 	Track *Media
 	*util.Ring[common.AVFrame]
-	wait       func()
+	// wait       func()
 	State      byte
 	FirstSeq   uint32
 	FirstTs    time.Duration
@@ -44,17 +44,17 @@ func (r *AVRingReader) DecConfChanged() bool {
 	return r.ConfSeq != r.Track.SequenceHeadSeq
 }
 
-func NewAVRingReader(t *Media, poll time.Duration) *AVRingReader {
+func NewAVRingReader(t *Media) *AVRingReader {
 	r := &AVRingReader{
 		Track: t,
 	}
-	if poll == 0 {
-		r.wait = runtime.Gosched
-	} else {
-		r.wait = func() {
-			time.Sleep(poll)
-		}
-	}
+	// if poll == 0 {
+	// 	r.wait = runtime.Gosched
+	// } else {
+	// 	r.wait = func() {
+	// 		time.Sleep(poll)
+	// 	}
+	// }
 	return r
 }
 
@@ -63,7 +63,7 @@ func (r *AVRingReader) ReadFrame() *common.AVFrame {
 		r.Frame.Wait()
 	}
 	// 超过一半的缓冲区大小，说明Reader太慢，需要丢帧
-	if r.State == READSTATE_NORMAL && r.Track.LastValue.Sequence-r.Frame.Sequence > uint32(r.Track.Size/2) && r.Track.IDRing != nil && r.Track.IDRing.Value.Sequence > r.Frame.Sequence {
+	if r.mode != SUBMODE_BUFFER && r.State == READSTATE_NORMAL && r.Track.LastValue.Sequence-r.Frame.Sequence > uint32(r.Track.Size/2) && r.Track.IDRing != nil && r.Track.IDRing.Value.Sequence > r.Frame.Sequence {
 		r.Warn("reader too slow", zap.Uint32("lastSeq", r.Track.LastValue.Sequence), zap.Uint32("seq", r.Frame.Sequence))
 		r.Ring = r.Track.IDRing
 		return r.ReadFrame()
@@ -84,6 +84,7 @@ func (r *AVRingReader) MoveNext() {
 
 func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 	r.ctx = ctx
+	r.mode = mode
 	switch r.State {
 	case READSTATE_INIT:
 		r.Info("start read", zap.Int("mode", mode))

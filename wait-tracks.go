@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/track"
 	"m7s.live/engine/v4/util"
@@ -68,15 +69,15 @@ func (w *waitTracks) Accept(t Track) bool {
 	suber := w.Promise.Value
 	switch t.(type) {
 	case *track.Audio:
-		if w.audio.Accept(t.GetBase().Name) {
+		if w.audio.Accept(t.GetName()) {
 			suber.OnEvent(t)
 		}
 	case *track.Video:
-		if w.video.Accept(t.GetBase().Name) {
+		if w.video.Accept(t.GetName()) {
 			suber.OnEvent(t)
 		}
-	case track.Custom:
-		w.data.Accept(t.GetBase().Name)
+	case common.Track:
+		w.data.Accept(t.GetName())
 		suber.OnEvent(t)
 	}
 	if w.NeedWait() {

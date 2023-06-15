@@ -79,7 +79,7 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 func (vt *H265) writeSequenceHead(head []byte) (err error) {
 	vt.WriteSequenceHead(head)
 	if vt.VPS, vt.SPS, vt.PPS, err = codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(vt.SequenceHead); err == nil {
-		vt.SPSInfo, _ = codec.ParseHevcSPS(vt.SequenceHead)
+		vt.SPSInfo, _ = codec.ParseHevcSPS(vt.SPS)
 		vt.nalulenSize = (int(vt.SequenceHead[26]) & 0x03) + 1
 	} else {
 		vt.Error("H265 ParseVpsSpsPps Error")
@@ -94,6 +94,7 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 	}
 	b0 := frame.GetByte(0)
 	if isExtHeader := (b0 >> 4) & 0b1000; isExtHeader != 0 {
+		firstBuffer := frame.Next.Value
 		packetType := b0 & 0b1111
 		switch packetType {
 		case codec.PacketTypeSequenceStart:
@@ -107,18 +108,18 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 			frame.Recycle()
 			return
 		case codec.PacketTypeCodedFrames:
-			frame.Next.Value[0] = b0 & 0b0111_1111 & 0xFC
-			frame.Next.Value[1] = 0x01
-			copy(frame.Next.Value[2:], frame.Next.Value[5:])
-			frame.Next.Value = frame.Next.Value[:frame.Next.Value.Len()-3]
+			firstBuffer[0] = b0 & 0b0111_1111 & 0xFC
+			firstBuffer[1] = 0x01
+			copy(firstBuffer[2:], firstBuffer[5:])
+			frame.Next.Value = firstBuffer[:firstBuffer.Len()-3]
 			frame.ByteLength -= 3
 			return vt.Video.WriteAVCC(ts, frame)
 		case codec.PacketTypeCodedFramesX:
-			frame.Next.Value[0] = b0 & 0b0111_1111 & 0xFC
-			frame.Next.Value[1] = 0x01
-			frame.Next.Value[2] = 0
-			frame.Next.Value[3] = 0
-			frame.Next.Value[4] = 0
+			firstBuffer[0] = b0 & 0b0111_1111 & 0xFC
+			firstBuffer[1] = 0x01
+			firstBuffer[2] = 0
+			firstBuffer[3] = 0
+			firstBuffer[4] = 0
 			return vt.Video.WriteAVCC(ts, frame)
 		}
 	} else {

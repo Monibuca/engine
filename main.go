@@ -144,16 +144,16 @@ func Run(ctx context.Context, configFile string) (err error) {
 		version = ver
 	}
 	if EngineConfig.LogLang == "zh" {
-		log.Info("monibuca 引擎版本：", version, Green(" 启动成功"))
+		log.Info("monibuca ", version, Green(" 启动成功"))
 	} else {
-		log.Info("monibuca", version, Green(" start success"))
+		log.Info("monibuca ", version, Green(" start success"))
 	}
-	var enabledPlugins, disabledPlugins []string
+	var enabledPlugins, disabledPlugins []*Plugin
 	for _, plugin := range plugins {
 		if plugin.Disabled {
-			disabledPlugins = append(disabledPlugins, plugin.Name)
+			disabledPlugins = append(disabledPlugins, plugin)
 		} else {
-			enabledPlugins = append(enabledPlugins, plugin.Name)
+			enabledPlugins = append(enabledPlugins, plugin)
 		}
 	}
 	if EngineConfig.LogLang == "zh" {
@@ -162,7 +162,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		fmt.Print("enabled plugins：")
 	}
 	for _, plugin := range enabledPlugins {
-		fmt.Print(Colorize(" "+plugin+" ", BlackFg|GreenBg|BoldFm), " ")
+		fmt.Print(Colorize(" "+plugin.Name+" ", BlackFg|GreenBg|BoldFm), " ")
 	}
 	fmt.Println()
 	if EngineConfig.LogLang == "zh" {
@@ -171,7 +171,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		fmt.Print("disabled plugins：")
 	}
 	for _, plugin := range disabledPlugins {
-		fmt.Print(Colorize(" "+plugin+" ", BlackFg|RedBg|CrossedOutFm), " ")
+		fmt.Print(Colorize(" "+plugin.Name+" ", BlackFg|RedBg|CrossedOutFm), " ")
 	}
 	fmt.Println()
 	fmt.Println(Bold(Cyan("官网地址: ")), Yellow("https://m7s.live"))
@@ -179,6 +179,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	fmt.Println(Bold(Cyan("文档地址: ")), Yellow("https://docs.m7s.live"))
 	fmt.Println(Bold(Cyan("视频教程: ")), Yellow("https://space.bilibili.com/328443019/channel/collectiondetail?sid=514619"))
 	fmt.Println(Bold(Cyan("远程界面: ")), Yellow("https://console.monibuca.com"))
+	fmt.Println(Yellow("关注公众号：不卡科技，获取更多信息"))
 	rp := struct {
 		UUID     string `json:"uuid"`
 		Machine  string `json:"machine"`
@@ -194,17 +195,18 @@ func Run(ctx context.Context, configFile string) (err error) {
 	}
 	var c http.Client
 	c.Do(req)
+	for _, plugin := range enabledPlugins {
+		plugin.Config.OnEvent(EngineConfig) //引擎初始化完成后，通知插件
+	}
 	for {
 		select {
 		case event := <-EventBus:
 			ts := time.Now()
-			for _, plugin := range Plugins {
-				if !plugin.Disabled {
-					ts := time.Now()
-					plugin.Config.OnEvent(event)
-					if cost := time.Since(ts); cost > time.Millisecond*100 {
-						plugin.Warn("event cost too much time", zap.String("event", fmt.Sprintf("%v", event)), zap.Duration("cost", cost))
-					}
+			for _, plugin := range enabledPlugins {
+				ts := time.Now()
+				plugin.Config.OnEvent(event)
+				if cost := time.Since(ts); cost > time.Millisecond*100 {
+					plugin.Warn("event cost too much time", zap.String("event", fmt.Sprintf("%v", event)), zap.Duration("cost", cost))
 				}
 			}
 			EngineConfig.OnEvent(event)

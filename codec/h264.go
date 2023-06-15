@@ -103,7 +103,6 @@ var (
 	RTMP_KEYFRAME_HEAD    = []byte{0x17, 0x01, 0x00, 0x00, 0x00}
 	RTMP_NORMALFRAME_HEAD = []byte{0x27, 0x01, 0x00, 0x00, 0x00}
 )
-var NALU_SEI_BYTE []byte
 
 // H.264/AVC视频编码标准中,整个系统框架被分为了两个层面:视频编码层面(VCL)和网络抽象层面(NAL)
 // NAL - Network Abstract Layer

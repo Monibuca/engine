@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
@@ -32,7 +33,9 @@ func NewH264(stream IStream, stuff ...any) (vt *H264) {
 
 func (vt *H264) WriteSliceBytes(slice []byte) {
 	naluType := codec.ParseH264NALUType(slice[0])
-	vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))
+	if log.Trace {
+		vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))
+	}
 	switch naluType {
 	case codec.NALU_SPS:
 		spsInfo, _ := codec.ParseSPS(slice)

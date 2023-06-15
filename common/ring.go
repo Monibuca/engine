@@ -34,8 +34,11 @@ func (rb *RingBuffer[T]) Glow(size int) (newItem *util.Ring[T]) {
 	return
 }
 
-func (rb *RingBuffer[T]) Reduce(size int) (newItem *util.Ring[T]) {
-	newItem = rb.Unlink(size)
+func (rb *RingBuffer[T]) Reduce(size int) (newItem *RingBuffer[T]) {
+	newItem = &RingBuffer[T]{
+		Ring: rb.Unlink(size),
+		Size: size,
+	}
 	rb.Size -= size
 	return
 }
@@ -45,7 +48,7 @@ func (rb *RingBuffer[T]) Reduce(size int) (newItem *util.Ring[T]) {
 func (rb *RingBuffer[T]) Do(f func(*T)) {
 	if rb != nil {
 		f(&rb.Value)
-		for p := rb.Next(); p != rb.Ring; p = rb.Next() {
+		for p := rb.Next(); p != rb.Ring; p = p.Next() {
 			f(&p.Value)
 		}
 	}

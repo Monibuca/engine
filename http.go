@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -339,5 +340,35 @@ func (conf *GlobalConfig) API_replay_mp4(w http.ResponseWriter, r *http.Request)
 		pub.SetIO(f)
 		w.Write([]byte("ok"))
 		go pub.ReadMP4Data(f)
+	}
+}
+
+func (conf *GlobalConfig) API_insertSEI(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	s := Streams.Get(streamPath)
+	if s == nil {
+		http.Error(w, NO_SUCH_STREAM, http.StatusNotFound)
+		return
+	}
+	t := q.Get("type")
+	tb, err := strconv.ParseInt(t, 10, 8)
+	if err != nil {
+		if t == "" {
+			tb = 5
+		} else {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+	sei, err := io.ReadAll(r.Body)
+	if err == nil {
+		if s.Tracks.AddSEI(byte(tb), sei) {
+			w.Write([]byte("ok"))
+		} else {
+			http.Error(w, "no sei track", http.StatusBadRequest)
+		}
+	} else {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 }

@@ -39,7 +39,29 @@ func (w *myResponseWriter3) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return net.Conn(w), bufio.NewReadWriter(bufio.NewReader(w), bufio.NewWriter(w)), nil
 }
 
-func (cfg *Engine) Remote(ctx context.Context) error {
+func (cfg *Engine) WtRemote(ctx context.Context) {
+	retryDelay := [...]int{2, 3, 5, 8, 13}
+	for i := 0; ctx.Err() == nil; i++ {
+		connected, err := cfg.Remote(ctx)
+		if err == nil {
+			//不需要重试了，服务器返回了错误
+			return
+		}
+		if Global.LogLang == "zh" {
+			log.Error("连接到控制台服务器", cfg.Server, "失败", err)
+		} else {
+			log.Error("connect to console server ", cfg.Server, " ", err)
+		}
+		if connected {
+			i = 0
+		} else if i >= 5 {
+			i = 4
+		}
+		time.Sleep(time.Second * time.Duration(retryDelay[i]))
+	}
+}
+
+func (cfg *Engine) Remote(ctx context.Context) (wasConnected bool, err error) {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"monibuca"},
@@ -49,7 +71,7 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 		KeepAlivePeriod: time.Second * 10,
 		EnableDatagrams: true,
 	})
-	wasConnected := err == nil
+	wasConnected = err == nil
 	if stream := quic.Stream(nil); err == nil {
 		if stream, err = conn.OpenStreamSync(ctx); err == nil {
 			_, err = stream.Write(append([]byte{1}, (cfg.Secret + "\n")...))
@@ -63,7 +85,7 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 							} else {
 								log.Error("response from console server ", cfg.Server, " ", rMessage["msg"])
 							}
-							return nil
+							return false, nil
 						} else {
 							cfg.reportStream = stream
 							if Global.LogLang == "zh" {
@@ -90,21 +112,7 @@ func (cfg *Engine) Remote(ctx context.Context) error {
 			go cfg.ReceiveRequest(s, conn)
 		}
 	}
-
-	if err != nil {
-		if wasConnected {
-			if Global.LogLang == "zh" {
-				log.Error("连接到控制台服务器", cfg.Server, "失败", err)
-			} else {
-				log.Error("connect to console server ", cfg.Server, " ", err)
-			}
-		}
-		if ctx.Err() == nil {
-			go cfg.Remote(ctx)
-		}
-	}
-
-	return err
+	return wasConnected, err
 }
 
 func (cfg *Engine) ReceiveRequest(s quic.Stream, conn quic.Connection) error {

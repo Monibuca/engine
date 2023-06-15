@@ -73,6 +73,7 @@ func (config *HTTP) Listen(ctx context.Context) error {
 			} else {
 				log.Info("🌐 https listen at ", Blink(config.ListenAddrTLS))
 			}
+			cer, _ := tls.X509KeyPair(LocalCert, LocalKey)
 			var server = http.Server{
 				Addr:         config.ListenAddrTLS,
 				ReadTimeout:  config.ReadTimeout,
@@ -80,6 +81,7 @@ func (config *HTTP) Listen(ctx context.Context) error {
 				IdleTimeout:  config.IdleTimeout,
 				Handler:      config.mux,
 				TLSConfig: &tls.Config{
+					Certificates: []tls.Certificate{cer},
 					CipherSuites: []uint16{
 						tls.TLS_AES_128_GCM_SHA256,
 						tls.TLS_CHACHA20_POLY1305_SHA256,

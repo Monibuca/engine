@@ -10,6 +10,8 @@ import (
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
+	"m7s.live/engine/v4/codec"
+	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
@@ -130,6 +132,7 @@ type StreamTimeoutConfig struct {
 type Tracks struct {
 	sync.Map
 	MainVideo *track.Video
+	SEI       *track.Data[[]byte]
 }
 
 func (tracks *Tracks) Range(f func(name string, t Track)) {
@@ -145,6 +148,11 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 		if tracks.MainVideo == nil {
 			tracks.MainVideo = v
 			tracks.SetIDR(v)
+		}
+		if tracks.SEI != nil {
+			v.SEIReader = &track.DataReader[[]byte]{
+				Ring: tracks.SEI.Ring,
+			}
 		}
 	case *track.Audio:
 		if tracks.MainVideo != nil {
@@ -163,6 +171,24 @@ func (tracks *Tracks) SetIDR(video Track) {
 			}
 		})
 	}
+}
+
+func (tracks *Tracks) AddSEI(t byte, data []byte) bool {
+	if tracks.SEI != nil {
+		l := len(data)
+		var buffer util.Buffer
+		buffer.WriteByte(byte(codec.NALU_SEI))
+		buffer.WriteByte(t)
+		for l > 255 {
+			buffer.WriteByte(255)
+			l -= 255
+		}
+		buffer.WriteByte(byte(l))
+		buffer.Write(data)
+		tracks.SEI.Push(buffer)
+		return true
+	}
+	return false
 }
 
 func (tracks *Tracks) MarshalJSON() ([]byte, error) {
@@ -190,6 +216,7 @@ type Stream struct {
 	AppName     string
 	StreamName  string
 	IsPause     bool // 是否处于暂停状态
+	pubLocker   sync.Mutex
 }
 type StreamSummay struct {
 	Path        string
@@ -222,8 +249,7 @@ func (s *Stream) Summary() (r StreamSummay) {
 		r.Type = s.Publisher.GetPublisher().Type
 	}
 	s.Tracks.Range(func(name string, t Track) {
-		b := t.GetBase()
-		r.BPS += b.BPS
+		r.BPS += t.GetBPS()
 		r.Tracks = append(r.Tracks, name)
 	})
 	r.Path = s.Path
@@ -245,22 +271,20 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		log.Warn(Red("Stream Path Format Error:"), streamPath)
 		return nil, false
 	}
-	if s := Streams.Get(streamPath); s != nil {
+	actual, loaded := Streams.LoadOrStore(streamPath, &Stream{
+		Path:       streamPath,
+		AppName:    p[0],
+		StreamName: strings.Join(p[1:], "/"),
+		StartTime:  time.Now(),
+	})
+	if s := actual.(*Stream); loaded {
 		s.Debug("Stream Found")
 		return s, false
 	} else {
-		p := strings.Split(streamPath, "/")
-		s = &Stream{
-			Path:       streamPath,
-			AppName:    p[0],
-			StreamName: strings.Join(p[1:], "/"),
-			StartTime:  time.Now(),
-			timeout:    time.NewTimer(waitTimeout),
-		}
+		s.timeout = time.NewTimer(waitTimeout)
 		s.Subscribers.Init()
 		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath))
 		s.Info("created")
-		Streams.Set(streamPath, s)
 		s.actionChan.Init(1)
 		go s.run()
 		return s, true
@@ -430,13 +454,13 @@ func (s *Stream) run() {
 					}
 					s.Tracks.Range(func(name string, t Track) {
 						trackCount++
-						if _, ok := t.(track.Custom); ok {
-							return
-						}
-						// track 超过一定时间没有更新数据了
-						if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > timeout {
-							s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", timeout))
-							hasTrackTimeout = true
+						switch t.(type) {
+						case *track.Video, *track.Audio:
+							// track 超过一定时间没有更新数据了
+							if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > timeout {
+								s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", timeout))
+								hasTrackTimeout = true
+							}
 						}
 					})
 					if trackCount == 0 || hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
@@ -470,6 +494,16 @@ func (s *Stream) run() {
 					}
 					if s.action(ACTION_PUBLISH) || republish || kicked {
 						v.Resolve()
+						if s.Publisher.GetPublisher().Config.InsertSEI {
+							if s.Tracks.SEI == nil {
+								s.Tracks.SEI = track.NewDataTrack[[]byte]("sei")
+								s.Tracks.SEI.Locker = &sync.Mutex{}
+								s.Tracks.SEI.SetStuff(s)
+								if s.Tracks.Add("sei", s.Tracks.SEI) {
+									s.Info("sei track added")
+								}
+							}
+						}
 					} else {
 						v.Reject(ErrBadStreamName)
 					}
@@ -526,13 +560,11 @@ func (s *Stream) run() {
 					s.onSuberClose(v)
 				case TrackRemoved:
 					timeOutInfo = zap.String("action", "TrackRemoved")
-					name := v.GetBase().Name
+					name := v.GetName()
 					if t, ok := s.Tracks.LoadAndDelete(name); ok {
 						s.Info("track -1", zap.String("name", name))
 						s.Subscribers.Broadcast(t)
-						if dt, ok := t.(track.Custom); ok {
-							dt.Dispose()
-						}
+						t.(common.Track).Dispose()
 					}
 				case *util.Promise[Track]:
 					timeOutInfo = zap.String("action", "Track")
@@ -540,7 +572,7 @@ func (s *Stream) run() {
 						s.action(ACTION_PUBLISH)
 					}
 					pubConfig := s.GetPublisherConfig()
-					name := v.Value.GetBase().Name
+					name := v.Value.GetName()
 					if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubVideo {
 						v.Reject(ErrTrackMute)
 						continue
@@ -575,9 +607,7 @@ func (s *Stream) run() {
 			} else {
 				s.Subscribers.Dispose()
 				s.Tracks.Range(func(_ string, t Track) {
-					if dt, ok := t.(track.Custom); ok {
-						dt.Dispose()
-					}
+					t.Dispose()
 				})
 				return
 			}
