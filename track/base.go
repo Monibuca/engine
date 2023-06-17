@@ -69,6 +69,7 @@ type SpesificTrack interface {
 	WriteRTPFrame(*RTPFrame)
 	generateTimestamp(uint32)
 	WriteSequenceHead([]byte)
+	GetNALU_SEI() *util.ListItem[util.Buffer]
 	Flush()
 }
 

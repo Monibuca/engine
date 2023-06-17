@@ -251,8 +251,8 @@ func (vt *Video) Flush() {
 	if vt.SEIReader != nil {
 		if seiFrame := vt.SEIReader.TryRead(); seiFrame != nil {
 			var au util.BLL
-			content := vt.BytesPool.GetShell(seiFrame.Data)
-			au.Push(content)
+			au.Push(vt.SpesificTrack.GetNALU_SEI())
+			au.Push(vt.BytesPool.GetShell(seiFrame.Data))
 			vt.Value.AUList.UnshiftValue(&au)
 			vt.SEIReader.MoveNext()
 		}

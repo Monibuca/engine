@@ -213,3 +213,9 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 	})
 	vt.PacketizeRTP(out...)
 }
+
+func (vt *H265) GetNALU_SEI() (item *util.ListItem[util.Buffer]) {
+	item = vt.BytesPool.Get(1)
+	item.Value[0] = 0b10000000 | byte(codec.NAL_UNIT_SEI<<1)
+	return
+}

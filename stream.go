@@ -10,7 +10,6 @@ import (
 
 	. "github.com/logrusorgru/aurora"
 	"go.uber.org/zap"
-	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -177,7 +176,6 @@ func (tracks *Tracks) AddSEI(t byte, data []byte) bool {
 	if tracks.SEI != nil {
 		l := len(data)
 		var buffer util.Buffer
-		buffer.WriteByte(byte(codec.NALU_SEI))
 		buffer.WriteByte(t)
 		for l > 255 {
 			buffer.WriteByte(255)
