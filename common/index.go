@@ -22,25 +22,25 @@ const (
 )
 
 // Base 基础Track类
-type Base[T any] struct {
-	RingBuffer[T] `json:"-" yaml:"-"`
-	Name          string
-	log.Zap       `json:"-" yaml:"-"`
-	Stream        IStream     `json:"-" yaml:"-"`
-	Attached      atomic.Bool `json:"-" yaml:"-"`
-	State         TrackState
-	ts            time.Time
-	bytes         int
-	frames        int
-	DropCount     int `json:"-" yaml:"-"` //丢帧数
-	BPS           int
-	FPS           int
-	Drops         int   // 丢帧率
-	RawSize       int   // 裸数据长度
-	RawPart       []int // 裸数据片段用于UI上显示
+type Base[T any, F IDataFrame[T]] struct {
+	RingWriter[T, F] `json:"-" yaml:"-"`
+	Name             string
+	log.Zap          `json:"-" yaml:"-"`
+	Stream           IStream     `json:"-" yaml:"-"`
+	Attached         atomic.Bool `json:"-" yaml:"-"`
+	State            TrackState
+	ts               time.Time
+	bytes            int
+	frames           int
+	DropCount        int `json:"-" yaml:"-"` //丢帧数
+	BPS              int
+	FPS              int
+	Drops            int   // 丢帧率
+	RawSize          int   // 裸数据长度
+	RawPart          []int // 裸数据片段用于UI上显示
 }
 
-func (bt *Base[T]) ComputeBPS(bytes int) {
+func (bt *Base[T, F]) ComputeBPS(bytes int) {
 	bt.bytes += bytes
 	bt.frames++
 	if elapse := time.Since(bt.ts).Seconds(); elapse > 1 {
@@ -54,31 +54,31 @@ func (bt *Base[T]) ComputeBPS(bytes int) {
 	}
 }
 
-func (bt *Base[T]) GetName() string {
+func (bt *Base[T, F]) GetName() string {
 	return bt.Name
 }
 
-func (bt *Base[T]) GetBPS() int {
+func (bt *Base[T, F]) GetBPS() int {
 	return bt.BPS
 }
 
-func (bt *Base[T]) GetFPS() int {
+func (bt *Base[T, F]) GetFPS() int {
 	return bt.FPS
 }
 
-func (bt *Base[T]) GetDrops() int {
+func (bt *Base[T, F]) GetDrops() int {
 	return bt.Drops
 }
 
 // GetRBSize 获取缓冲区大小
-func (bt *Base[T]) GetRBSize() int {
-	return bt.RingBuffer.Size
+func (bt *Base[T, F]) GetRBSize() int {
+	return bt.RingWriter.Size
 }
 
-func (bt *Base[T]) SnapForJson() {
+func (bt *Base[T, F]) SnapForJson() {
 }
 
-func (bt *Base[T]) SetStuff(stuff ...any) {
+func (bt *Base[T, F]) SetStuff(stuff ...any) {
 	for _, s := range stuff {
 		switch v := s.(type) {
 		case IStream:

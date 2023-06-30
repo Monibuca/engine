@@ -1,13 +1,12 @@
 package track
 
 import (
-	"context"
+	"errors"
 	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/log"
-	"m7s.live/engine/v4/util"
 )
 
 const (
@@ -21,12 +20,12 @@ const (
 	SUBMODE_BUFFER
 )
 
+var ErrDiscard = errors.New("dsicard")
+
 type AVRingReader struct {
-	ctx   context.Context
-	mode  int
-	Track *Media
-	*util.Ring[common.AVFrame]
-	// wait       func()
+	RingReader[any, *common.AVFrame]
+	mode       int
+	Track      *Media
 	State      byte
 	FirstSeq   uint32
 	FirstTs    time.Duration
@@ -34,7 +33,6 @@ type AVRingReader struct {
 	beforeJump time.Duration
 	ConfSeq    int
 	startTime  time.Time
-	Frame      *common.AVFrame
 	AbsTime    uint32
 	Delay      uint32
 	*log.Logger
@@ -45,45 +43,25 @@ func (r *AVRingReader) DecConfChanged() bool {
 }
 
 func NewAVRingReader(t *Media) *AVRingReader {
-	r := &AVRingReader{
+	return &AVRingReader{
 		Track: t,
 	}
-	// if poll == 0 {
-	// 	r.wait = runtime.Gosched
-	// } else {
-	// 	r.wait = func() {
-	// 		time.Sleep(poll)
-	// 	}
-	// }
-	return r
 }
 
-func (r *AVRingReader) ReadFrame() *common.AVFrame {
-	if r.Frame = &r.Value; r.ctx.Err() == nil && !r.Frame.CanRead {
-		r.Frame.Wait()
+func (r *AVRingReader) readFrame() (err error) {
+	err = r.ReadNext()
+	if err != nil {
+		return err
 	}
 	// 超过一半的缓冲区大小，说明Reader太慢，需要丢帧
-	if r.mode != SUBMODE_BUFFER && r.State == READSTATE_NORMAL && r.Track.LastValue.Sequence-r.Frame.Sequence > uint32(r.Track.Size/2) && r.Track.IDRing != nil && r.Track.IDRing.Value.Sequence > r.Frame.Sequence {
-		r.Warn("reader too slow", zap.Uint32("lastSeq", r.Track.LastValue.Sequence), zap.Uint32("seq", r.Frame.Sequence))
-		r.Ring = r.Track.IDRing
-		return r.ReadFrame()
+	if r.mode != SUBMODE_BUFFER && r.State == READSTATE_NORMAL && r.Track.LastValue.Sequence-r.Value.Sequence > uint32(r.Track.Size/2) && r.Track.IDRing != nil && r.Track.IDRing.Value.Sequence > r.Value.Sequence {
+		r.Warn("reader too slow", zap.Uint32("lastSeq", r.Track.LastValue.Sequence), zap.Uint32("seq", r.Value.Sequence))
+		return r.Read(r.Track.IDRing)
 	}
-	return r.Frame
+	return
 }
 
-func (r *AVRingReader) TryRead() (item *common.AVFrame) {
-	if item = &r.Value; item.CanRead {
-		return
-	}
-	return nil
-}
-
-func (r *AVRingReader) MoveNext() {
-	r.Ring = r.Next()
-}
-
-func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
-	r.ctx = ctx
+func (r *AVRingReader) ReadFrame(mode int) (err error) {
 	r.mode = mode
 	switch r.State {
 	case READSTATE_INIT:
@@ -109,57 +87,56 @@ func (r *AVRingReader) Read(ctx context.Context, mode int) (err error) {
 			}
 			r.State = READSTATE_NORMAL
 		}
-		r.Ring = startRing
-		r.ReadFrame()
-		if err = r.ctx.Err(); err != nil {
+		if err = r.StartRead(startRing); err != nil {
 			return
 		}
 		r.startTime = time.Now()
 		if r.FirstTs == 0 {
-			r.FirstTs = r.Frame.Timestamp
+			r.FirstTs = r.Value.Timestamp
 		}
 		r.SkipTs = r.FirstTs
-		r.FirstSeq = r.Frame.Sequence
+		r.FirstSeq = r.Value.Sequence
 		r.Info("first frame read", zap.Duration("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
 	case READSTATE_FIRST:
 		if r.Track.IDRing.Value.Sequence != r.FirstSeq {
-			r.Ring = r.Track.IDRing
-			frame := r.ReadFrame() // 直接跳到最近的关键帧
-			if err = r.ctx.Err(); err != nil {
+			if err = r.Read(r.Track.IDRing); err != nil {
 				return
 			}
-			r.SkipTs = frame.Timestamp - r.beforeJump
+			r.SkipTs = r.Value.Timestamp - r.beforeJump
 			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Duration("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {
-			r.MoveNext()
-			frame := r.ReadFrame()
-			r.beforeJump = frame.Timestamp - r.FirstTs
+			if err = r.readFrame(); err != nil {
+				return
+			}
+			r.beforeJump = r.Value.Timestamp - r.FirstTs
 			// 防止过快消费
 			if fast := r.beforeJump - time.Since(r.startTime); fast > 0 && fast < time.Second {
 				time.Sleep(fast)
 			}
 		}
 	case READSTATE_NORMAL:
-		r.MoveNext()
-		r.ReadFrame()
+		if err = r.readFrame(); err != nil {
+			return
+		}
 	}
-	r.AbsTime = uint32((r.Frame.Timestamp - r.SkipTs).Milliseconds())
+	r.AbsTime = uint32((r.Value.Timestamp - r.SkipTs).Milliseconds())
 	if r.AbsTime == 0 {
 		r.AbsTime = 1
 	}
-	r.Delay = uint32((r.Track.LastValue.Timestamp - r.Frame.Timestamp).Milliseconds())
+	// r.Delay = uint32((r.Track.LastValue.Timestamp - r.Value.Timestamp).Milliseconds())
+	r.Delay = uint32(r.Track.LastValue.Sequence - r.Value.Sequence)
 	// fmt.Println(r.Track.Name, r.Delay)
 	// println(r.Track.Name, r.State, r.Frame.AbsTime, r.SkipTs, r.AbsTime)
 	return
 }
 func (r *AVRingReader) GetPTS32() uint32 {
-	return uint32((r.Frame.PTS - r.SkipTs*90/time.Millisecond))
+	return uint32((r.Value.PTS - r.SkipTs*90/time.Millisecond))
 }
 func (r *AVRingReader) GetDTS32() uint32 {
-	return uint32((r.Frame.DTS - r.SkipTs*90/time.Millisecond))
+	return uint32((r.Value.DTS - r.SkipTs*90/time.Millisecond))
 }
 func (r *AVRingReader) ResetAbsTime() {
-	r.SkipTs = r.Frame.Timestamp
+	r.SkipTs = r.Value.Timestamp
 	r.AbsTime = 1
 }

@@ -2,7 +2,6 @@ package track
 
 import (
 	"io"
-	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
@@ -20,7 +19,7 @@ type H264 struct {
 func NewH264(stream IStream, stuff ...any) (vt *H264) {
 	vt = &H264{}
 	vt.Video.CodecID = codec.CodecID_H264
-	vt.SetStuff("h264", int(256), byte(96), uint32(90000), stream, vt, time.Millisecond*10)
+	vt.SetStuff("h264", byte(96), uint32(90000), stream, vt)
 	vt.SetStuff(stuff...)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
@@ -114,7 +113,7 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 		vt.lostFlag = true
 		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq), zap.Uint16("lastSeq2", vt.lastSeq2))
 	}
-	rv := &vt.Value
+	rv := vt.Value
 	if naluType := frame.H264Type(); naluType < 24 {
 		vt.WriteSliceBytes(frame.Payload)
 	} else {

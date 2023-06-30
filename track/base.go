@@ -12,13 +12,6 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
-type emptyLocker struct{}
-
-func (emptyLocker) Lock()   {}
-func (emptyLocker) Unlock() {}
-
-var EmptyLocker emptyLocker
-
 type 流速控制 struct {
 	起始时间戳 time.Duration
 	起始dts time.Duration
@@ -74,12 +67,12 @@ type SpesificTrack interface {
 }
 
 type IDRingList struct {
-	IDRList     util.List[*util.Ring[AVFrame]]
-	IDRing      *util.Ring[AVFrame]
-	HistoryRing *util.Ring[AVFrame]
+	IDRList     util.List[*util.Ring[*AVFrame]]
+	IDRing      *util.Ring[*AVFrame]
+	HistoryRing *util.Ring[*AVFrame]
 }
 
-func (p *IDRingList) AddIDR(IDRing *util.Ring[AVFrame]) {
+func (p *IDRingList) AddIDR(IDRing *util.Ring[*AVFrame]) {
 	p.IDRList.PushValue(IDRing)
 	p.IDRing = IDRing
 }
@@ -91,7 +84,7 @@ func (p *IDRingList) ShiftIDR() {
 
 // Media 基础媒体Track类
 type Media struct {
-	Base[AVFrame]
+	Base[any, *AVFrame]
 	PayloadType     byte
 	IDRingList      `json:"-" yaml:"-"` //最近的关键帧位置，首屏渲染
 	SSRC            uint32
@@ -159,11 +152,12 @@ func (av *Media) SetStuff(stuff ...any) {
 	// 代表发布者已经离线，该Track成为遗留Track，等待下一任发布者接续发布
 	for _, s := range stuff {
 		switch v := s.(type) {
-		case int:
-			av.Init(v)
-			av.Value.L = EmptyLocker
+		case IStream:
+			pubConf := v.GetPublisherConfig()
+			av.Base.SetStuff(v)
+			av.Init(pubConf.RingSize, NewAVFrame)
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
-			av.等待上限 = config.Global.SpeedLimit
+			av.等待上限 = pubConf.SpeedLimit
 		case uint32:
 			av.SampleRate = v
 		case byte:
@@ -183,7 +177,7 @@ func (av *Media) LastWriteTime() time.Time {
 }
 
 func (av *Media) CurrentFrame() *AVFrame {
-	return &av.Value
+	return av.Value
 }
 func (av *Media) PreFrame() *AVFrame {
 	return av.LastValue
@@ -212,9 +206,7 @@ func (av *Media) narrow(gop int) {
 			av.Trace("resize", zap.Int("before", av.Size), zap.Int("after", av.Size-5))
 		}
 		//缩小缓冲环节省内存
-		av.Reduce(5).Do(func(v *AVFrame) {
-			v.Reset()
-		})
+		av.Reduce(5)
 	}
 }
 
@@ -230,7 +222,7 @@ func (av *Media) AddIDR() {
 }
 
 func (av *Media) Flush() {
-	curValue, preValue, nextValue := &av.Value, av.LastValue, av.Next()
+	curValue, preValue, nextValue := av.Value, av.LastValue, av.Next()
 	useDts := curValue.Timestamp == 0
 	if av.State == TrackStateOffline {
 		av.State = TrackStateOnline
@@ -308,20 +300,10 @@ func (av *Media) Flush() {
 		}
 	}
 	av.ComputeBPS(curValue.BytesIn)
-	curValue.WriteTime = time.Now()
+	av.Step()
 	if av.等待上限 > 0 {
 		av.控制流速(curValue.Timestamp, curValue.DTS)
 	}
-	preValue = curValue
-	curValue = av.MoveNext()
-	curValue.CanRead = false
-	curValue.Reset()
-	if curValue.L == nil {
-		curValue.L = EmptyLocker
-	}
-	curValue.Sequence = av.MoveCount
-	preValue.CanRead = true
-	preValue.Broadcast()
 }
 
 func deltaTS(curTs time.Duration, preTs time.Duration) time.Duration {

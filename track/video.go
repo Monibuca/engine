@@ -247,14 +247,15 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 }
 
 func (vt *Video) Flush() {
-	rv := &vt.Value
+	rv := vt.Value
 	if vt.SEIReader != nil {
-		if seiFrame := vt.SEIReader.TryRead(); seiFrame != nil {
+		if seiFrame, err := vt.SEIReader.TryRead(); seiFrame != nil {
 			var au util.BLL
 			au.Push(vt.SpesificTrack.GetNALU_SEI())
 			au.Push(vt.BytesPool.GetShell(seiFrame.Data))
 			vt.Value.AUList.UnshiftValue(&au)
-			vt.SEIReader.MoveNext()
+		} else if err != nil {
+			vt.SEIReader = nil
 		}
 	}
 	if rv.IFrame {

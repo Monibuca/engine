@@ -12,8 +12,12 @@ import (
 )
 
 type Data[T any] struct {
-	Base[DataFrame[T]]
+	Base[T, *DataFrame[T]]
 	sync.Locker `json:"-" yaml:"-"` // 写入锁，可选，单一协程写入可以不加锁
+}
+
+func (dt *Data[T]) Init(n int) {
+	dt.Base.Init(n, NewDataFrame[T])
 }
 
 func (dt *Data[T]) Push(data T) {
@@ -21,43 +25,30 @@ func (dt *Data[T]) Push(data T) {
 		dt.Lock()
 		defer dt.Unlock()
 	}
-	curValue := &dt.Value
+	curValue := dt.Value
 	if log.Trace {
 		dt.Trace("push data", zap.Uint32("sequence", curValue.Sequence))
 	}
-	curValue.WriteTime = time.Now()
 	curValue.Data = data
-	preValue := curValue
-	curValue = dt.MoveNext()
-	curValue.CanRead = false
-	curValue.Reset()
-	if curValue.L == nil {
-		curValue.L = EmptyLocker
-	}
-	curValue.Sequence = dt.MoveCount
-	preValue.CanRead = true
-	preValue.Broadcast()
+	dt.Step()
 }
 
 func (d *Data[T]) Play(ctx context.Context, onData func(*DataFrame[T]) error) (err error) {
 	d.Debug("play data track")
-	reader := DataReader[T]{
-		Ctx:  ctx,
-		Ring: d.Ring,
-	}
-	for {
-		curValue := reader.Read()
-		if err = ctx.Err(); err != nil {
-			return
-		}
+	reader := DataReader[T]{}
+	for err = reader.Read(d.Ring); err == nil; err = reader.ReadNext() {
 		if log.Trace {
-			d.Trace("read data", zap.Uint32("sequence", curValue.Sequence))
+			d.Trace("read data", zap.Uint32("sequence", reader.Value.Sequence))
 		}
-		if err = onData(curValue); err == nil {
+		if err = onData(reader.Value); err == nil {
 			err = ctx.Err()
 		}
-		reader.MoveNext()
+		if err != nil {
+			reader.Value.ReaderLeave()
+			return
+		}
 	}
+	return
 }
 
 func (d *Data[T]) Attach(s IStream) {
@@ -80,7 +71,6 @@ func (d *Data[T]) LastWriteTime() time.Time {
 func NewDataTrack[T any](name string) (dt *Data[T]) {
 	dt = &Data[T]{}
 	dt.Init(10)
-	dt.Value.L = EmptyLocker
 	dt.SetStuff(name)
 	return
 }
@@ -94,30 +84,18 @@ func (dt *RecycleData[T]) Push(data T) {
 		dt.Lock()
 		defer dt.Unlock()
 	}
-	curValue := &dt.Value
+	curValue := dt.Value
 	if log.Trace {
 		dt.Trace("push data", zap.Uint32("sequence", curValue.Sequence))
 	}
-	curValue.WriteTime = time.Now()
 	curValue.Data = data
-	preValue := curValue
-	curValue = dt.MoveNext()
-	curValue.CanRead = false
-	curValue.Reset()
-	if curValue.L == nil {
-		curValue.L = EmptyLocker
-	} else {
-		curValue.Data.Recycle()
-	}
-	curValue.Sequence = dt.MoveCount
-	preValue.CanRead = true
-	preValue.Broadcast()
+	dt.Step()
+	dt.Value.Data.Recycle()
 }
 
 func NewRecycleDataTrack[T util.Recyclable](name string) (dt *RecycleData[T]) {
 	dt = &RecycleData[T]{}
 	dt.Init(10)
-	dt.Value.L = EmptyLocker
 	dt.SetStuff(name)
 	return
 }
@@ -132,7 +110,6 @@ func NewBytesDataTrack(name string) (dt *BytesData) {
 		Pool: make(util.BytesPool, 17),
 	}
 	dt.Init(10)
-	dt.Value.L = EmptyLocker
 	dt.SetStuff(name)
 	return
 }

@@ -38,9 +38,12 @@ type Publish struct {
 	IdleTimeout       time.Duration // 空闲(无订阅)超时
 	PauseTimeout      time.Duration `default:"30s"` // 暂停超时
 	BufferTime        time.Duration // 缓冲长度(单位：秒)，0代表取最近关键帧
+	SpeedLimit        time.Duration `default:"500ms"` //速度限制最大等待时间
 	Key               string        // 发布鉴权key
 	SecretArgName     string        `default:"secret"` // 发布鉴权参数名
 	ExpireArgName     string        `default:"expire"` // 发布鉴权失效时间参数名
+	RingSize          int           `default:"256"`    // 初始缓冲区大小
+	RingSizeMax       int           `default:"1024"`   // 最大缓冲区大小
 }
 
 func (c Publish) GetPublishConfig() Publish {
@@ -59,9 +62,8 @@ type Subscribe struct {
 	SubDataTracks   []string      // 指定订阅的数据轨道
 	SubMode         int           // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
 	IFrameOnly      bool          // 只要关键帧
-	WaitTimeout     time.Duration `default:"10s"`  // 等待流超时
-	WriteBufferSize int           `default:"0"`    // 写缓冲大小
-	// Poll            time.Duration `default:"20ms"` // 读取Ring时的轮询间隔,单位毫秒
+	WaitTimeout     time.Duration `default:"10s"` // 等待流超时
+	WriteBufferSize int           `default:"0"`   // 写缓冲大小
 	Key             string        // 订阅鉴权key
 	SecretArgName   string        `default:"secret"` // 订阅鉴权参数名
 	ExpireArgName   string        `default:"expire"` // 订阅鉴权失效时间参数名

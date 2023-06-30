@@ -2,7 +2,6 @@ package track
 
 import (
 	"io"
-	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
@@ -20,7 +19,7 @@ type H265 struct {
 func NewH265(stream IStream, stuff ...any) (vt *H265) {
 	vt = &H265{}
 	vt.Video.CodecID = codec.CodecID_H265
-	vt.SetStuff("h265", int(256), byte(96), uint32(90000), stream, vt, time.Millisecond*10)
+	vt.SetStuff("h265", byte(96), uint32(90000), stream, vt)
 	vt.SetStuff(stuff...)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
@@ -135,7 +134,7 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 }
 
 func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
-	rv := &vt.Value
+	rv := vt.Value
 	// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
 	var usingDonlField bool
 	var buffer = util.Buffer(frame.Payload)

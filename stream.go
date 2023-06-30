@@ -149,9 +149,8 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 			tracks.SetIDR(v)
 		}
 		if tracks.SEI != nil {
-			v.SEIReader = &track.DataReader[[]byte]{
-				Ring: tracks.SEI.Ring,
-			}
+			v.SEIReader = &track.DataReader[[]byte]{}
+			v.SEIReader.Ring = tracks.SEI.Ring
 		}
 	case *track.Audio:
 		if tracks.MainVideo != nil {
@@ -177,12 +176,13 @@ func (tracks *Tracks) AddSEI(t byte, data []byte) bool {
 		l := len(data)
 		var buffer util.Buffer
 		buffer.WriteByte(t)
-		for l > 255 {
+		for l >= 255 {
 			buffer.WriteByte(255)
 			l -= 255
 		}
 		buffer.WriteByte(byte(l))
 		buffer.Write(data)
+		buffer.WriteByte(0x80)
 		tracks.SEI.Push(buffer)
 		return true
 	}
@@ -274,16 +274,16 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		AppName:    p[0],
 		StreamName: strings.Join(p[1:], "/"),
 		StartTime:  time.Now(),
+		Logger:     log.LocaleLogger.With(zap.String("stream", streamPath)),
+		timeout:    time.NewTimer(waitTimeout),
 	})
 	if s := actual.(*Stream); loaded {
 		s.Debug("Stream Found")
 		return s, false
 	} else {
-		s.timeout = time.NewTimer(waitTimeout)
 		s.Subscribers.Init()
-		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath))
-		s.Info("created")
 		s.actionChan.Init(1)
+		s.Info("created")
 		go s.run()
 		return s, true
 	}
@@ -330,11 +330,11 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 				stateEvent = SEpublish{event}
 			}
 			r.Subscribers.Broadcast(stateEvent)
-			if r.IdleTimeout > 0 && r.Subscribers.Len() == 0 {
-				return r.action(ACTION_LASTLEAVE)
-			} else {
-				r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
-			}
+			// if r.IdleTimeout > 0 && r.Subscribers.Len() == 0 {
+			// 	return r.action(ACTION_LASTLEAVE)
+			// } else {
+			r.timeout.Reset(r.PublishTimeout) // 5秒心跳，检测track的存活度
+			// }
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
 			if r.IdleTimeout > 0 {
@@ -463,6 +463,10 @@ func (s *Stream) run() {
 					})
 					if trackCount == 0 || hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
 						s.action(ACTION_PUBLISHLOST)
+						continue
+					}
+					if s.IdleTimeout > 0 && s.Subscribers.Len() == 0 && time.Since(s.StartTime) > s.IdleTimeout {
+						s.action(ACTION_LASTLEAVE)
 						continue
 					}
 				}

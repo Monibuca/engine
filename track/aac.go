@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"time"
 
 	"github.com/aler9/gortsplib/v2/pkg/bits"
 	"go.uber.org/zap"
@@ -25,7 +24,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
-	aac.SetStuff("aac", stream, int(256+128), byte(97), aac, time.Millisecond*10)
+	aac.SetStuff("aac", stream, byte(97), aac)
 	aac.SetStuff(stuff...)
 	if aac.BytesPool == nil {
 		aac.BytesPool = make(util.BytesPool, 17)
