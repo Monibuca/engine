@@ -33,7 +33,7 @@ func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
 	if g711.BytesPool == nil {
 		g711.BytesPool = make(util.BytesPool, 17)
 	}
-	g711.Attach()
+	go g711.Attach()
 	return
 }
 
