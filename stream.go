@@ -507,7 +507,7 @@ func (s *Stream) run() {
 							}
 						}
 					} else {
-						v.Reject(ErrBadStreamName)
+						v.Reject(ErrDuplicatePublish)
 					}
 				case *util.Promise[ISubscriber]:
 					timeOutInfo = zap.String("action", "Subscribe")

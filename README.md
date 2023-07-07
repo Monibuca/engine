@@ -88,7 +88,7 @@ global:
   enablertp : true # 启用rtp格式缓存，用于rtsp、websocket、gb28181协议
   enableauth: true # 启用鉴权,详细查看鉴权机制
   enablesubevent: true # 启用订阅事件，用于订阅者上下线事件,关闭可以提高性能
-  rtpreroderbufferlen: 50 # rtp乱序重排缓存长度
+  rtpreoderbufferlen: 50 # rtp乱序重排缓存长度
   speedlimit: 500ms # 限速超时时间 0为不限速，对于读取文件这类流需要限速，否则读取过快
   eventbussize: 10 # 事件总线缓存大小，事件较多时容易堵阻塞线程，需要增大缓存
   pulseinterval: 5s # 心跳事件间隔时间

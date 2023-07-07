@@ -120,14 +120,15 @@ func (io *IO) Stop() {
 }
 
 var (
-	ErrBadStreamName  = errors.New("Stream Already Exist")
-	ErrBadTrackName   = errors.New("Track Already Exist")
-	ErrTrackMute      = errors.New("Track Mute")
-	ErrStreamIsClosed = errors.New("Stream Is Closed")
-	ErrPublisherLost  = errors.New("Publisher Lost")
-	ErrAuth           = errors.New("Auth Failed")
-	OnAuthSub         func(p *util.Promise[ISubscriber]) error
-	OnAuthPub         func(p *util.Promise[IPublisher]) error
+	ErrDuplicatePublish = errors.New("Duplicate Publish")
+	ErrBadStreamName    = errors.New("StreamPath Illegal")
+	ErrBadTrackName     = errors.New("Track Already Exist")
+	ErrTrackMute        = errors.New("Track Mute")
+	ErrStreamIsClosed   = errors.New("Stream Is Closed")
+	ErrPublisherLost    = errors.New("Publisher Lost")
+	ErrAuth             = errors.New("Auth Failed")
+	OnAuthSub           func(p *util.Promise[ISubscriber]) error
+	OnAuthPub           func(p *util.Promise[IPublisher]) error
 )
 
 func (io *IO) auth(key string, secret string, expire string) bool {
@@ -165,6 +166,9 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		io.Context, io.CancelFunc = context.WithCancel(Engine)
 	}
 	s, create := findOrCreateStream(u.Path, wt)
+	if s == nil {
+		return ErrBadStreamName
+	}
 	io.Stream = s
 	io.Spesific = specific
 	io.StartTime = time.Now()
@@ -190,7 +194,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			} else if oldPublisher == specific {
 				//断线重连
 			} else {
-				return ErrBadStreamName
+				return ErrDuplicatePublish
 			}
 		}
 		s.PublishTimeout = conf.PublishTimeout

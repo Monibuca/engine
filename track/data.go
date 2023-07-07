@@ -90,7 +90,9 @@ func (dt *RecycleData[T]) Push(data T) {
 	}
 	curValue.Data = data
 	dt.Step()
-	dt.Value.Data.Recycle()
+	if !dt.Value.WriteTime.IsZero() {
+		dt.Value.Data.Recycle()
+	}
 }
 
 func NewRecycleDataTrack[T util.Recyclable](name string) (dt *RecycleData[T]) {
