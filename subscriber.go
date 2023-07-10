@@ -19,7 +19,6 @@ import (
 
 const (
 	SUBTYPE_RAW = iota
-	SUBTYPE_AVCC
 	SUBTYPE_RTP
 	SUBTYPE_FLV
 )
@@ -202,8 +201,13 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		s.Error("play before subscribe")
 		return
 	}
-	s.Info("playblock")
+	if s.IO.Err() != nil {
+		s.Error("play", zap.Error(s.IO.Err()))
+		return
+	}
+	s.Info("playblock", zap.Uint8("subType", subType))
 	s.TrackPlayer.Context, s.TrackPlayer.CancelFunc = context.WithCancel(s.IO)
+	defer s.TrackPlayer.CancelFunc()
 	ctx := s.TrackPlayer.Context
 	conf := s.Config
 	hasVideo, hasAudio := s.Video != nil && conf.SubVideo, s.Audio != nil && conf.SubAudio

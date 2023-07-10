@@ -36,7 +36,7 @@ func (dt *Data[T]) Push(data T) {
 func (d *Data[T]) Play(ctx context.Context, onData func(*DataFrame[T]) error) (err error) {
 	d.Debug("play data track")
 	reader := DataReader[T]{}
-	for err = reader.Read(d.Ring); err == nil; err = reader.ReadNext() {
+	for err = reader.StartRead(d.Ring); err == nil; err = reader.ReadNext() {
 		if log.Trace {
 			d.Trace("read data", zap.Uint32("sequence", reader.Value.Sequence))
 		}
