@@ -28,6 +28,7 @@ type AVRingReader struct {
 	Track      *Media
 	State      byte
 	FirstSeq   uint32
+	StartTs    time.Duration
 	FirstTs    time.Duration
 	SkipTs     time.Duration //ms
 	beforeJump time.Duration
@@ -94,7 +95,7 @@ func (r *AVRingReader) ReadFrame(mode int) (err error) {
 		if r.FirstTs == 0 {
 			r.FirstTs = r.Value.Timestamp
 		}
-		r.SkipTs = r.FirstTs
+		r.SkipTs = r.FirstTs - r.StartTs
 		r.FirstSeq = r.Value.Sequence
 		r.Info("first frame read", zap.Duration("firstTs", r.FirstTs), zap.Uint32("firstSeq", r.FirstSeq))
 	case READSTATE_FIRST:
@@ -102,7 +103,7 @@ func (r *AVRingReader) ReadFrame(mode int) (err error) {
 			if err = r.Read(r.Track.IDRing); err != nil {
 				return
 			}
-			r.SkipTs = r.Value.Timestamp - r.beforeJump
+			r.SkipTs = r.Value.Timestamp - r.beforeJump - r.StartTs
 			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Duration("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {

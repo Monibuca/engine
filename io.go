@@ -234,7 +234,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			return err
 		}
 	} else {
-
+		conf := specific.(ISubscriber).GetSubscriber().Config
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		io.Info("subscribe")
 		if create {
@@ -245,7 +245,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				specific.OnEvent(specific)
 			}
 		}()
-		if config.Global.EnableAuth {
+		if config.Global.EnableAuth && !conf.Internal {
 			onAuthSub := OnAuthSub
 			if auth, ok := specific.(AuthSub); ok {
 				onAuthSub = auth.OnAuth
@@ -258,7 +258,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				if err != nil {
 					return err
 				}
-			} else if conf := specific.(ISubscriber).GetSubscriber().Config; conf.Key != "" {
+			} else if conf.Key != "" {
 				if !io.auth(conf.Key, io.Args.Get(conf.SecretArgName), io.Args.Get(conf.ExpireArgName)) {
 					return ErrAuth
 				}
