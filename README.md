@@ -46,7 +46,7 @@ global:
   loglevel: info # 日志级别，可选值：debug,info,warn,error,panic,fatal
   http:
     listenaddr: :8080 # 网关地址，用于访问API
-    listenaddrtls: ""  # 用于HTTPS方式访问API的端口配置
+    listenaddrtls: :8443  # 用于HTTPS方式访问API的端口配置
     certfile: ""
     keyfile: ""
     cors: true  # 是否自动添加cors头

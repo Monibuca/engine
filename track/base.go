@@ -43,6 +43,9 @@ func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Dura
 	if 过快 := (数据时间差 - 实际时间差); 过快 > 100*time.Millisecond {
 		// fmt.Println("过快毫秒", 过快.Milliseconds())
 		// println("过快毫秒", p.name, 过快.Milliseconds())
+		// if log.Trace {
+		// 	log.Trace("sleep", zap.Duration("sleep", 过快))
+		// }
 		if 过快 > p.等待上限 {
 			time.Sleep(p.等待上限)
 		} else {

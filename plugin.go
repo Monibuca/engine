@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/mcuadros/go-defaults"
 	"go.uber.org/zap"
@@ -292,6 +294,7 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 		copyConfig := *conf.GetSubscribeConfig()
 		suber.Config = &copyConfig
 	}
+	suber.ID = fmt.Sprintf("%s_%d", suber.ID, uintptr(unsafe.Pointer(suber)))
 	return sub.Subscribe(streamPath, sub)
 }
 

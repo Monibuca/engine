@@ -312,8 +312,12 @@ func (conf *GlobalConfig) API_replay_ts(w http.ResponseWriter, r *http.Request) 
 	if err := Engine.Publish(streamPath, &pub); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	} else {
+		tsReader := NewTSReader(&pub)
 		pub.SetIO(f)
-		go pub.Feed(f)
+		go func(){
+			tsReader.Feed(f)
+			tsReader.Close()
+		}()
 		w.Write([]byte("ok"))
 	}
 }
