@@ -237,7 +237,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		conf := specific.(ISubscriber).GetSubscriber().Config
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		io.Info("subscribe")
-		if create {
+		if create || s.State != STATE_PUBLISHING {
 			EventBus <- s // 通知发布者按需拉流
 		}
 		defer func() {
