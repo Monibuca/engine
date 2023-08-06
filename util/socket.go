@@ -11,6 +11,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func FetchValue[T any](t T) func() T {
+	return func() T {
+		return t
+	}
+}
+
 func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("Accept") == "text/event-stream" {
 		sse := NewSSE(rw, r.Context())

@@ -69,10 +69,10 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 	case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
 		vt.Value.IFrame = false
 		vt.AppendAuBytes(slice)
-	case codec.NAL_UNIT_SEI:
+	case codec.NAL_UNIT_SEI, codec.NAL_UNIT_SEI_SUFFIX:
 		vt.AppendAuBytes(slice)
 	default:
-		vt.Warn("h265 slice type not supported", zap.Uint("type", uint(t)))
+		vt.Warn("nalu type not supported", zap.Uint("type", uint(t)))
 	}
 }
 func (vt *H265) writeSequenceHead(head []byte) (err error) {
@@ -189,6 +189,7 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 	if value.IFrame {
 		out = append(out, [][]byte{vt.VPS}, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 	}
+	startIndex := len(out)
 	vt.Value.AUList.Range(func(au *util.BLL) bool {
 		if au.ByteLength < RTPMTU {
 			out = append(out, au.ToBuffers())
@@ -199,14 +200,11 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 			b1, _ := r.ReadByte()
 			naluType = naluType.Parse(b0)
 			b0 = (byte(codec.NAL_UNIT_RTP_FU) << 1) | (b0 & 0b10000001)
-			buf := [][]byte{{b0, b1, (1 << 7) | byte(naluType)}}
-			buf = append(buf, r.ReadN(RTPMTU-3)...)
-			out = append(out, buf)
 			for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
-				buf = append([][]byte{{b0, b1, byte(naluType)}}, bufs...)
-				out = append(out, buf)
+				out = append(out, append([][]byte{{b0, b1, byte(naluType)}}, bufs...))
 			}
-			buf[0][2] |= 1 << 6 // set end bit
+			out[startIndex][0][2] |= 1 << 7 // set start bit
+			out[len(out)-1][0][2] |= 1 << 6 // set end bit
 		}
 		return true
 	})

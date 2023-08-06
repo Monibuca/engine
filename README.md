@@ -36,7 +36,8 @@
 - 热更新配置信息 `/api/updateconfig?name=xxx` 热更新xxx插件的配置信息，如果不带参数或参数为空则热更新全局配置
 - 获取所有远端拉流信息 `/api/list/pull` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
 - 获取所有向远端推流信息 `/api/list/push` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
-- 停止推流 `/api/stoppush?url=xxx` 停止向xxx推流 ，成功返回ok
+- 停止推流 `/api/stop/push?url=xxx` 停止向xxx推流 ，成功返回ok
+- 停止某个订阅者 `/api/stop/subscribe?streamPath=xxx&id=xxx` 停止xxx流的xxx订阅者 ，成功返回ok
 - 插入SEI帧 `/api/insertsei?streamPath=xxx&type=5` 向xxx流内插入SEI帧 ，成功返回ok。type为SEI类型，可选，默认是5
 # 引擎默认配置
 ```yaml

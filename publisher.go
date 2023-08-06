@@ -2,6 +2,7 @@ package engine
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -34,10 +35,11 @@ func (p *Publisher) GetPublisher() *Publisher {
 	return p
 }
 
-func (p *Publisher) Stop() {
-	p.IO.Stop()
+func (p *Publisher) Stop(reason ...zapcore.Field) {
+	p.IO.Stop(reason...)
 	p.Stream.Receive(ACTION_PUBLISHLOST)
 }
+
 func (p *Publisher) getAudioTrack() common.AudioTrack {
 	return p.AudioTrack
 }

@@ -3,18 +3,18 @@ module m7s.live/engine/v4
 go 1.19
 
 require (
-	github.com/aler9/gortsplib/v2 v2.2.2
+	github.com/bluenviron/mediacommon v0.7.0
 	github.com/cnotch/ipchub v1.1.0
 	github.com/google/uuid v1.3.0
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/mcuadros/go-defaults v1.2.0
-	github.com/pion/rtp v1.7.13
-	github.com/pion/webrtc/v3 v3.1.49
+	github.com/pion/rtp v1.8.0
+	github.com/pion/webrtc/v3 v3.1.56
 	github.com/q191201771/naza v0.30.8
 	github.com/quic-go/quic-go v0.32.0
-	github.com/shirou/gopsutil/v3 v3.22.10
-	go.uber.org/zap v1.23.0
-	golang.org/x/net v0.8.0
+	github.com/shirou/gopsutil/v3 v3.22.11
+	go.uber.org/zap v1.24.0
+	golang.org/x/net v0.12.0
 	golang.org/x/sync v0.1.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -43,9 +43,9 @@ require (
 	github.com/tklauser/numcpus v0.6.0 // indirect
 	github.com/yapingcat/gomedia v0.0.0-20230426092936-387031404274
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
-	golang.org/x/crypto v0.4.0 // indirect
+	golang.org/x/crypto v0.11.0 // indirect
 	golang.org/x/exp v0.0.0-20221205204356-47842c84f3db // indirect
 	golang.org/x/mod v0.7.0 // indirect
-	golang.org/x/sys v0.6.0 // indirect
+	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/tools v0.3.0 // indirect
 )

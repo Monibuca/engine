@@ -66,3 +66,16 @@ func (g711 *G711) WriteRTPFrame(frame *RTPFrame) {
 	g711.AppendAuBytes(frame.Payload)
 	g711.Flush()
 }
+
+func (g711 *G711) CompleteRTP(value *AVFrame) {
+	if value.AUList.ByteLength > RTPMTU {
+		var packets [][][]byte
+		r := value.AUList.Next.Value.NewReader()
+		for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
+			packets = append(packets, bufs)
+		}
+		g711.PacketizeRTP(packets...)
+	} else {
+		g711.Audio.CompleteRTP(value)
+	}
+}

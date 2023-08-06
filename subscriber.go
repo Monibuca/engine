@@ -105,7 +105,7 @@ type ISubscriber interface {
 	PlayRaw()
 	PlayBlock(byte)
 	PlayFLV()
-	Stop()
+	Stop(reason ...zapcore.Field)
 	Subscribe(streamPath string, sub ISubscriber) error
 }
 
@@ -316,6 +316,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		if hasVideo {
 			for ctx.Err() == nil {
 				err := s.VideoReader.ReadFrame(subMode)
+				if err == nil {
+					err = ctx.Err()
+				}
 				if err != nil {
 					stopReason = zap.Error(err)
 					return
@@ -361,6 +364,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					}
 				}
 				err := s.AudioReader.ReadFrame(subMode)
+				if err == nil {
+					err = ctx.Err()
+				}
 				if err != nil {
 					stopReason = zap.Error(err)
 					return

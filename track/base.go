@@ -32,7 +32,7 @@ func (p *流速控制) 根据起始DTS计算绝对时间戳(dts time.Duration) t
 	return ((dts-p.起始dts)*time.Millisecond + p.起始时间戳*90) / 90
 }
 
-func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Duration) {
+func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Duration) (等待了 time.Duration) {
 	数据时间差, 实际时间差 := 绝对时间戳-p.起始时间戳, time.Since(p.起始时间)
 	// println("数据时间差", 数据时间差, "实际时间差", 实际时间差, "绝对时间戳", 绝对时间戳, "起始时间戳", p.起始时间戳, "起始时间", p.起始时间.Format("2006-01-02 15:04:05"))
 	// if 实际时间差 > 数据时间差 {
@@ -43,19 +43,18 @@ func (p *流速控制) 控制流速(绝对时间戳 time.Duration, dts time.Dura
 	if 过快 := (数据时间差 - 实际时间差); 过快 > 100*time.Millisecond {
 		// fmt.Println("过快毫秒", 过快.Milliseconds())
 		// println("过快毫秒", p.name, 过快.Milliseconds())
-		// if log.Trace {
-		// 	log.Trace("sleep", zap.Duration("sleep", 过快))
-		// }
 		if 过快 > p.等待上限 {
-			time.Sleep(p.等待上限)
+			等待了 = p.等待上限
 		} else {
-			time.Sleep(过快)
+			等待了 = 过快
 		}
+		time.Sleep(等待了)
 	} else if 过快 < -100*time.Millisecond {
 		// fmt.Println("过慢毫秒", 过快.Milliseconds())
 		// p.重置(绝对时间戳, dts)
 		// println("过慢毫秒", p.name, 过快.Milliseconds())
 	}
+	return
 }
 
 type SpesificTrack interface {
@@ -305,7 +304,10 @@ func (av *Media) Flush() {
 	av.ComputeBPS(curValue.BytesIn)
 	av.Step()
 	if av.等待上限 > 0 {
-		av.控制流速(curValue.Timestamp, curValue.DTS)
+		等待了 := av.控制流速(curValue.Timestamp, curValue.DTS)
+		if log.Trace && 等待了 > 0 {
+			av.Trace("speed control", zap.Duration("sleep", 等待了))
+		}
 	}
 }
 

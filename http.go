@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/config"
@@ -40,33 +42,12 @@ func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func fetchSummary() *Summary {
-	return &summary
-}
-
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
 	y := ShouldYaml(r)
-	if r.Header.Get("Accept") == "text/event-stream" {
-		summary.Add()
-		defer summary.Done()
-		if y {
-			util.ReturnYaml(fetchSummary, time.Second, rw, r)
-		} else {
-			util.ReturnJson(fetchSummary, time.Second, rw, r)
-		}
+	if y {
+		util.ReturnYaml(util.FetchValue(&summary), time.Second, rw, r)
 	} else {
-		if !summary.Running() {
-			summary.collect()
-		}
-		summary.rw.RLock()
-		defer summary.rw.RUnlock()
-		if y {
-			if err := yaml.NewEncoder(rw).Encode(&summary); err != nil {
-				http.Error(rw, err.Error(), http.StatusInternalServerError)
-			}
-		} else if err := json.NewEncoder(rw).Encode(&summary); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-		}
+		util.ReturnJson(util.FetchValue(&summary), time.Second, rw, r)
 	}
 }
 
@@ -84,9 +65,9 @@ func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
 			if ShouldYaml(r) {
-				util.ReturnYaml(func() *Stream { return s }, time.Second, rw, r)
+				util.ReturnYaml(util.FetchValue(s), time.Second, rw, r)
 			} else {
-				util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
+				util.ReturnJson(util.FetchValue(s), time.Second, rw, r)
 			}
 		} else {
 			http.Error(rw, NO_SUCH_STREAM, http.StatusNotFound)
@@ -218,15 +199,33 @@ func (conf *GlobalConfig) API_list_push(w http.ResponseWriter, r *http.Request) 
 	}, time.Second, w, r)
 }
 
-func (conf *GlobalConfig) API_stopPush(w http.ResponseWriter, r *http.Request) {
+func (conf *GlobalConfig) API_stop_push(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	pusher, ok := Pushers.Load(q.Get("url"))
 	if ok {
 		pusher.(IPusher).Stop()
-		w.Write([]byte("ok"))
+		fmt.Fprintln(w, "ok")
 	} else {
 		http.Error(w, "no such pusher", http.StatusNotFound)
 	}
+}
+
+func (conf *GlobalConfig) API_stop_subscribe(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	id := q.Get("id")
+	s := Streams.Get(streamPath)
+	if s == nil {
+		http.Error(w, NO_SUCH_STREAM, http.StatusNotFound)
+		return
+	}
+	suber := s.Subscribers.Find(id)
+	if suber == nil {
+		http.Error(w, "no such subscriber", http.StatusNotFound)
+		return
+	}
+	suber.Stop(zap.String("reason", "stop by api"))
+	fmt.Fprintln(w, "ok")
 }
 
 func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Request) {
@@ -314,7 +313,7 @@ func (conf *GlobalConfig) API_replay_ts(w http.ResponseWriter, r *http.Request) 
 	} else {
 		tsReader := NewTSReader(&pub)
 		pub.SetIO(f)
-		go func(){
+		go func() {
 			tsReader.Feed(f)
 			tsReader.Close()
 		}()

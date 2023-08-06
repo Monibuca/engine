@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -36,6 +37,7 @@ type AuthPub interface {
 type IO struct {
 	ID                 string
 	Type               string
+	RemoteAddr         string
 	context.Context    `json:"-" yaml:"-"` //不要直接设置，应当通过OnEvent传入父级Context
 	context.CancelFunc `json:"-" yaml:"-"` //流关闭是关闭发布者或者订阅者
 	*log.Logger        `json:"-" yaml:"-"`
@@ -92,7 +94,7 @@ type IIO interface {
 	receive(string, IIO) error
 	IsClosed() bool
 	OnEvent(any)
-	Stop()
+	Stop(reason ...zapcore.Field)
 	SetIO(any)
 	SetParentCtx(context.Context)
 	SetLogger(*log.Logger)
@@ -113,9 +115,11 @@ func (i *IO) close() bool {
 }
 
 // Stop 停止订阅或者发布，由订阅者或者发布者调用
-func (io *IO) Stop() {
+func (io *IO) Stop(reason ...zapcore.Field) {
 	if io.close() {
-		io.Debug("stop", zap.Stack("stack"))
+		io.Info("stop", reason...)
+	} else {
+		io.Warn("already stopped", reason...)
 	}
 }
 
@@ -194,6 +198,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			} else if oldPublisher == specific {
 				//断线重连
 			} else {
+				s.Warn("duplicate publish", zap.String("type", oldPublisher.GetPublisher().Type))
 				return ErrDuplicatePublish
 			}
 		}

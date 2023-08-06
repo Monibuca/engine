@@ -19,6 +19,7 @@ state:    状态
 initialize: 初始化
 "start read": 开始读取
 "start pull": 开始从远端拉流
+"restart pull": 重新拉流
 "pull failed": 拉取失败
 "wait publisher": 等待发布者发布
 "wait timeout": 等待超时
@@ -45,6 +46,7 @@ reamins:  剩余
 "video track attached": 视频轨道已附加
 "audio track attached": 音频轨道已附加
 "data track attached": 数据轨道已附加
+"track back online": 轨道已恢复
 "first frame read": 第一帧已读取
 "fu have no start": rtp的FU起始包丢了
 "disabled by env": 被环境变量禁用
@@ -55,3 +57,5 @@ firstTs:  第一帧时间戳
 firstSeq: 第一帧序列号
 skipSeq:  跳过序列号
 skipTs:   跳过时间戳
+"nalu type not supported": nalu类型不支持
+"create file": 创建文件
