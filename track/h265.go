@@ -189,11 +189,11 @@ func (vt *H265) CompleteRTP(value *AVFrame) {
 	if value.IFrame {
 		out = append(out, [][]byte{vt.VPS}, [][]byte{vt.SPS}, [][]byte{vt.PPS})
 	}
-	startIndex := len(out)
 	vt.Value.AUList.Range(func(au *util.BLL) bool {
 		if au.ByteLength < RTPMTU {
 			out = append(out, au.ToBuffers())
 		} else {
+			startIndex := len(out)
 			var naluType codec.H265NALUType
 			r := au.NewReader()
 			b0, _ := r.ReadByte()

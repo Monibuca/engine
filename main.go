@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -68,7 +68,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if err = util.CreateShutdownScript(); err != nil {
 		log.Error("create shutdown script error:", err)
 	}
-	if ConfigRaw, err = ioutil.ReadFile(configFile); err != nil {
+	if ConfigRaw, err = os.ReadFile(configFile); err != nil {
 		log.Warn("read config file error:", err.Error())
 	}
 	if err = os.MkdirAll(SettingDir, 0766); err != nil {
@@ -159,7 +159,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if EngineConfig.LogLang == "zh" {
 		fmt.Print("已运行的插件：")
 	} else {
-		fmt.Print("enabled plugins：")
+		fmt.Print("enabled plugins:")
 	}
 	for _, plugin := range enabledPlugins {
 		fmt.Print(Colorize(" "+plugin.Name+" ", BlackFg|GreenBg|BoldFm), " ")
@@ -168,7 +168,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	if EngineConfig.LogLang == "zh" {
 		fmt.Print("已禁用的插件：")
 	} else {
-		fmt.Print("disabled plugins：")
+		fmt.Print("disabled plugins:")
 	}
 	for _, plugin := range disabledPlugins {
 		fmt.Print(Colorize(" "+plugin.Name+" ", BlackFg|RedBg|CrossedOutFm), " ")
@@ -189,7 +189,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		Arch     string `json:"arch"`
 	}{UUID, id, EngineConfig.GetInstanceId(), version, runtime.GOOS, runtime.GOARCH}
 	json.NewEncoder(contentBuf).Encode(&rp)
-	req.Body = ioutil.NopCloser(contentBuf)
+	req.Body = io.NopCloser(contentBuf)
 	if EngineConfig.Secret != "" {
 		EngineConfig.OnEvent(ctx)
 	}
@@ -218,7 +218,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 		case <-reportTimer.C:
 			contentBuf.Reset()
 			contentBuf.WriteString(fmt.Sprintf(`{"uuid":"`+UUID+`","streams":%d}`, Streams.Len()))
-			req.Body = ioutil.NopCloser(contentBuf)
+			req.Body = io.NopCloser(contentBuf)
 			c.Do(req)
 		}
 	}

@@ -155,7 +155,7 @@ var Global *Engine
 
 func (cfg *Engine) InitDefaultHttp() {
 	Global = cfg
-	cfg.HTTP.mux = http.DefaultServeMux
+	cfg.HTTP.mux = http.NewServeMux()
 	cfg.HTTP.ListenAddrTLS = ":8443"
 	cfg.HTTP.ListenAddr = ":8080"
 }

@@ -99,6 +99,7 @@ type IIO interface {
 	SetParentCtx(context.Context)
 	SetLogger(*log.Logger)
 	IsShutdown() bool
+	log.Zap
 }
 
 func (i *IO) close() bool {
@@ -166,9 +167,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if v, ok := specific.(ISubscriber); ok {
 		wt = v.GetSubscriber().Config.WaitTimeout
 	}
-	if io.Context == nil {
-		io.Context, io.CancelFunc = context.WithCancel(Engine)
-	}
+	io.Context, io.CancelFunc = context.WithCancel(util.Conditoinal[context.Context](io.Context == nil, Engine, io.Context))
 	s, create := findOrCreateStream(u.Path, wt)
 	if s == nil {
 		return ErrBadStreamName
@@ -179,9 +178,15 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
 	}
-	io.Logger = s.With(zap.String("type", io.Type))
+	logFeilds := []zapcore.Field{zap.String("type", io.Type)}
 	if io.ID != "" {
-		io.Logger = io.Logger.With(zap.String("ID", io.ID))
+		logFeilds = append(logFeilds, zap.String("ID", io.ID))
+	}
+	if io.Logger == nil {
+		io.Logger = s.With(logFeilds...)
+	} else {
+		logFeilds = append(logFeilds, zap.String("streamPath", s.Path))
+		io.Logger = io.Logger.With(logFeilds...)
 	}
 	if v, ok := specific.(IPublisher); ok {
 		conf := v.GetPublisher().Config
@@ -191,14 +196,14 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		defer s.pubLocker.Unlock()
 		oldPublisher := s.Publisher
 		if oldPublisher != nil && !oldPublisher.IsClosed() {
-			// 根据配置是否剔出原来的发布者
-			if conf.KickExist {
-				s.Warn("kick", zap.String("type", oldPublisher.GetPublisher().Type))
+			zot := zap.String("old type", oldPublisher.GetPublisher().Type)
+			if oldPublisher == specific { // 断线重连
+				s.Info("republish", zot)
+			} else if conf.KickExist { // 根据配置是否剔出原来的发布者
+				s.Warn("kick", zot)
 				oldPublisher.OnEvent(SEKick{})
-			} else if oldPublisher == specific {
-				//断线重连
 			} else {
-				s.Warn("duplicate publish", zap.String("type", oldPublisher.GetPublisher().Type))
+				s.Warn("duplicate publish", zot)
 				return ErrDuplicatePublish
 			}
 		}
@@ -208,11 +213,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		s.PauseTimeout = conf.PauseTimeout
 		defer func() {
 			if err == nil {
-				if oldPublisher == nil {
-					specific.OnEvent(specific)
-				} else {
-					specific.OnEvent(oldPublisher)
-				}
+				specific.OnEvent(util.Conditoinal[IIO](oldPublisher == nil, specific, oldPublisher))
 			}
 		}()
 		if config.Global.EnableAuth {
@@ -242,8 +243,8 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		conf := specific.(ISubscriber).GetSubscriber().Config
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		io.Info("subscribe")
-		if create || s.State != STATE_PUBLISHING {
-			EventBus <- s // 通知发布者按需拉流
+		if create {
+			EventBus <- InvitePublish{CreateEvent(s.Path)} // 通知发布者按需拉流
 		}
 		defer func() {
 			if err == nil {

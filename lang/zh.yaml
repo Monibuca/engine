@@ -19,8 +19,10 @@ state:    状态
 initialize: 初始化
 "start read": 开始读取
 "start pull": 开始从远端拉流
+"stop pull": 停止从远端拉流
 "restart pull": 重新拉流
-"pull failed": 拉取失败
+"pull interrupt": 拉流中断
+"pull publish": 拉流发布
 "wait publisher": 等待发布者发布
 "wait timeout": 等待超时
 created:  已创建
@@ -33,6 +35,7 @@ track+1:  轨道+1
 playblock: 阻塞式播放
 "play neither video nor audio": 播放既没有视频也没有音频
 "play before subscribe": 播放之前需要先订阅
+"play stop": 播放停止
 "suber -1": 订阅者-1
 "suber +1": 订阅者+1
 "innersuber +1": 内部订阅者+1
@@ -59,3 +62,6 @@ skipSeq:  跳过序列号
 skipTs:   跳过时间戳
 "nalu type not supported": nalu类型不支持
 "create file": 创建文件
+"duplicate publish": 重复发布
+"republish": 重新发布
+"stream already had a publisher": 流已经有发布者了

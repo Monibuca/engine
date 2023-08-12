@@ -135,23 +135,3 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPo
 		p.AudioTrack.WriteAVCC(ts, frame)
 	}
 }
-
-type IPuller interface {
-	IPublisher
-	Connect() error
-	Pull() error
-	Reconnect() bool
-	init(streamPath string, url string, conf *config.Pull)
-}
-
-// 用于远程拉流的发布者
-type Puller struct {
-	ClientIO[config.Pull]
-}
-
-// 是否需要重连
-func (pub *Puller) Reconnect() (ok bool) {
-	ok = pub.Config.RePull == -1 || pub.ReConnectCount <= pub.Config.RePull
-	pub.ReConnectCount++
-	return
-}

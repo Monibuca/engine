@@ -17,42 +17,123 @@ func FetchValue[T any](t T) func() T {
 	}
 }
 
-func ReturnJson[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Accept") == "text/event-stream" {
-		sse := NewSSE(rw, r.Context())
-		tick := time.NewTicker(tickDur)
-		defer tick.Stop()
-		for range tick.C {
-			if sse.WriteJSON(fetch()) != nil {
-				return
-			}
+const (
+	APIErrorNone   = 0
+	APIErrorDecode = iota + 4000
+	APIErrorQueryParse
+	APIErrorNoBody
+)
+
+const (
+	APIErrorNotFound = iota + 4040
+	APIErrorNoStream
+	APIErrorNoConfig
+	APIErrorNoPusher
+	APIErrorNoSubscriber
+	APIErrorNoSEI
+)
+
+const (
+	APIErrorInternal = iota + 5000
+	APIErrorJSONEncode
+	APIErrorPublish
+	APIErrorSave
+	APIErrorOpen
+)
+
+type APIError struct {
+	Code    int    `json:"code"`
+	Message string `json:"msg"`
+}
+
+type APIResult struct {
+	Code    int    `json:"code"`
+	Data    any    `json:"data"`
+	Message string `json:"msg"`
+}
+
+func ReturnValue(v any, rw http.ResponseWriter, r *http.Request) {
+	ReturnFetchValue(FetchValue(v), rw, r)
+}
+
+func ReturnOK(rw http.ResponseWriter, r *http.Request) {
+	ReturnError(0, "ok", rw, r)
+}
+
+func ReturnError(code int, msg string, rw http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	isJson := query.Get("format") == "json"
+	if isJson {
+		if err := json.NewEncoder(rw).Encode(APIError{code, msg}); err != nil {
+			json.NewEncoder(rw).Encode(APIError{
+				Code:    APIErrorJSONEncode,
+				Message: err.Error(),
+			})
 		}
 	} else {
-		rw.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(rw).Encode(fetch()); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		switch true {
+		case code == 0:
+			http.Error(rw, msg, http.StatusOK)
+		case code/10 == 404:
+			http.Error(rw, msg, http.StatusNotFound)
+		case code > 5000:
+			http.Error(rw, msg, http.StatusInternalServerError)
+		default:
+			http.Error(rw, msg, http.StatusBadRequest)
 		}
 	}
 }
 
-func ReturnYaml[T any](fetch func() T, tickDur time.Duration, rw http.ResponseWriter, r *http.Request) {
+func ReturnFetchValue[T any](fetch func() T, rw http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	isYaml := query.Get("format") == "yaml"
+	isJson := query.Get("format") == "json"
+	tickDur, err := time.ParseDuration(query.Get("interval"))
+	if err != nil {
+		tickDur = time.Second
+	}
 	if r.Header.Get("Accept") == "text/event-stream" {
 		sse := NewSSE(rw, r.Context())
 		tick := time.NewTicker(tickDur)
 		defer tick.Stop()
-		for range tick.C {
-			if sse.WriteYAML(fetch()) != nil {
-				return
+		if isYaml {
+			for range tick.C {
+				if sse.WriteYAML(fetch()) != nil {
+					return
+				}
+			}
+		} else {
+			for range tick.C {
+				if sse.WriteJSON(fetch()) != nil {
+					return
+				}
 			}
 		}
 	} else {
-		rw.Header().Set("Content-Type", "application/yaml")
-		if err := yaml.NewEncoder(rw).Encode(fetch()); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		data := fetch()
+		rw.Header().Set("Content-Type", Conditoinal(isYaml, "text/yaml", "application/json"))
+		if isYaml {
+			if err := yaml.NewEncoder(rw).Encode(data); err != nil {
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			}
+		} else if isJson {
+			if err := json.NewEncoder(rw).Encode(APIResult{
+				Code:    0,
+				Data:    data,
+				Message: "ok",
+			}); err != nil {
+				json.NewEncoder(rw).Encode(APIError{
+					Code:    APIErrorJSONEncode,
+					Message: err.Error(),
+				})
+			}
+		} else {
+			if err := json.NewEncoder(rw).Encode(data); err != nil {
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			}
 		}
 	}
 }
-
 
 func ListenUDP(address string, networkBuffer int) (*net.UDPConn, error) {
 	addr, err := net.ResolveUDPAddr("udp", address)

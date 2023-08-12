@@ -404,27 +404,10 @@ func (s *Subscriber) PlayBlock(subType byte) {
 
 func (s *Subscriber) onStop(reason *zapcore.Field) {
 	if !s.Stream.IsClosed() {
-		s.Info("stop", *reason)
+		s.Info("play stop", *reason)
 		if !s.Config.Internal {
 			s.Stream.Receive(s.Spesific)
 		}
 	}
 }
 
-type IPusher interface {
-	ISubscriber
-	Push() error
-	Connect() error
-	init(string, string, *config.Push)
-	Reconnect() bool
-}
-type Pusher struct {
-	ClientIO[config.Push]
-}
-
-// 是否需要重连
-func (pub *Pusher) Reconnect() (result bool) {
-	result = pub.Config.RePush == -1 || pub.ReConnectCount <= pub.Config.RePush
-	pub.ReConnectCount++
-	return
-}
