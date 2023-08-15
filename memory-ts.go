@@ -50,6 +50,9 @@ func (ts *MemoryTs) WritePESPacket(frame *mpegts.MpegtsPESFrame, packet mpegts.M
 	var tsHeaderLength int
 	for i := 0; len(pesBuffers) > 0; i++ {
 		if bigLen < mpegts.TS_PACKET_SIZE {
+			if i == 0 {
+				ts.Recycle()
+			}
 			headerItem := ts.Get(mpegts.TS_PACKET_SIZE)
 			ts.BLL.Push(headerItem)
 			bwTsHeader = &headerItem.Value

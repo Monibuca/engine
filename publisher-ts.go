@@ -7,25 +7,36 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
+type TSReader struct {
+	*TSPublisher
+	mpegts.MpegTsStream
+}
+
+func NewTSReader(pub *TSPublisher) (r *TSReader) {
+	r = &TSReader{
+		TSPublisher: pub,
+	}
+	r.PESChan = make(chan *mpegts.MpegTsPESPacket, 50)
+	r.PESBuffer = make(map[uint16]*mpegts.MpegTsPESPacket)
+	go r.ReadPES()
+	return
+}
+
 type TSPublisher struct {
 	Publisher
-	pool                util.BytesPool
-	mpegts.MpegTsStream `json:"-" yaml:"-"`
+	pool util.BytesPool
 }
 
 func (t *TSPublisher) OnEvent(event any) {
 	switch v := event.(type) {
 	case IPublisher:
-		t.PESChan = make(chan *mpegts.MpegTsPESPacket, 50)
-		t.PESBuffer = make(map[uint16]*mpegts.MpegTsPESPacket)
 		t.pool = make(util.BytesPool, 17)
-		go t.ReadPES()
 		if !t.Equal(v) {
 			t.AudioTrack = v.getAudioTrack()
 			t.VideoTrack = v.getVideoTrack()
 		}
 	case SEKick, SEclose:
-		close(t.PESChan)
+		// close(t.PESChan)
 		t.Publisher.OnEvent(event)
 	default:
 		t.Publisher.OnEvent(event)
@@ -59,8 +70,15 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 	}
 }
 
-func (t *TSPublisher) ReadPES() {
+func (t *TSReader) Close() {
+	close(t.PESChan)
+}
+
+func (t *TSReader) ReadPES() {
 	for pes := range t.PESChan {
+		if t.Err() != nil {
+			continue
+		}
 		if pes.Header.Dts == 0 {
 			pes.Header.Dts = pes.Header.Pts
 		}

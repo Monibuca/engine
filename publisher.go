@@ -2,6 +2,7 @@ package engine
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -34,10 +35,11 @@ func (p *Publisher) GetPublisher() *Publisher {
 	return p
 }
 
-func (p *Publisher) Stop() {
-	p.IO.Stop()
+func (p *Publisher) Stop(reason ...zapcore.Field) {
+	p.IO.Stop(reason...)
 	p.Stream.Receive(ACTION_PUBLISHLOST)
 }
+
 func (p *Publisher) getAudioTrack() common.AudioTrack {
 	return p.AudioTrack
 }
@@ -132,24 +134,4 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPo
 	} else {
 		p.AudioTrack.WriteAVCC(ts, frame)
 	}
-}
-
-type IPuller interface {
-	IPublisher
-	Connect() error
-	Pull() error
-	Reconnect() bool
-	init(streamPath string, url string, conf *config.Pull)
-}
-
-// 用于远程拉流的发布者
-type Puller struct {
-	ClientIO[config.Pull]
-}
-
-// 是否需要重连
-func (pub *Puller) Reconnect() (ok bool) {
-	ok = pub.Config.RePull == -1 || pub.ReConnectCount <= pub.Config.RePull
-	pub.ReConnectCount++
-	return
 }

@@ -7,8 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/config"
@@ -24,11 +24,6 @@ type GlobalConfig struct {
 	config.Engine
 }
 
-func ShouldYaml(r *http.Request) bool {
-	format := r.URL.Query().Get("format")
-	return r.URL.Query().Get("yaml") != "" || format == "yaml"
-}
-
 func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/favicon.ico" {
 		http.ServeFile(rw, r, "favicon.ico")
@@ -40,78 +35,40 @@ func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func fetchSummary() *Summary {
-	return &summary
-}
-
 func (conf *GlobalConfig) API_summary(rw http.ResponseWriter, r *http.Request) {
-	y := ShouldYaml(r)
-	if r.Header.Get("Accept") == "text/event-stream" {
-		summary.Add()
-		defer summary.Done()
-		if y {
-			util.ReturnYaml(fetchSummary, time.Second, rw, r)
-		} else {
-			util.ReturnJson(fetchSummary, time.Second, rw, r)
-		}
-	} else {
-		if !summary.Running() {
-			summary.collect()
-		}
-		summary.rw.RLock()
-		defer summary.rw.RUnlock()
-		if y {
-			if err := yaml.NewEncoder(rw).Encode(&summary); err != nil {
-				http.Error(rw, err.Error(), http.StatusInternalServerError)
-			}
-		} else if err := json.NewEncoder(rw).Encode(&summary); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-		}
-	}
+	util.ReturnValue(&summary, rw, r)
 }
 
 func (conf *GlobalConfig) API_plugins(rw http.ResponseWriter, r *http.Request) {
-	if ShouldYaml(r) {
-		if err := yaml.NewEncoder(rw).Encode(Plugins); err != nil {
-			http.Error(rw, err.Error(), http.StatusInternalServerError)
-		}
-	} else if err := json.NewEncoder(rw).Encode(Plugins); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-	}
+	util.ReturnValue(Plugins, rw, r)
 }
 
 func (conf *GlobalConfig) API_stream(rw http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
-			if ShouldYaml(r) {
-				util.ReturnYaml(func() *Stream { return s }, time.Second, rw, r)
-			} else {
-				util.ReturnJson(func() *Stream { return s }, time.Second, rw, r)
-			}
+			util.ReturnValue(s, rw, r)
 		} else {
-			http.Error(rw, NO_SUCH_STREAM, http.StatusNotFound)
+			util.ReturnError(util.APIErrorNoStream, NO_SUCH_STREAM, rw, r)
 		}
 	} else {
-		http.Error(rw, "no streamPath", http.StatusBadRequest)
+		util.ReturnError(util.APIErrorNoStream, "no streamPath", rw, r)
 	}
 }
 
 func (conf *GlobalConfig) API_sysInfo(rw http.ResponseWriter, r *http.Request) {
-	if err := json.NewEncoder(rw).Encode(&SysInfo); err != nil {
-		http.Error(rw, err.Error(), http.StatusInternalServerError)
-	}
+	util.ReturnValue(&SysInfo, rw, r)
 }
 
 func (conf *GlobalConfig) API_closeStream(w http.ResponseWriter, r *http.Request) {
 	if streamPath := r.URL.Query().Get("streamPath"); streamPath != "" {
 		if s := Streams.Get(streamPath); s != nil {
 			s.Close()
-			w.Write([]byte("ok"))
+			util.ReturnOK(w, r)
 		} else {
-			http.Error(w, NO_SUCH_STREAM, http.StatusNotFound)
+			util.ReturnError(util.APIErrorNoStream, NO_SUCH_STREAM, w, r)
 		}
 	} else {
-		http.Error(w, "no streamPath", http.StatusBadRequest)
+		util.ReturnError(util.APIErrorNoStream, "no streamPath", w, r)
 	}
 }
 
@@ -123,27 +80,30 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 		if c, ok := Plugins[configName]; ok {
 			p = c
 		} else {
-			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
+			util.ReturnError(util.APIErrorNoConfig, NO_SUCH_CONIFG, w, r)
 			return
 		}
 	} else {
 		p = Engine
 	}
-	if ShouldYaml(r) {
+	var data any
+	if q.Get("yaml") != "" {
 		mm, err := yaml.Marshal(p.RawConfig)
 		if err != nil {
 			mm = []byte("")
 		}
-		json.NewEncoder(w).Encode(struct {
+		data = struct {
 			File     string
 			Modified string
 			Merged   string
 		}{
 			p.Yaml, p.modifiedYaml, string(mm),
-		})
-	} else if err := json.NewEncoder(w).Encode(p.RawConfig); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+	} else {
+		data = p.RawConfig
 	}
+	util.ReturnValue(data, w, r)
 }
 
 // API_modifyConfig 修改并保存配置
@@ -155,28 +115,28 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 		if c, ok := Plugins[configName]; ok {
 			p = c
 		} else {
-			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
+			util.ReturnError(util.APIErrorNoConfig, NO_SUCH_CONIFG, w, r)
 			return
 		}
 	} else {
 		p = Engine
 	}
-	if ShouldYaml(r) {
+	if q.Get("yaml") != "" {
 		err = yaml.NewDecoder(r.Body).Decode(&p.Modified)
 	} else {
 		err = json.NewDecoder(r.Body).Decode(&p.Modified)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		util.ReturnError(util.APIErrorDecode, err.Error(), w, r)
 	} else if err = p.Save(); err == nil {
 		p.RawConfig.Assign(p.Modified)
 		out, err := yaml.Marshal(p.Modified)
 		if err == nil {
 			p.modifiedYaml = string(out)
 		}
-		w.Write([]byte("ok"))
+		util.ReturnOK(w, r)
 	} else {
-		w.Write([]byte(err.Error()))
+		util.ReturnError(util.APIErrorSave, err.Error(), w, r)
 	}
 }
 
@@ -188,45 +148,63 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 		if c, ok := Plugins[configName]; ok {
 			p = c
 		} else {
-			http.Error(w, NO_SUCH_CONIFG, http.StatusNotFound)
+			util.ReturnError(util.APIErrorNoConfig, NO_SUCH_CONIFG, w, r)
 			return
 		}
 	} else {
 		p = Engine
 	}
 	p.Update(p.Modified)
-	w.Write([]byte("ok"))
+	util.ReturnOK(w, r)
 }
 
 func (conf *GlobalConfig) API_list_pull(w http.ResponseWriter, r *http.Request) {
-	util.ReturnJson(func() (result []any) {
+	util.ReturnFetchValue(func() (result []any) {
 		Pullers.Range(func(key, value any) bool {
 			result = append(result, key)
 			return true
 		})
 		return
-	}, time.Second, w, r)
+	}, w, r)
 }
 
 func (conf *GlobalConfig) API_list_push(w http.ResponseWriter, r *http.Request) {
-	util.ReturnJson(func() (result []any) {
+	util.ReturnFetchValue(func() (result []any) {
 		Pushers.Range(func(key, value any) bool {
 			result = append(result, value)
 			return true
 		})
 		return
-	}, time.Second, w, r)
+	}, w, r)
 }
 
-func (conf *GlobalConfig) API_stopPush(w http.ResponseWriter, r *http.Request) {
+func (conf *GlobalConfig) API_stop_push(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	pusher, ok := Pushers.Load(q.Get("url"))
 	if ok {
 		pusher.(IPusher).Stop()
-		w.Write([]byte("ok"))
+		util.ReturnOK(w, r)
 	} else {
-		http.Error(w, "no such pusher", http.StatusNotFound)
+		util.ReturnError(util.APIErrorNoPusher, "no such pusher", w, r)
 	}
+}
+
+func (conf *GlobalConfig) API_stop_subscribe(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	streamPath := q.Get("streamPath")
+	id := q.Get("id")
+	s := Streams.Get(streamPath)
+	if s == nil {
+		util.ReturnError(util.APIErrorNoStream, NO_SUCH_STREAM, w, r)
+		return
+	}
+	suber := s.Subscribers.Find(id)
+	if suber == nil {
+		util.ReturnError(util.APIErrorNoSubscriber, "no such subscriber", w, r)
+		return
+	}
+	suber.Stop(zap.String("reason", "stop by api"))
+	util.ReturnOK(w, r)
 }
 
 func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Request) {
@@ -265,29 +243,29 @@ func (conf *GlobalConfig) API_replay_rtpdump(w http.ResponseWriter, r *http.Requ
 	ss := strings.Split(dumpFile, ",")
 	if len(ss) > 1 {
 		if err := Engine.Publish(streamPath, &pub); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			util.ReturnError(util.APIErrorPublish, err.Error(), w, r)
 		} else {
 			for _, s := range ss {
 				f, err := os.Open(s)
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					util.ReturnError(util.APIErrorOpen, err.Error(), w, r)
 					return
 				}
 				go pub.Feed(f)
 			}
-			w.Write([]byte("ok"))
+			util.ReturnOK(w, r)
 		}
 	} else {
 		f, err := os.Open(dumpFile)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			util.ReturnError(util.APIErrorOpen, err.Error(), w, r)
 			return
 		}
 		if err := Engine.Publish(streamPath, &pub); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			util.ReturnError(util.APIErrorPublish, err.Error(), w, r)
 		} else {
 			pub.SetIO(f)
-			w.Write([]byte("ok"))
+			util.ReturnOK(w, r)
 			go pub.Feed(f)
 		}
 	}
@@ -305,16 +283,20 @@ func (conf *GlobalConfig) API_replay_ts(w http.ResponseWriter, r *http.Request) 
 	}
 	f, err := os.Open(dumpFile)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		util.ReturnError(util.APIErrorOpen, err.Error(), w, r)
 		return
 	}
 	var pub TSPublisher
 	if err := Engine.Publish(streamPath, &pub); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		util.ReturnError(util.APIErrorPublish, err.Error(), w, r)
 	} else {
+		tsReader := NewTSReader(&pub)
 		pub.SetIO(f)
-		go pub.Feed(f)
-		w.Write([]byte("ok"))
+		go func() {
+			tsReader.Feed(f)
+			tsReader.Close()
+		}()
+		util.ReturnOK(w, r)
 	}
 }
 
@@ -331,14 +313,14 @@ func (conf *GlobalConfig) API_replay_mp4(w http.ResponseWriter, r *http.Request)
 	var pub MP4Publisher
 	f, err := os.Open(dumpFile)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		util.ReturnError(util.APIErrorOpen, err.Error(), w, r)
 		return
 	}
 	if err := Engine.Publish(streamPath, &pub); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		util.ReturnError(util.APIErrorPublish, err.Error(), w, r)
 	} else {
 		pub.SetIO(f)
-		w.Write([]byte("ok"))
+		util.ReturnOK(w, r)
 		go pub.ReadMP4Data(f)
 	}
 }
@@ -348,7 +330,7 @@ func (conf *GlobalConfig) API_insertSEI(w http.ResponseWriter, r *http.Request) 
 	streamPath := q.Get("streamPath")
 	s := Streams.Get(streamPath)
 	if s == nil {
-		http.Error(w, NO_SUCH_STREAM, http.StatusNotFound)
+		util.ReturnError(util.APIErrorNoStream, NO_SUCH_STREAM, w, r)
 		return
 	}
 	t := q.Get("type")
@@ -357,18 +339,18 @@ func (conf *GlobalConfig) API_insertSEI(w http.ResponseWriter, r *http.Request) 
 		if t == "" {
 			tb = 5
 		} else {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			util.ReturnError(util.APIErrorQueryParse, "type must a number", w, r)
 			return
 		}
 	}
 	sei, err := io.ReadAll(r.Body)
 	if err == nil {
 		if s.Tracks.AddSEI(byte(tb), sei) {
-			w.Write([]byte("ok"))
+			util.ReturnOK(w, r)
 		} else {
-			http.Error(w, "no sei track", http.StatusBadRequest)
+			util.ReturnError(util.APIErrorNoSEI, "no sei track", w, r)
 		}
 	} else {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		util.ReturnError(util.APIErrorNoBody, err.Error(), w, r)
 	}
 }

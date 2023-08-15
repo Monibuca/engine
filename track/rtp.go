@@ -60,7 +60,15 @@ func (av *Media) PacketizeRTP(payloads ...[][]byte) {
 		}
 		packet.Marker = false
 		for _, p := range pp {
-			br.Write(p)
+			if _, err := br.Write(p); err != nil {
+				av.Error("rtp payload write error", zap.Error(err))
+				for i, pp := range payloads {
+					for j, p := range pp {
+						av.Error("rtp payload", zap.Int("i", i), zap.Int("j", j), zap.Int("len", len(p)))
+					}
+				}
+				return
+			}
 		}
 		packet.Payload = br.Bytes()
 		av.Value.RTP.Push(rtpItem)

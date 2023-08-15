@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/mcuadros/go-defaults"
 	"go.uber.org/zap"
@@ -241,6 +243,17 @@ func (opt *Plugin) Save() error {
 	return nil
 }
 
+func (opt *Plugin) AssignPubConfig(puber *Publisher) {
+	if puber.Config == nil {
+		conf, ok := opt.Config.(config.PublishConfig)
+		if !ok {
+			conf = EngineConfig
+		}
+		copyConfig := conf.GetPublishConfig()
+		puber.Config = &copyConfig
+	}
+}
+
 func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
 	puber := pub.GetPublisher()
 	if puber == nil {
@@ -250,14 +263,7 @@ func (opt *Plugin) Publish(streamPath string, pub IPublisher) error {
 			return errors.New("not publisher")
 		}
 	}
-	if puber.Config == nil {
-		conf, ok := opt.Config.(config.PublishConfig)
-		if !ok {
-			conf = EngineConfig
-		}
-		copyConfig := conf.GetPublishConfig()
-		puber.Config = &copyConfig
-	}
+	opt.AssignPubConfig(puber)
 	return pub.Publish(streamPath, pub)
 }
 
@@ -273,7 +279,19 @@ func (opt *Plugin) SubscribeExist(streamPath string, sub ISubscriber) error {
 	}
 	return opt.Subscribe(streamPath, sub)
 }
-
+func (opt *Plugin) AssignSubConfig(suber  *Subscriber) {
+	if suber.Config == nil {
+		conf, ok := opt.Config.(config.SubscribeConfig)
+		if !ok {
+			conf = EngineConfig
+		}
+		copyConfig := *conf.GetSubscribeConfig()
+		suber.Config = &copyConfig
+	}
+	if suber.ID == "" {
+		suber.ID = fmt.Sprintf("%d", uintptr(unsafe.Pointer(suber)))
+	}
+}
 // Subscribe 订阅一个流，如果流不存在则创建一个等待流
 func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 	suber := sub.GetSubscriber()
@@ -284,14 +302,7 @@ func (opt *Plugin) Subscribe(streamPath string, sub ISubscriber) error {
 			return errors.New("not subscriber")
 		}
 	}
-	if suber.Config == nil {
-		conf, ok := opt.Config.(config.SubscribeConfig)
-		if !ok {
-			conf = EngineConfig
-		}
-		copyConfig := *conf.GetSubscribeConfig()
-		suber.Config = &copyConfig
-	}
+	opt.AssignSubConfig(suber)
 	return sub.Subscribe(streamPath, sub)
 }
 
@@ -307,60 +318,20 @@ var ErrNoPullConfig = errors.New("no pull config")
 var Pullers sync.Map
 
 func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int) (err error) {
-	zurl := zap.String("url", url)
-	zpath := zap.String("path", streamPath)
-	opt.Info("pull", zpath, zurl)
-	defer func() {
-		if err != nil {
-			opt.Error("pull failed", zurl, zap.Error(err))
-		}
-	}()
 	conf, ok := opt.Config.(config.PullConfig)
 	if !ok {
 		return ErrNoPullConfig
 	}
 	pullConf := conf.GetPullConfig()
-
-	puller.init(streamPath, url, pullConf)
-	puller.SetLogger(opt.Logger.With(zpath, zurl))
-	go func() {
-		Pullers.Store(puller, url)
-		defer Pullers.Delete(puller)
-		for opt.Info("start pull", zurl); puller.Reconnect(); opt.Warn("restart pull", zurl) {
-			if err = puller.Connect(); err != nil {
-				if err == io.EOF {
-					puller.GetPublisher().Stream.Close()
-					opt.Info("pull complete", zurl)
-					return
-				}
-				opt.Error("pull connect", zurl, zap.Error(err))
-				time.Sleep(time.Second * 5)
-			} else {
-				if err = opt.Publish(streamPath, puller); err != nil {
-					if stream := Streams.Get(streamPath); stream != nil {
-						if stream.Publisher != puller && stream.Publisher != nil {
-							io := stream.Publisher.GetPublisher()
-							opt.Error("puller is not publisher", zap.String("ID", io.ID), zap.String("Type", io.Type), zap.Error(err))
-							return
-						} else {
-							opt.Warn("pull publish", zurl, zap.Error(err))
-						}
-					} else {
-						opt.Error("pull publish", zurl, zap.Error(err))
-						return
-					}
-				}
-				if err = puller.Pull(); err != nil && !puller.IsShutdown() {
-					opt.Error("pull", zurl, zap.Error(err))
-				}
-			}
-			if puller.IsShutdown() {
-				opt.Info("stop pull shutdown", zurl)
-				return
-			}
-		}
-		opt.Warn("stop pull stop reconnect", zurl)
-	}()
+	if save < 2 {
+		zurl := zap.String("url", url)
+		zpath := zap.String("path", streamPath)
+		opt.Info("pull", zpath, zurl)
+		puller.init(streamPath, url, pullConf)
+		opt.AssignPubConfig(puller.GetPublisher())
+		puller.SetLogger(opt.Logger.With(zpath, zurl))
+		go puller.startPull(puller)
+	}
 	switch save {
 	case 1:
 		pullConf.AddPullOnStart(streamPath, url)
@@ -395,39 +366,10 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 		return ErrNoPushConfig
 	}
 	pushConfig := conf.GetPushConfig()
-
 	pusher.init(streamPath, url, pushConfig)
-
-	go func() {
-		Pushers.Store(url, pusher)
-		defer Pushers.Delete(url)
-		for opt.Info("start push", zp, zu); pusher.Reconnect(); opt.Warn("restart push", zp, zu) {
-			if err = opt.Subscribe(streamPath, pusher); err != nil {
-				opt.Error("push subscribe", zp, zu, zap.Error(err))
-				time.Sleep(time.Second * 5)
-			} else {
-				stream := pusher.GetSubscriber().Stream
-				if err = pusher.Connect(); err != nil {
-					if err == io.EOF {
-						opt.Info("push complete", zp, zu)
-						return
-					}
-					opt.Error("push connect", zp, zu, zap.Error(err))
-					time.Sleep(time.Second * 5)
-					stream.Receive(pusher) // 通知stream移除订阅者
-				} else if err = pusher.Push(); err != nil && !stream.IsClosed() {
-					opt.Error("push", zp, zu, zap.Error(err))
-					pusher.Stop()
-				}
-				if stream.IsClosed() {
-					opt.Info("stop push closed", zp, zu)
-					return
-				}
-			}
-		}
-		opt.Warn("stop push stop reconnect", zp, zu)
-	}()
-
+	pusher.SetLogger(opt.Logger.With(zp, zu))
+	opt.AssignSubConfig(pusher.GetSubscriber())
+	go pusher.startPush(pusher)
 	if save {
 		pushConfig.AddPush(url, streamPath)
 		if opt.Modified == nil {

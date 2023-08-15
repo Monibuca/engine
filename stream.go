@@ -130,8 +130,9 @@ type StreamTimeoutConfig struct {
 }
 type Tracks struct {
 	sync.Map
-	MainVideo *track.Video
-	SEI       *track.Data[[]byte]
+	MainVideo   *track.Video
+	SEI         *track.Data[[]byte]
+	marshalLock sync.Mutex
 }
 
 func (tracks *Tracks) Range(f func(name string, t Track)) {
@@ -191,6 +192,8 @@ func (tracks *Tracks) AddSEI(t byte, data []byte) bool {
 
 func (tracks *Tracks) MarshalJSON() ([]byte, error) {
 	var trackList []Track
+	tracks.marshalLock.Lock()
+	defer tracks.marshalLock.Unlock()
 	tracks.Range(func(_ string, t Track) {
 		t.SnapForJson()
 		trackList = append(trackList, t)
@@ -238,6 +241,10 @@ func (s *Stream) GetStartTime() time.Time {
 }
 
 func (s *Stream) GetPublisherConfig() *config.Publish {
+	if s.Publisher == nil {
+		s.Error("GetPublisherConfig: Publisher is nil")
+		return nil
+	}
 	return s.Publisher.GetPublisher().Config
 }
 
@@ -444,7 +451,7 @@ func (s *Stream) run() {
 					}
 				}
 				if !s.NeverTimeout {
-					hasTrackTimeout := false
+					lost := false
 					trackCount := 0
 					timeout := s.PublishTimeout
 					if s.IsPause {
@@ -457,11 +464,20 @@ func (s *Stream) run() {
 							// track 超过一定时间没有更新数据了
 							if lastWriteTime := t.LastWriteTime(); !lastWriteTime.IsZero() && time.Since(lastWriteTime) > timeout {
 								s.Warn("track timeout", zap.String("name", name), zap.Time("last writetime", lastWriteTime), zap.Duration("timeout", timeout))
-								hasTrackTimeout = true
+								lost = true
 							}
 						}
 					})
-					if trackCount == 0 || hasTrackTimeout || (s.Publisher != nil && s.Publisher.IsClosed()) {
+					if !lost {
+						if trackCount == 0 {
+							s.Warn("no tracks")
+							lost = true
+						} else if s.Publisher != nil && s.Publisher.IsClosed() {
+							s.Warn("publish is closed")
+							lost = true
+						}
+					}
+					if lost {
 						s.action(ACTION_PUBLISHLOST)
 						continue
 					}

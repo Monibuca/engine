@@ -1,25 +1,23 @@
 package engine
 
 import (
+	"encoding/json"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
-	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
-var summary Summary
-var children util.Map[string, *Summary]
-
-func init() {
-	go summary.Start()
-}
-
+var (
+	summary SummaryUtil
+	lastSummary Summary
+	children util.Map[string, *Summary]
+	collectLock sync.Mutex
+)
 // ServerSummary 系统摘要定义
 type Summary struct {
 	Address string
@@ -36,11 +34,9 @@ type Summary struct {
 		Used  uint64
 		Usage float64
 	}
-	NetWork     []NetWorkInfo
-	Streams     []StreamSummay
-	lastNetWork []net.IOCountersStat
-	ref         atomic.Int32
-	rw          sync.RWMutex
+	NetWork []NetWorkInfo
+	Streams []StreamSummay
+	ts      time.Time //上次更新时间
 }
 
 // NetWorkInfo 网速信息
@@ -51,51 +47,28 @@ type NetWorkInfo struct {
 	ReceiveSpeed uint64
 	SentSpeed    uint64
 }
-
-// StartSummary 开始定时采集数据，每秒一次
-func (s *Summary) Start() {
-	for range time.Tick(time.Second) {
-		if s.Running() {
-			summary.collect()
-		}
-	}
-}
-func (s *Summary) Point() *Summary {
-	return s
-}
-
-// Running 是否正在采集数据
-func (s *Summary) Running() bool {
-	return s.ref.Load() > 0
-}
-
-// Add 增加订阅者
-func (s *Summary) Add() {
-	if count := s.ref.Add(1); count == 1 {
-		log.Info("start report summary")
-	} else {
-		log.Info("summary count", count)
-	}
-}
-
-// Done 删除订阅者
-func (s *Summary) Done() {
-	if count := s.ref.Add(-1); count == 0 {
-		log.Info("stop report summary")
-		s.lastNetWork = nil
-	} else {
-		log.Info("summary count", count)
-	}
-}
-
+type SummaryUtil Summary
 // Report 上报数据
 func (s *Summary) Report(slave *Summary) {
 	children.Set(slave.Address, slave)
 }
 
-func (s *Summary) collect() *Summary {
-	s.rw.Lock()
-	defer s.rw.Unlock()
+func (s *SummaryUtil) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.collect())
+}
+
+func (s *SummaryUtil) MarshalYAML() (any, error) {
+	return s.collect(), nil
+}
+
+func (s *SummaryUtil) collect() *Summary {
+	collectLock.Lock()
+	defer collectLock.Unlock()
+	dur := time.Since(s.ts)
+	if dur < time.Second {
+		return &lastSummary
+	}
+	s.ts = time.Now()
 	v, _ := mem.VirtualMemory()
 	d, _ := disk.Usage("/")
 	nv, _ := net.IOCounters(true)
@@ -119,16 +92,16 @@ func (s *Summary) collect() *Summary {
 			Receive: n.BytesRecv,
 			Sent:    n.BytesSent,
 		}
-		if s.lastNetWork != nil && len(s.lastNetWork) > i {
-			info.ReceiveSpeed = n.BytesRecv - s.lastNetWork[i].BytesRecv
-			info.SentSpeed = n.BytesSent - s.lastNetWork[i].BytesSent
+		if len(lastSummary.NetWork) > i {
+			info.ReceiveSpeed = (n.BytesRecv - lastSummary.NetWork[i].Receive) / uint64(dur.Seconds())
+			info.SentSpeed = (n.BytesSent - lastSummary.NetWork[i].Sent) / uint64(dur.Seconds())
 		}
 		netWorks = append(netWorks, info)
 	}
 	s.NetWork = netWorks
-	s.lastNetWork = nv
 	s.Streams = util.MapList(&Streams, func(name string, ss *Stream) StreamSummay {
 		return ss.Summary()
 	})
-	return s
+	lastSummary = Summary(*s)
+	return &lastSummary
 }

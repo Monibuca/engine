@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -36,6 +37,7 @@ type AuthPub interface {
 type IO struct {
 	ID                 string
 	Type               string
+	RemoteAddr         string
 	context.Context    `json:"-" yaml:"-"` //不要直接设置，应当通过OnEvent传入父级Context
 	context.CancelFunc `json:"-" yaml:"-"` //流关闭是关闭发布者或者订阅者
 	*log.Logger        `json:"-" yaml:"-"`
@@ -92,11 +94,12 @@ type IIO interface {
 	receive(string, IIO) error
 	IsClosed() bool
 	OnEvent(any)
-	Stop()
+	Stop(reason ...zapcore.Field)
 	SetIO(any)
 	SetParentCtx(context.Context)
 	SetLogger(*log.Logger)
 	IsShutdown() bool
+	log.Zap
 }
 
 func (i *IO) close() bool {
@@ -113,9 +116,11 @@ func (i *IO) close() bool {
 }
 
 // Stop 停止订阅或者发布，由订阅者或者发布者调用
-func (io *IO) Stop() {
+func (io *IO) Stop(reason ...zapcore.Field) {
 	if io.close() {
-		io.Debug("stop", zap.Stack("stack"))
+		io.Info("stop", reason...)
+	} else {
+		io.Warn("already stopped", reason...)
 	}
 }
 
@@ -162,9 +167,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if v, ok := specific.(ISubscriber); ok {
 		wt = v.GetSubscriber().Config.WaitTimeout
 	}
-	if io.Context == nil {
-		io.Context, io.CancelFunc = context.WithCancel(Engine)
-	}
+	io.Context, io.CancelFunc = context.WithCancel(util.Conditoinal[context.Context](io.Context == nil, Engine, io.Context))
 	s, create := findOrCreateStream(u.Path, wt)
 	if s == nil {
 		return ErrBadStreamName
@@ -175,9 +178,15 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if io.Type == "" {
 		io.Type = reflect.TypeOf(specific).Elem().Name()
 	}
-	io.Logger = s.With(zap.String("type", io.Type))
+	logFeilds := []zapcore.Field{zap.String("type", io.Type)}
 	if io.ID != "" {
-		io.Logger = io.Logger.With(zap.String("ID", io.ID))
+		logFeilds = append(logFeilds, zap.String("ID", io.ID))
+	}
+	if io.Logger == nil {
+		io.Logger = s.With(logFeilds...)
+	} else {
+		logFeilds = append(logFeilds, zap.String("streamPath", s.Path))
+		io.Logger = io.Logger.With(logFeilds...)
 	}
 	if v, ok := specific.(IPublisher); ok {
 		conf := v.GetPublisher().Config
@@ -187,13 +196,14 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		defer s.pubLocker.Unlock()
 		oldPublisher := s.Publisher
 		if oldPublisher != nil && !oldPublisher.IsClosed() {
-			// 根据配置是否剔出原来的发布者
-			if conf.KickExist {
-				s.Warn("kick", zap.String("type", oldPublisher.GetPublisher().Type))
+			zot := zap.String("old type", oldPublisher.GetPublisher().Type)
+			if oldPublisher == specific { // 断线重连
+				s.Info("republish", zot)
+			} else if conf.KickExist { // 根据配置是否剔出原来的发布者
+				s.Warn("kick", zot)
 				oldPublisher.OnEvent(SEKick{})
-			} else if oldPublisher == specific {
-				//断线重连
 			} else {
+				s.Warn("duplicate publish", zot)
 				return ErrDuplicatePublish
 			}
 		}
@@ -203,11 +213,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		s.PauseTimeout = conf.PauseTimeout
 		defer func() {
 			if err == nil {
-				if oldPublisher == nil {
-					specific.OnEvent(specific)
-				} else {
-					specific.OnEvent(oldPublisher)
-				}
+				specific.OnEvent(util.Conditoinal[IIO](oldPublisher == nil, specific, oldPublisher))
 			}
 		}()
 		if config.Global.EnableAuth {
@@ -234,18 +240,18 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			return err
 		}
 	} else {
-
+		conf := specific.(ISubscriber).GetSubscriber().Config
 		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		io.Info("subscribe")
 		if create {
-			EventBus <- s // 通知发布者按需拉流
+			EventBus <- InvitePublish{CreateEvent(s.Path)} // 通知发布者按需拉流
 		}
 		defer func() {
 			if err == nil {
 				specific.OnEvent(specific)
 			}
 		}()
-		if config.Global.EnableAuth {
+		if config.Global.EnableAuth && !conf.Internal {
 			onAuthSub := OnAuthSub
 			if auth, ok := specific.(AuthSub); ok {
 				onAuthSub = auth.OnAuth
@@ -258,7 +264,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				if err != nil {
 					return err
 				}
-			} else if conf := specific.(ISubscriber).GetSubscriber().Config; conf.Key != "" {
+			} else if conf.Key != "" {
 				if !io.auth(conf.Key, io.Args.Get(conf.SecretArgName), io.Args.Get(conf.ExpireArgName)) {
 					return ErrAuth
 				}

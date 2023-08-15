@@ -36,7 +36,8 @@
 - 热更新配置信息 `/api/updateconfig?name=xxx` 热更新xxx插件的配置信息，如果不带参数或参数为空则热更新全局配置
 - 获取所有远端拉流信息 `/api/list/pull` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
 - 获取所有向远端推流信息 `/api/list/push` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
-- 停止推流 `/api/stoppush?url=xxx` 停止向xxx推流 ，成功返回ok
+- 停止推流 `/api/stop/push?url=xxx` 停止向xxx推流 ，成功返回ok
+- 停止某个订阅者 `/api/stop/subscribe?streamPath=xxx&id=xxx` 停止xxx流的xxx订阅者 ，成功返回ok
 - 插入SEI帧 `/api/insertsei?streamPath=xxx&type=5` 向xxx流内插入SEI帧 ，成功返回ok。type为SEI类型，可选，默认是5
 # 引擎默认配置
 ```yaml
@@ -46,7 +47,7 @@ global:
   loglevel: info # 日志级别，可选值：debug,info,warn,error,panic,fatal
   http:
     listenaddr: :8080 # 网关地址，用于访问API
-    listenaddrtls: ""  # 用于HTTPS方式访问API的端口配置
+    listenaddrtls: :8443  # 用于HTTPS方式访问API的端口配置
     certfile: ""
     keyfile: ""
     cors: true  # 是否自动添加cors头
@@ -65,6 +66,7 @@ global:
       waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
       buffertime: 0 # 缓存时间，用于时光回溯，0为关闭缓存
       idletimeout: 0 # 空闲超时时间，0为不限制
+      speedlimit: 500ms # 限速超时时间 0为不限速，对于读取文件这类流需要限速，否则读取过快
       key:                      # 发布鉴权key
 	    secretargname: secret     # 发布鉴权参数名
 	    expireargname:   expire   # 发布鉴权失效时间参数名
@@ -89,11 +91,10 @@ global:
   enableauth: true # 启用鉴权,详细查看鉴权机制
   enablesubevent: true # 启用订阅事件，用于订阅者上下线事件,关闭可以提高性能
   rtpreoderbufferlen: 50 # rtp乱序重排缓存长度
-  speedlimit: 500ms # 限速超时时间 0为不限速，对于读取文件这类流需要限速，否则读取过快
   eventbussize: 10 # 事件总线缓存大小，事件较多时容易堵阻塞线程，需要增大缓存
   pulseinterval: 5s # 心跳事件间隔时间
   console: 
-    server : console.monibuca.com:4242 # 连接远程控制台的地址
+    server : console.monibuca.com:44944 # 连接远程控制台的地址
     secret: "" # 远程控制台的秘钥
     publicaddr: "" # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
     publicaddrtls: "" # 实例公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址（https）

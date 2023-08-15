@@ -135,7 +135,6 @@ type Engine struct {
 	LogLang             string        `default:"zh"`    //日志语言
 	LogLevel            string        `default:"info"`  //日志级别
 	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
-	SpeedLimit          time.Duration `default:"500ms"` //速度限制最大等待时间
 	EventBusSize        int           `default:"10"`    //事件总线大小
 	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
 	DisableAll          bool          `default:"false"` //禁用所有插件
@@ -156,7 +155,7 @@ var Global *Engine
 
 func (cfg *Engine) InitDefaultHttp() {
 	Global = cfg
-	cfg.HTTP.mux = http.DefaultServeMux
+	cfg.HTTP.mux = http.NewServeMux()
 	cfg.HTTP.ListenAddrTLS = ":8443"
 	cfg.HTTP.ListenAddr = ":8080"
 }

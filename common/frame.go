@@ -177,6 +177,7 @@ func (av *AVFrame) Reset() {
 		av.ADTS = nil
 	}
 	av.Timestamp = 0
+	av.IFrame = false
 	av.DataFrame.Reset()
 }
 

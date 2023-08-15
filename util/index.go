@@ -56,3 +56,11 @@ func IsSubdir(baseDir, joinedDir string) bool {
 	}
 	return !strings.HasPrefix(rel, "..") && !strings.HasPrefix(rel, "/")
 }
+
+func Conditoinal[T any](cond bool, t, f T) T {
+	if cond {
+		return t
+	} else {
+		return f
+	}
+}

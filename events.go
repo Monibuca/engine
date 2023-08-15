@@ -78,3 +78,15 @@ type UnsubscribeEvent struct {
 type AddTrackEvent struct {
 	Event[common.Track]
 }
+
+// InvitePublishEvent 邀请推流事件(按需拉流)
+type InvitePublish struct {
+	Event[string]
+}
+
+func TryInvitePublish(streamPath string) {
+	s := Streams.Get(streamPath)
+	if s == nil || s.Publisher == nil {
+		EventBus <- InvitePublish{Event: CreateEvent(streamPath)}
+	}
+}

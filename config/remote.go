@@ -67,7 +67,7 @@ func (cfg *Engine) Remote(ctx context.Context) (wasConnected bool, err error) {
 		NextProtos:         []string{"monibuca"},
 	}
 
-	conn, err := quic.DialAddr(cfg.Server, tlsConf, &quic.Config{
+	conn, err := quic.DialAddr(ctx, cfg.Server, tlsConf, &quic.Config{
 		KeepAlivePeriod: time.Second * 10,
 		EnableDatagrams: true,
 	})

@@ -5,7 +5,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/aler9/gortsplib/v2/pkg/bits"
+	"github.com/bluenviron/mediacommon/pkg/bits"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
@@ -171,7 +171,7 @@ func (aac *AAC) WriteSequenceHead(sh []byte) {
 	aac.Channels = ((config2 >> 3) & 0x0F) //声道
 	aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
 	aac.Parse(aac.SequenceHead[2:])
-	aac.Attach()
+	go aac.Attach()
 }
 
 func (aac *AAC) WriteAVCC(ts uint32, frame *util.BLL) error {

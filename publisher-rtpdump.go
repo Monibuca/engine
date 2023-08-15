@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aler9/gortsplib/v2/pkg/codecs/mpeg4audio"
+	"github.com/bluenviron/mediacommon/pkg/codecs/mpeg4audio"
 	"github.com/pion/webrtc/v3/pkg/media/rtpdump"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
@@ -20,7 +20,7 @@ type RTPDumpPublisher struct {
 	ACodec       codec.AudioCodecID
 	VPayloadType uint8
 	APayloadType uint8
-	other        *rtpdump.Packet
+	other        rtpdump.Packet
 	sync.Mutex
 }
 
@@ -77,15 +77,15 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 		if needLock {
 			t.Lock()
 		}
-		if t.other == nil {
-			t.other = &packet
+		if t.other.Payload == nil {
+			t.other = packet
 			t.Unlock()
 			needLock = true
 			continue
 		}
-		if packet.Offset > t.other.Offset {
+		if packet.Offset >= t.other.Offset {
 			t.WriteRTP(t.other.Payload)
-			t.other = &packet
+			t.other = packet
 			t.Unlock()
 			needLock = true
 			continue

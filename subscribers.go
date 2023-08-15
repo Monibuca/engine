@@ -94,6 +94,15 @@ func (s *Subscribers) AbortWait() {
 	}
 }
 
+func (s *Subscribers) Find(id string) ISubscriber {
+	for sub := range s.public {
+		if sub.GetSubscriber().ID == id {
+			return sub
+		}
+	}
+	return nil
+}
+
 func (s *Subscribers) Delete(suber ISubscriber) {
 	delete(s.public, suber)
 	io := suber.GetSubscriber()

@@ -55,7 +55,8 @@ func (b *LimitBuffer) Write(a []byte) (n int, err error) {
 	l := b.Len()
 	newL := l + len(a)
 	if c := b.Cap(); newL > c {
-		panic(fmt.Sprintf("LimitBuffer Write %d > %d", newL, c))
+		return 0, fmt.Errorf("LimitBuffer Write %d > %d", newL, c)
+		// panic(fmt.Sprintf("LimitBuffer Write %d > %d", newL, c))
 	} else {
 		b.Buffer = b.Buffer.SubBuf(0, newL)
 		copy(b.Buffer[l:], a)

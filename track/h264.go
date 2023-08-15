@@ -35,6 +35,10 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	if log.Trace {
 		vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))
 	}
+	if vt.Value.IFrame {
+		vt.AppendAuBytes(slice)
+		return
+	}
 	switch naluType {
 	case codec.NALU_SPS:
 		spsInfo, _ := codec.ParseSPS(slice)
@@ -78,7 +82,7 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	case codec.NALU_Access_Unit_Delimiter:
 	case codec.NALU_Filler_Data:
 	default:
-		vt.Error("WriteSliceBytes naluType not support", zap.Int("naluType", int(naluType)))
+		vt.Error("nalu type not support", zap.Int("type", int(naluType)))
 	}
 }
 
@@ -159,19 +163,17 @@ func (vt *H264) CompleteRTP(value *AVFrame) {
 		if au.ByteLength < RTPMTU {
 			out = append(out, au.ToBuffers())
 		} else {
+			startIndex := len(out)
 			var naluType codec.H264NALUType
 			r := au.NewReader()
 			b0, _ := r.ReadByte()
 			naluType = naluType.Parse(b0)
 			b0 = codec.NALU_FUA.Or(b0 & 0x60)
-			buf := [][]byte{{b0, naluType.Or(1 << 7)}}
-			buf = append(buf, r.ReadN(RTPMTU-2)...)
-			out = append(out, buf)
 			for bufs := r.ReadN(RTPMTU); len(bufs) > 0; bufs = r.ReadN(RTPMTU) {
-				buf = append([][]byte{{b0, naluType.Byte()}}, bufs...)
-				out = append(out, buf)
+				out = append(out, append([][]byte{{b0, naluType.Byte()}}, bufs...))
 			}
-			buf[0][1] |= 1 << 6 // set end bit
+			out[startIndex][0][1] |= 1 << 7 // set start bit
+			out[len(out)-1][0][1] |= 1 << 6 // set end bit
 		}
 		return true
 	})
