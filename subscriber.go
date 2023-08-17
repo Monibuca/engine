@@ -331,9 +331,11 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				if hasAudio {
 					if audioFrame != nil {
-						if videoFrame.Timestamp > audioFrame.Timestamp {
+						if util.Conditoinal(conf.SyncMode == 0, videoFrame.Timestamp > audioFrame.Timestamp, videoFrame.WriteTime.After(audioFrame.WriteTime)) {
 							// fmt.Println("switch audio", audioFrame.CanRead)
-							sendAudioFrame(audioFrame)
+							if audioFrame.AUList.ByteLength > 0 {
+								sendAudioFrame(audioFrame)
+							}
 							audioFrame = nil
 							break
 						}
@@ -343,7 +345,9 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 
 				if !conf.IFrameOnly || videoFrame.IFrame {
-					sendVideoFrame(videoFrame)
+					if videoFrame.AUList.ByteLength > 0 {
+						sendVideoFrame(videoFrame)
+					}
 				} else {
 					// fmt.Println("skip video", frame.Sequence)
 				}
@@ -378,15 +382,18 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					sendAudioDecConf()
 				}
 				if hasVideo && videoFrame != nil {
-					if audioFrame.Timestamp > videoFrame.Timestamp {
-						// fmt.Println("switch video", videoFrame.CanRead)
-						sendVideoFrame(videoFrame)
+					if util.Conditoinal(conf.SyncMode == 0, audioFrame.Timestamp > videoFrame.Timestamp, audioFrame.WriteTime.After(videoFrame.WriteTime)) {
+						if videoFrame.AUList.ByteLength > 0 {
+							sendVideoFrame(videoFrame)
+						}
 						videoFrame = nil
 						break
 					}
 				}
 				if audioFrame.Timestamp >= s.AudioReader.SkipTs {
-					sendAudioFrame(audioFrame)
+					if audioFrame.AUList.ByteLength > 0 {
+						sendAudioFrame(audioFrame)
+					}
 				} else {
 					// fmt.Println("skip audio", frame.AbsTime, s.AudioReader.SkipTs)
 				}
@@ -410,4 +417,3 @@ func (s *Subscriber) onStop(reason *zapcore.Field) {
 		}
 	}
 }
-

@@ -161,7 +161,7 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 func (conf *GlobalConfig) API_list_pull(w http.ResponseWriter, r *http.Request) {
 	util.ReturnFetchValue(func() (result []any) {
 		Pullers.Range(func(key, value any) bool {
-			result = append(result, key)
+			result = append(result, value)
 			return true
 		})
 		return

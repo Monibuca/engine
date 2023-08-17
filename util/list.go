@@ -13,6 +13,7 @@ type ListItem[T any] struct {
 	Next, Pre *ListItem[T] `json:"-" yaml:"-"`
 	Pool      *List[T]     `json:"-" yaml:"-"` // 回收池
 	list      *List[T]
+	OnRecycle func() `json:"-" yaml:"-"`
 }
 
 func (item *ListItem[T]) InsertBefore(insert *ListItem[T]) {
@@ -50,7 +51,17 @@ func (item *ListItem[T]) IsRoot() bool {
 
 func (item *ListItem[T]) Recycle() {
 	if item.list != item.Pool && item.Pool != nil {
-		item.Pool.Push(item)
+		if item.Pool.Length < PoolSize {
+			item.Pool.Push(item)
+			if item.OnRecycle != nil {
+				item.OnRecycle()
+			}
+		} else {
+			item.Pool = nil
+			item.list = nil
+			item.Next = nil
+			item.Pre = nil
+		}
 	}
 }
 

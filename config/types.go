@@ -61,6 +61,7 @@ type Subscribe struct {
 	SubVideoTracks  []string      // 指定订阅的视频轨道
 	SubDataTracks   []string      // 指定订阅的数据轨道
 	SubMode         int           // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
+	SyncMode        int           // 0，采用时间戳同步，1，采用写入时间同步
 	IFrameOnly      bool          // 只要关键帧
 	WaitTimeout     time.Duration `default:"10s"` // 等待流超时
 	WriteBufferSize int           `default:"0"`   // 写缓冲大小
@@ -138,6 +139,7 @@ type Engine struct {
 	EventBusSize        int           `default:"10"`    //事件总线大小
 	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
 	DisableAll          bool          `default:"false"` //禁用所有插件
+	PoolSize            int           //内存池大小
 	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
 	reportStream        quic.Stream   // console server connection
 	instanceId          string        // instance id 来自console

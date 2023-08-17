@@ -108,6 +108,7 @@ func Run(ctx context.Context, configFile string) (err error) {
 	Engine.RawConfig = config.Struct2Config(&EngineConfig.Engine, "GLOBAL")
 	Engine.assign()
 	Engine.Logger.Debug("", zap.Any("config", EngineConfig))
+	util.PoolSize = EngineConfig.PoolSize
 	EventBus = make(chan any, EngineConfig.EventBusSize)
 	go EngineConfig.Listen(Engine)
 	for _, plugin := range plugins {

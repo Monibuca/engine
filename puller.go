@@ -2,6 +2,7 @@ package engine
 
 import (
 	"io"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -37,9 +38,16 @@ func (pub *Puller) startPull(puller IPuller) {
 	badPuller := true
 	var stream *Stream
 	var err error
-	Pullers.Store(puller, pub.RemoteURL)
+	streamPath := pub.StreamPath
+	if i := strings.Index(streamPath, "?"); i >= 0 {
+		streamPath = streamPath[:i]
+	}
+	if _, loaded := Pullers.LoadOrStore(streamPath, puller); loaded {
+		puller.Error("puller already exists")
+		return
+	}
 	defer func() {
-		Pullers.Delete(puller)
+		Pullers.Delete(streamPath)
 		puller.Disconnect()
 		if stream != nil {
 			stream.Close()
@@ -47,6 +55,7 @@ func (pub *Puller) startPull(puller IPuller) {
 	}()
 	puber := puller.GetPublisher()
 	originContext := puber.Context // 保存原始的Context
+	logger := puber.Logger         // 保存原始的Logger
 	for puller.Info("start pull"); puller.Reconnect(); puller.Warn("restart pull") {
 		if err = puller.Connect(); err != nil {
 			if err == io.EOF {
@@ -60,6 +69,7 @@ func (pub *Puller) startPull(puller IPuller) {
 			time.Sleep(time.Second * 5)
 		} else {
 			puber.Context = originContext // 每次重连都需要恢复原始的Context
+			puber.Logger = logger         // 每次重连都需要恢复原始的Logger
 			if err = puller.Publish(pub.StreamPath, puller); err != nil {
 				puller.Error("pull publish", zap.Error(err))
 				return

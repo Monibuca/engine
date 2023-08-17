@@ -66,7 +66,7 @@ global:
       waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除
       buffertime: 0 # 缓存时间，用于时光回溯，0为关闭缓存
       idletimeout: 0 # 空闲超时时间，0为不限制
-      speedlimit: 500ms # 限速超时时间 0为不限速，对于读取文件这类流需要限速，否则读取过快
+      speedlimit: 500ms # 限速超时时间 0为不限速，对于读取文件这类流需要限速，否则读取过快（如果流的时间戳不正确，则只能关闭该功能：设置为0）
       key:                      # 发布鉴权key
 	    secretargname: secret     # 发布鉴权参数名
 	    expireargname:   expire   # 发布鉴权失效时间参数名
@@ -79,6 +79,7 @@ global:
       subaudiotracks: [] # 订阅音频轨道名称列表
       subvideotracks: [] # 订阅视频轨道名称列表
       submode: 0 # 订阅模式，0为跳帧追赶模式，1为不追赶（多用于录制），2为时光回溯模式
+      syncmode: 0 # 音视频同步模式，0按照时间戳同步，1按照写入时间同步（在时间戳不正确的时候)
       iframeonly: false # 只订阅关键帧
       waittimeout: 10s # 等待发布者的超时时间，用于订阅尚未发布的流
       writebuffersize: 0 # 订阅者写缓存大小，用于减少io次数，但可能影响实时性
@@ -92,6 +93,7 @@ global:
   enablesubevent: true # 启用订阅事件，用于订阅者上下线事件,关闭可以提高性能
   rtpreoderbufferlen: 50 # rtp乱序重排缓存长度
   eventbussize: 10 # 事件总线缓存大小，事件较多时容易堵阻塞线程，需要增大缓存
+  poolsize: 0 # 内存池大小，0为不使用内存池
   pulseinterval: 5s # 心跳事件间隔时间
   console: 
     server : console.monibuca.com:44944 # 连接远程控制台的地址
