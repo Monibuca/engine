@@ -23,7 +23,7 @@ func initFatalLog() *os.File {
 	if _fatal_log := os.Getenv("M7S_FATAL_LOG"); _fatal_log != "" {
 		fatal_log = _fatal_log
 	}
-	os.MkdirAll(fatal_log, 0666)
+	os.MkdirAll(fatal_log, 0766)
 	fatal_log = filepath.Join(fatal_log, time.Now().Format("2006-01-02 15:04:05")+".log")
 	logFile, err := os.OpenFile(fatal_log, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
 	if err != nil {

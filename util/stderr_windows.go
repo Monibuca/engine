@@ -28,7 +28,7 @@ func setStdHandle(stdhandle int32, handle syscall.Handle) error {
 func init() {
 	logFile := initFatalLog()
 	if logFile != nil {
-		err = setStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(logFile.Fd()))
+		err := setStdHandle(syscall.STD_ERROR_HANDLE, syscall.Handle(logFile.Fd()))
 		if err != nil {
 			log.Fatalf("Failed to redirect stderr to file: %v", err)
 		}
