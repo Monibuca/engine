@@ -57,37 +57,47 @@ func init() {
 }
 
 // Run 启动Monibuca引擎，传入总的Context，可用于关闭所有
-func Run(ctx context.Context, configFile string) (err error) {
+func Run(ctx context.Context, conf any) (err error) {
 	id, _ := machineid.ProtectedID("monibuca")
 	SysInfo.StartTime = time.Now()
 	SysInfo.Version = Engine.Version
 	Engine.Context = ctx
-	if _, err = os.Stat(configFile); err != nil {
-		configFile = filepath.Join(ExecDir, configFile)
+	var cg config.Config
+	switch v := conf.(type) {
+	case string:
+		if _, err = os.Stat(v); err != nil {
+			v = filepath.Join(ExecDir, v)
+		}
+		if ConfigRaw, err = os.ReadFile(v); err != nil {
+			log.Warn("read config file error:", err.Error())
+		}
+	case []byte:
+		ConfigRaw = v
+	case config.Config:
+		cg = v
 	}
+
 	if err = util.CreateShutdownScript(); err != nil {
 		log.Error("create shutdown script error:", err)
 	}
-	if ConfigRaw, err = os.ReadFile(configFile); err != nil {
-		log.Warn("read config file error:", err.Error())
-	}
+
 	if err = os.MkdirAll(SettingDir, 0766); err != nil {
 		log.Error("create dir .m7s error:", err)
 		return
 	}
 	log.Info("Ⓜ starting engine:", Blink(Engine.Version))
-	var cg config.Config
 	if ConfigRaw != nil {
-		if err = yaml.Unmarshal(ConfigRaw, &cg); err == nil {
-			Engine.RawConfig = cg.GetChild("global")
-			if b, err := yaml.Marshal(Engine.RawConfig); err == nil {
-				Engine.Yaml = string(b)
-			}
-			//将配置信息同步到结构体
-			Engine.RawConfig.Unmarshal(&EngineConfig.Engine)
-		} else {
+		if err = yaml.Unmarshal(ConfigRaw, &cg); err != nil {
 			log.Error("parsing yml error:", err)
 		}
+	}
+	if cg != nil {
+		Engine.RawConfig = cg.GetChild("global")
+		if b, err := yaml.Marshal(Engine.RawConfig); err == nil {
+			Engine.Yaml = string(b)
+		}
+		//将配置信息同步到结构体
+		Engine.RawConfig.Unmarshal(&EngineConfig.Engine)
 	}
 	var logger log.Logger
 	log.LocaleLogger = logger.Lang(lang.Get(EngineConfig.LogLang))
