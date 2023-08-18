@@ -2,18 +2,35 @@ package util
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 )
 
 var Null = struct{}{}
 
 func Clone[T any](x T) *T {
 	return &x
+}
+
+func initFatalLog() *os.File {
+	fatal_log := "./fatal"
+	if _fatal_log := os.Getenv("M7S_FATAL_LOG"); _fatal_log != "" {
+		fatal_log = _fatal_log
+	}
+	os.MkdirAll(fatal_log, 0666)
+	fatal_log = filepath.Join(fatal_log, time.Now().Format("2006-01-02 15:04:05")+".log")
+	logFile, err := os.OpenFile(fatal_log, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	if err != nil {
+		log.Println("服务启动出错", "打开异常日志文件失败", err)
+		return nil
+	}
+	return logFile
 }
 
 func CurrentDir(path ...string) string {

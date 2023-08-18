@@ -54,8 +54,6 @@ func (pub *Puller) startPull(puller IPuller) {
 		}
 	}()
 	puber := puller.GetPublisher()
-	originContext := puber.Context // 保存原始的Context
-	logger := puber.Logger         // 保存原始的Logger
 	for puller.Info("start pull"); puller.Reconnect(); puller.Warn("restart pull") {
 		if err = puller.Connect(); err != nil {
 			if err == io.EOF {
@@ -68,8 +66,6 @@ func (pub *Puller) startPull(puller IPuller) {
 			}
 			time.Sleep(time.Second * 5)
 		} else {
-			puber.Context = originContext // 每次重连都需要恢复原始的Context
-			puber.Logger = logger         // 每次重连都需要恢复原始的Logger
 			if err = puller.Publish(pub.StreamPath, puller); err != nil {
 				puller.Error("pull publish", zap.Error(err))
 				return
