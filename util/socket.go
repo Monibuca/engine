@@ -96,17 +96,11 @@ func ReturnFetchValue[T any](fetch func() T, rw http.ResponseWriter, r *http.Req
 		sse := NewSSE(rw, r.Context())
 		tick := time.NewTicker(tickDur)
 		defer tick.Stop()
-		if isYaml {
-			for range tick.C {
-				if sse.WriteYAML(fetch()) != nil {
-					return
-				}
-			}
-		} else {
-			for range tick.C {
-				if sse.WriteJSON(fetch()) != nil {
-					return
-				}
+		writer := Conditoinal(isYaml, sse.WriteYAML, sse.WriteJSON)
+		writer(fetch())
+		for range tick.C {
+			if writer(fetch()) != nil {
+				return
 			}
 		}
 	} else {
