@@ -3,32 +3,30 @@ package log
 import (
 	"io"
 	"os"
+	"sync"
 )
 
-type MultipleWriter []io.Writer
+type MultipleWriter struct {
+	io.Writer // 默认输出到标准输出
+	sync.Map  // 用于存储多个输出
+}
 
 func (m *MultipleWriter) Write(p []byte) (n int, err error) {
-	for _, w := range *m {
-		n, err = w.Write(p)
-		if err != nil {
-			m.Delete(w)
+	n, err = m.Writer.Write(p)
+	m.Range(func(key, value any) bool {
+		if _, err := key.(io.Writer).Write(p); err != nil {
+			m.Delete(key)
 		}
-	}
-	return len(p), nil
-}
-func (m *MultipleWriter) Delete(writer io.Writer) {
-	for i, w := range *m {
-		if w == writer {
-			*m = append((*m)[:i], (*m)[i+1:]...)
-			return
-		}
-	}
-}
-func (m *MultipleWriter) Add(writer io.Writer) {
-	*m = append(*m, writer)
+		return true
+	})
+	return
 }
 
-var multipleWriter = &MultipleWriter{os.Stdout}
+func (m *MultipleWriter) Add(writer io.Writer) {
+	m.Map.Store(writer, struct{}{})
+}
+
+var multipleWriter = &MultipleWriter{Writer: os.Stdout}
 
 func AddWriter(writer io.Writer) {
 	multipleWriter.Add(writer)

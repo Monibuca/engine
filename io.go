@@ -156,9 +156,9 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	u, err := url.Parse(streamPath)
 	if err != nil {
 		if EngineConfig.LogLang == "zh" {
-			io.Error("接收流路径(流唯一标识)格式错误,必须形如 live/test ", zap.String("流路径", streamPath), zap.Error(err))
+			log.Error("接收流路径(流唯一标识)格式错误,必须形如 live/test ", zap.String("流路径", streamPath), zap.Error(err))
 		} else {
-			io.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
+			log.Error("receive streamPath wrong format", zap.String("streamPath", streamPath), zap.Error(err))
 		}
 		return err
 	}
