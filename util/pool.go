@@ -290,9 +290,7 @@ func (p BytesPool) GetShell(b []byte) (item *ListItem[Buffer]) {
 	}
 	item = p[0].PoolShift()
 	item.Value = b
-	item.OnRecycle = func(){
-		item.Value = nil
-	}
+	item.reset = true
 	return
 }
 

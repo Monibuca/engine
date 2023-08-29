@@ -171,8 +171,12 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if s == nil {
 		return ErrBadStreamName
 	}
+
 	if io.Stream == nil { //初次
 		io.Context, io.CancelFunc = context.WithCancel(util.Conditoinal[context.Context](io.Context == nil, Engine, io.Context))
+		if io.Type == "" {
+			io.Type = reflect.TypeOf(specific).Elem().Name()
+		}
 		logFeilds := []zapcore.Field{zap.String("type", io.Type)}
 		if io.ID != "" {
 			logFeilds = append(logFeilds, zap.String("ID", io.ID))
@@ -187,12 +191,8 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	io.Stream = s
 	io.Spesific = specific
 	io.StartTime = time.Now()
-	if io.Type == "" {
-		io.Type = reflect.TypeOf(specific).Elem().Name()
-	}
 	if v, ok := specific.(IPublisher); ok {
 		conf := v.GetPublisher().Config
-		io.Type = strings.TrimSuffix(io.Type, "Publisher")
 		io.Info("publish")
 		s.pubLocker.Lock()
 		defer s.pubLocker.Unlock()
@@ -243,7 +243,6 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		}
 	} else {
 		conf := specific.(ISubscriber).GetSubscriber().Config
-		io.Type = strings.TrimSuffix(io.Type, "Subscriber")
 		io.Info("subscribe")
 		if create {
 			EventBus <- InvitePublish{CreateEvent(s.Path)} // 通知发布者按需拉流
