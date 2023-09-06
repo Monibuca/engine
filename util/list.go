@@ -82,7 +82,7 @@ type List[T any] struct {
 }
 
 func (p *List[T]) PushValue(value T) {
-	p.Push(&ListItem[T]{Value: value})
+	p.Push(&ListItem[T]{Value: value, reset: true})
 }
 
 func (p *List[T]) Push(item *ListItem[T]) {

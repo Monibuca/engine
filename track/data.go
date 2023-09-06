@@ -60,10 +60,6 @@ func (d *Data[T]) Attach(s IStream) {
 	}
 }
 
-func (d *Data[T]) Dispose() {
-	d.Value.Broadcast()
-}
-
 func (d *Data[T]) LastWriteTime() time.Time {
 	return d.LastValue.WriteTime
 }

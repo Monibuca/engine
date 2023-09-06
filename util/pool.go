@@ -309,6 +309,7 @@ func (p BytesPool) Get(size int) (item *ListItem[Buffer]) {
 	if item == nil {
 		item = &ListItem[Buffer]{
 			Value: make(Buffer, size),
+			reset: true,
 		}
 	}
 	return

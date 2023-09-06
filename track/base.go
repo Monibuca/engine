@@ -102,10 +102,6 @@ type Media struct {
 	流速控制
 }
 
-func (av *Media) Dispose() {
-	av.Value.Broadcast()
-}
-
 func (av *Media) GetFromPool(b util.IBytes) (item *util.ListItem[util.Buffer]) {
 	if b.Reuse() {
 		item = av.BytesPool.Get(b.Len())

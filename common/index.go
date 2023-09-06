@@ -92,6 +92,10 @@ func (bt *Base[T, F]) SetStuff(stuff ...any) {
 	}
 }
 
+func (bt *Base[T, F]) Dispose() {
+	bt.Value.Broadcast()
+}
+
 type Track interface {
 	GetName() string
 	GetBPS() int

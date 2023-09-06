@@ -16,7 +16,7 @@ var (
 	summary SummaryUtil
 	lastSummary Summary
 	children util.Map[string, *Summary]
-	collectLock sync.Mutex
+	collectLock sync.RWMutex
 )
 // ServerSummary 系统摘要定义
 type Summary struct {
@@ -62,8 +62,13 @@ func (s *SummaryUtil) MarshalYAML() (any, error) {
 }
 
 func (s *SummaryUtil) collect() *Summary {
-	collectLock.Lock()
-	defer collectLock.Unlock()
+	if collectLock.TryLock() {
+		defer collectLock.Unlock()
+	} else {
+		collectLock.RLock()
+		defer collectLock.RUnlock()
+		return &lastSummary
+	}
 	dur := time.Since(s.ts)
 	if dur < time.Second {
 		return &lastSummary

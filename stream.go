@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -87,30 +86,6 @@ var StreamFSM = [len(StateNames)]map[StreamAction]StreamState{
 
 // Streams 所有的流集合
 var Streams util.Map[string, *Stream]
-
-type StreamList []*Stream
-
-func (l StreamList) Len() int {
-	return len(l)
-}
-
-func (l StreamList) Less(i, j int) bool {
-	return l[i].Path < l[j].Path
-}
-
-func (l StreamList) Swap(i, j int) {
-	l[i], l[j] = l[j], l[i]
-}
-
-func (l StreamList) Sort() {
-	sort.Sort(l)
-}
-
-func GetSortedStreamList() StreamList {
-	result := StreamList(Streams.ToList())
-	result.Sort()
-	return result
-}
 
 func FilterStreams[T IPublisher]() (ss []*Stream) {
 	Streams.Range(func(_ string, s *Stream) {
@@ -350,14 +325,18 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 				r.timeout.Reset(r.DelayCloseTimeout)
 			}
 		case STATE_CLOSED:
+			Streams.Delete(r.Path)
+			r.timeout.Stop()
+			r.Subscribers.Dispose()
 			for !r.actionChan.Close() {
 				// 等待channel发送完毕，伪自旋锁
 				time.Sleep(time.Millisecond * 100)
 			}
 			stateEvent = SEclose{event}
 			r.Subscribers.Broadcast(stateEvent)
-			Streams.Delete(r.Path)
-			r.timeout.Stop()
+			r.Tracks.Range(func(_ string, t Track) {
+				t.Dispose()
+			})
 		}
 		EventBus <- stateEvent
 		if r.Publisher != nil {
@@ -494,140 +473,135 @@ func (s *Stream) run() {
 				s.action(ACTION_TIMEOUT)
 			}
 		case action, ok := <-s.actionChan.C:
+			if !ok {
+				return
+			}
 			timeStart = time.Now()
-			if ok {
-				switch v := action.(type) {
-				case SubPulse:
-					timeOutInfo = zap.String("action", "SubPulse")
-					pulseSuber[v] = struct{}{}
-				case *util.Promise[IPublisher]:
-					timeOutInfo = zap.String("action", "Publish")
-					if s.IsClosed() {
-						v.Reject(ErrStreamIsClosed)
-					}
-					republish := s.Publisher == v.Value                                  // 重复发布
-					kicked := !republish && s.Publisher != nil && s.Publisher.IsClosed() // 被踢下线
-					if !republish {
-						s.Publisher = v.Value
-					}
-					if s.action(ACTION_PUBLISH) || republish || kicked {
-						v.Resolve()
-						if s.Publisher.GetPublisher().Config.InsertSEI {
-							if s.Tracks.SEI == nil {
-								s.Tracks.SEI = track.NewDataTrack[[]byte]("sei")
-								s.Tracks.SEI.Locker = &sync.Mutex{}
-								s.Tracks.SEI.SetStuff(s)
-								if s.Tracks.Add("sei", s.Tracks.SEI) {
-									s.Info("sei track added")
-								}
+			switch v := action.(type) {
+			case SubPulse:
+				timeOutInfo = zap.String("action", "SubPulse")
+				pulseSuber[v] = struct{}{}
+			case *util.Promise[IPublisher]:
+				timeOutInfo = zap.String("action", "Publish")
+				if s.IsClosed() {
+					v.Reject(ErrStreamIsClosed)
+				}
+				republish := s.Publisher == v.Value                                  // 重复发布
+				kicked := !republish && s.Publisher != nil && s.Publisher.IsClosed() // 被踢下线
+				if !republish {
+					s.Publisher = v.Value
+				}
+				if s.action(ACTION_PUBLISH) || republish || kicked {
+					v.Resolve()
+					if s.Publisher.GetPublisher().Config.InsertSEI {
+						if s.Tracks.SEI == nil {
+							s.Tracks.SEI = track.NewDataTrack[[]byte]("sei")
+							s.Tracks.SEI.Locker = &sync.Mutex{}
+							s.Tracks.SEI.SetStuff(s)
+							if s.Tracks.Add("sei", s.Tracks.SEI) {
+								s.Info("sei track added")
 							}
 						}
-					} else {
-						v.Reject(ErrDuplicatePublish)
 					}
-				case *util.Promise[ISubscriber]:
-					timeOutInfo = zap.String("action", "Subscribe")
-					if s.IsClosed() {
-						v.Reject(ErrStreamIsClosed)
-					}
-					suber := v.Value
-					io := suber.GetSubscriber()
-					sbConfig := io.Config
-					waits := &waitTracks{
-						Promise: v,
-					}
-					if ats := io.Args.Get(sbConfig.SubAudioArgName); ats != "" {
-						waits.audio.Wait(strings.Split(ats, ",")...)
-					} else if len(sbConfig.SubAudioTracks) > 0 {
-						waits.audio.Wait(sbConfig.SubAudioTracks...)
-					} else if sbConfig.SubAudio {
-						waits.audio.Wait()
-					}
-					if vts := io.Args.Get(sbConfig.SubVideoArgName); vts != "" {
-						waits.video.Wait(strings.Split(vts, ",")...)
-					} else if len(sbConfig.SubVideoTracks) > 0 {
-						waits.video.Wait(sbConfig.SubVideoTracks...)
-					} else if sbConfig.SubVideo {
-						waits.video.Wait()
-					}
-					if dts := io.Args.Get(sbConfig.SubDataArgName); dts != "" {
-						waits.data.Wait(strings.Split(dts, ",")...)
-					} else {
-						// waits.data.Wait()
-					}
-					if s.Publisher != nil {
-						s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
-						pubConfig := s.Publisher.GetPublisher().Config
-						s.Tracks.Range(func(name string, t Track) {
-							waits.Accept(t)
-						})
-						if !pubConfig.PubAudio || s.Subscribers.waitAborted {
-							waits.audio.StopWait()
-						}
-						if !pubConfig.PubVideo || s.Subscribers.waitAborted {
-							waits.video.StopWait()
-						}
-					}
-					s.Subscribers.Add(suber, waits)
-					if s.Subscribers.Len() == 1 && s.State == STATE_WAITCLOSE {
-						s.action(ACTION_FIRSTENTER)
-					}
-				case Unsubscribe:
-					timeOutInfo = zap.String("action", "Unsubscribe")
-					delete(pulseSuber, v)
-					s.onSuberClose(v)
-				case TrackRemoved:
-					timeOutInfo = zap.String("action", "TrackRemoved")
-					name := v.GetName()
-					if t, ok := s.Tracks.LoadAndDelete(name); ok {
-						s.Info("track -1", zap.String("name", name))
-						s.Subscribers.Broadcast(t)
-						t.(common.Track).Dispose()
-					}
-				case *util.Promise[Track]:
-					timeOutInfo = zap.String("action", "Track")
-					if s.State == STATE_WAITPUBLISH {
-						s.action(ACTION_PUBLISH)
-					}
-					pubConfig := s.GetPublisherConfig()
-					name := v.Value.GetName()
-					if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubVideo {
-						v.Reject(ErrTrackMute)
-						continue
-					}
-					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubAudio {
-						v.Reject(ErrTrackMute)
-						continue
-					}
-					if s.Tracks.Add(name, v.Value) {
-						v.Resolve()
-						s.Subscribers.OnTrack(v.Value)
-						if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubAudio {
-							s.Subscribers.AbortWait()
-						}
-						if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubVideo {
-							s.Subscribers.AbortWait()
-						}
-						// 这里重置的目的是当PublishTimeout设置很大的情况下，需要及时取消订阅者的等待
-						s.timeout.Reset(time.Second * 5)
-					} else {
-						v.Reject(ErrBadTrackName)
-					}
-				case NoMoreTrack:
-					s.Subscribers.AbortWait()
-				case StreamAction:
-					timeOutInfo = zap.String("action", "StreamAction"+v.String())
-					s.action(v)
-				default:
-					timeOutInfo = zap.String("action", "unknown")
-					s.Error("unknown action", timeOutInfo)
+				} else {
+					v.Reject(ErrDuplicatePublish)
 				}
-			} else {
-				s.Subscribers.Dispose()
-				s.Tracks.Range(func(_ string, t Track) {
-					t.Dispose()
-				})
-				return
+			case *util.Promise[ISubscriber]:
+				timeOutInfo = zap.String("action", "Subscribe")
+				if s.IsClosed() {
+					v.Reject(ErrStreamIsClosed)
+				}
+				suber := v.Value
+				io := suber.GetSubscriber()
+				sbConfig := io.Config
+				waits := &waitTracks{
+					Promise: v,
+				}
+				if ats := io.Args.Get(sbConfig.SubAudioArgName); ats != "" {
+					waits.audio.Wait(strings.Split(ats, ",")...)
+				} else if len(sbConfig.SubAudioTracks) > 0 {
+					waits.audio.Wait(sbConfig.SubAudioTracks...)
+				} else if sbConfig.SubAudio {
+					waits.audio.Wait()
+				}
+				if vts := io.Args.Get(sbConfig.SubVideoArgName); vts != "" {
+					waits.video.Wait(strings.Split(vts, ",")...)
+				} else if len(sbConfig.SubVideoTracks) > 0 {
+					waits.video.Wait(sbConfig.SubVideoTracks...)
+				} else if sbConfig.SubVideo {
+					waits.video.Wait()
+				}
+				if dts := io.Args.Get(sbConfig.SubDataArgName); dts != "" {
+					waits.data.Wait(strings.Split(dts, ",")...)
+				} else {
+					// waits.data.Wait()
+				}
+				if s.Publisher != nil {
+					s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
+					pubConfig := s.Publisher.GetPublisher().Config
+					s.Tracks.Range(func(name string, t Track) {
+						waits.Accept(t)
+					})
+					if !pubConfig.PubAudio || s.Subscribers.waitAborted {
+						waits.audio.StopWait()
+					}
+					if !pubConfig.PubVideo || s.Subscribers.waitAborted {
+						waits.video.StopWait()
+					}
+				}
+				s.Subscribers.Add(suber, waits)
+				if s.Subscribers.Len() == 1 && s.State == STATE_WAITCLOSE {
+					s.action(ACTION_FIRSTENTER)
+				}
+			case Unsubscribe:
+				timeOutInfo = zap.String("action", "Unsubscribe")
+				delete(pulseSuber, v)
+				s.onSuberClose(v)
+			case TrackRemoved:
+				timeOutInfo = zap.String("action", "TrackRemoved")
+				name := v.GetName()
+				if t, ok := s.Tracks.LoadAndDelete(name); ok {
+					s.Info("track -1", zap.String("name", name))
+					s.Subscribers.Broadcast(t)
+					t.(common.Track).Dispose()
+				}
+			case *util.Promise[Track]:
+				timeOutInfo = zap.String("action", "Track")
+				if s.State == STATE_WAITPUBLISH {
+					s.action(ACTION_PUBLISH)
+				}
+				pubConfig := s.GetPublisherConfig()
+				name := v.Value.GetName()
+				if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubVideo {
+					v.Reject(ErrTrackMute)
+					continue
+				}
+				if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubAudio {
+					v.Reject(ErrTrackMute)
+					continue
+				}
+				if s.Tracks.Add(name, v.Value) {
+					v.Resolve()
+					s.Subscribers.OnTrack(v.Value)
+					if _, ok := v.Value.(*track.Video); ok && !pubConfig.PubAudio {
+						s.Subscribers.AbortWait()
+					}
+					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubVideo {
+						s.Subscribers.AbortWait()
+					}
+					// 这里重置的目的是当PublishTimeout设置很大的情况下，需要及时取消订阅者的等待
+					s.timeout.Reset(time.Second * 5)
+				} else {
+					v.Reject(ErrBadTrackName)
+				}
+			case NoMoreTrack:
+				s.Subscribers.AbortWait()
+			case StreamAction:
+				timeOutInfo = zap.String("action", "StreamAction"+v.String())
+				s.action(v)
+			default:
+				timeOutInfo = zap.String("action", "unknown")
+				s.Error("unknown action", timeOutInfo)
 			}
 		}
 	}
