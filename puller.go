@@ -54,7 +54,12 @@ func (pub *Puller) startPull(puller IPuller) {
 		}
 	}()
 	puber := puller.GetPublisher()
+	startTime := time.Now()
 	for puller.Info("start pull"); puller.Reconnect(); puller.Warn("restart pull") {
+		if time.Since(startTime) < 5*time.Second {
+			time.Sleep(5 * time.Second)
+		}
+		startTime = time.Now()
 		if err = puller.Connect(); err != nil {
 			if err == io.EOF {
 				puller.Info("pull complete")
@@ -64,7 +69,6 @@ func (pub *Puller) startPull(puller IPuller) {
 			if badPuller {
 				return
 			}
-			time.Sleep(time.Second * 5)
 		} else {
 			if err = puller.Publish(pub.StreamPath, puller); err != nil {
 				puller.Error("pull publish", zap.Error(err))
