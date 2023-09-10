@@ -16,6 +16,7 @@ var znomorereconnect = zap.String("reason", "no more reconnect")
 type IPuller interface {
 	IPublisher
 	Connect() error
+	OnConnected()
 	Disconnect()
 	Pull() error
 	Reconnect() bool
@@ -26,6 +27,10 @@ type IPuller interface {
 // 用于远程拉流的发布者
 type Puller struct {
 	ClientIO[config.Pull]
+}
+
+func (pub *Puller) OnConnected() {
+	pub.ReConnectCount = 0 // 重置重连次数
 }
 
 // 是否需要重连

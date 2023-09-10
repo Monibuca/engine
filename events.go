@@ -53,6 +53,10 @@ type SEpublish struct {
 	StateEvent
 }
 
+type SEtrackAvaliable struct {
+	StateEvent
+}
+
 type SErepublish struct {
 	StateEvent
 }

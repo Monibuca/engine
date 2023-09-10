@@ -37,7 +37,7 @@ func (p *Publisher) GetPublisher() *Publisher {
 
 func (p *Publisher) Stop(reason ...zapcore.Field) {
 	p.IO.Stop(reason...)
-	p.Stream.Receive(ACTION_PUBLISHLOST)
+	p.Stream.Receive(ACTION_PUBLISHCLOSE)
 }
 
 func (p *Publisher) getAudioTrack() common.AudioTrack {
