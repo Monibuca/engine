@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"gopkg.in/yaml.v3"
 	"m7s.live/engine/v4/log"
 )
@@ -30,6 +31,11 @@ type TCPPlugin interface {
 type HTTPPlugin interface {
 	Plugin
 	http.Handler
+}
+
+type QuicPlugin interface {
+	Plugin
+	ServeQuic(quic.Connection)
 }
 
 // CreateElem 创建Map或者Slice中的元素
