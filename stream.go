@@ -327,16 +327,13 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		case STATE_CLOSED:
 			Streams.Delete(r.Path)
 			r.timeout.Stop()
-			r.Subscribers.Dispose()
-			for !r.actionChan.Close() {
-				// 等待channel发送完毕，伪自旋锁
-				time.Sleep(time.Millisecond * 100)
-			}
 			stateEvent = SEclose{event}
 			r.Subscribers.Broadcast(stateEvent)
 			r.Tracks.Range(func(_ string, t Track) {
 				t.Dispose()
 			})
+			r.Subscribers.Dispose()
+			r.actionChan.Close()
 		}
 		EventBus <- stateEvent
 		if r.Publisher != nil {
@@ -475,6 +472,11 @@ func (s *Stream) run() {
 		case action, ok := <-s.actionChan.C:
 			if !ok {
 				return
+			} else if s.State == STATE_CLOSED {
+				if s.actionChan.Close() { //再次尝试关闭
+					return
+				}
+				continue
 			}
 			timeStart = time.Now()
 			switch v := action.(type) {

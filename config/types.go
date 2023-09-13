@@ -40,10 +40,9 @@ type Publish struct {
 	BufferTime        time.Duration // 缓冲长度(单位：秒)，0代表取最近关键帧
 	SpeedLimit        time.Duration `default:"500ms"` //速度限制最大等待时间
 	Key               string        // 发布鉴权key
-	SecretArgName     string        `default:"secret"` // 发布鉴权参数名
-	ExpireArgName     string        `default:"expire"` // 发布鉴权失效时间参数名
-	RingSize          int           `default:"256"`    // 初始缓冲区大小
-	RingSizeMax       int           `default:"1024"`   // 最大缓冲区大小
+	SecretArgName     string        `default:"secret"`   // 发布鉴权参数名
+	ExpireArgName     string        `default:"expire"`   // 发布鉴权失效时间参数名
+	RingSize          string        `default:"256-1024"` // 初始缓冲区大小
 }
 
 func (c Publish) GetPublishConfig() Publish {

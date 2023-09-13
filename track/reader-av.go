@@ -20,7 +20,7 @@ const (
 	SUBMODE_BUFFER
 )
 
-var ErrDiscard = errors.New("dsicard")
+var ErrDiscard = errors.New("discard")
 
 type AVRingReader struct {
 	RingReader[any, *common.AVFrame]
