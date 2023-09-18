@@ -55,7 +55,7 @@ func (pub *Puller) startPull(puller IPuller) {
 		}
 	}()
 	puber := puller.GetPublisher()
-	startTime := time.Now()
+	var startTime time.Time
 	for puller.Info("start pull"); puller.Reconnect(); puller.Warn("restart pull") {
 		if time.Since(startTime) < 5*time.Second {
 			time.Sleep(5 * time.Second)
