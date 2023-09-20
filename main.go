@@ -17,7 +17,7 @@ import (
 
 	"github.com/denisbrodbeck/machineid"
 	"github.com/google/uuid"
-	. "github.com/logrusorgru/aurora"
+	. "github.com/logrusorgru/aurora/v4"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
@@ -185,12 +185,20 @@ func Run(ctx context.Context, conf any) (err error) {
 		fmt.Print(Colorize(" "+plugin.Name+" ", BlackFg|RedBg|CrossedOutFm), " ")
 	}
 	fmt.Println()
-	fmt.Println(Bold(Cyan("官网地址: ")), Yellow("https://m7s.live"))
-	fmt.Println(Bold(Cyan("启动工程: ")), Yellow("https://github.com/langhuihui/monibuca"))
-	fmt.Println(Bold(Cyan("文档地址: ")), Yellow("https://docs.m7s.live"))
-	fmt.Println(Bold(Cyan("视频教程: ")), Yellow("https://space.bilibili.com/328443019/channel/collectiondetail?sid=514619"))
-	fmt.Println(Bold(Cyan("远程界面: ")), Yellow("https://console.monibuca.com"))
-	fmt.Println(Yellow("关注公众号：不卡科技，获取更多信息"))
+	if EngineConfig.LogLang == "zh" {
+		fmt.Println(Cyan("🌏 官网地址: ").Bold(), Yellow("https://monibuca.com"))
+		fmt.Println(Cyan("🔥 启动工程: ").Bold(), Yellow("https://github.com/langhuihui/monibuca"))
+		fmt.Println(Cyan("📄 文档地址: ").Bold(), Yellow("https://monibuca.com/docs/index.html"))
+		fmt.Println(Cyan("🎞 视频教程: ").Bold(), Yellow("https://space.bilibili.com/328443019/channel/collectiondetail?sid=514619"))
+		fmt.Println(Cyan("🖥 远程界面: ").Bold(), Yellow("https://console.monibuca.com"))
+		fmt.Println(Yellow("关注公众号：不卡科技，获取更多信息"))
+	} else {
+		fmt.Println(Cyan("🌏 WebSite: ").Bold(), Yellow("https://m7s.live"))
+		fmt.Println(Cyan("🔥 Github: ").Bold(), Yellow("https://github.com/langhuihui/monibuca"))
+		fmt.Println(Cyan("📄 Docs: ").Bold(), Yellow("https://docs.m7s.live"))
+		fmt.Println(Cyan("🎞 Videos: ").Bold(), Yellow("https://space.bilibili.com/328443019/channel/collectiondetail?sid=514619"))
+		fmt.Println(Cyan("🖥 Console: ").Bold(), Yellow("https://console.monibuca.com"))
+	}
 	rp := struct {
 		UUID     string `json:"uuid"`
 		Machine  string `json:"machine"`

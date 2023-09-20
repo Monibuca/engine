@@ -2,8 +2,6 @@ package track
 
 import (
 
-	// . "github.com/logrusorgru/aurora"
-
 	"time"
 
 	"github.com/pion/rtp"

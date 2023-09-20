@@ -7,7 +7,7 @@ import (
 	"time"
 	"unsafe"
 
-	. "github.com/logrusorgru/aurora"
+	. "github.com/logrusorgru/aurora/v4"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/common"
 	. "m7s.live/engine/v4/common"

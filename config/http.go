@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	. "github.com/logrusorgru/aurora"
+	"github.com/logrusorgru/aurora/v4"
 	"golang.org/x/sync/errgroup"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -33,6 +33,7 @@ type HTTPConfig interface {
 	GetHTTPConfig() *HTTP
 	Listen(ctx context.Context) error
 	Handle(string, http.Handler)
+	Handler(*http.Request) (http.Handler, string)
 	AddMiddleware(Middleware)
 }
 
@@ -60,6 +61,10 @@ func (config *HTTP) GetHTTPConfig() *HTTP {
 	return config
 }
 
+func (config *HTTP) Handler(r *http.Request) (h http.Handler, pattern string) {
+	return config.mux.Handler(r)
+}
+
 // ListenAddrs Listen http and https
 func (config *HTTP) Listen(ctx context.Context) error {
 	if config.mux == nil {
@@ -69,9 +74,9 @@ func (config *HTTP) Listen(ctx context.Context) error {
 	if config.ListenAddrTLS != "" && (config == &Global.HTTP || config.ListenAddrTLS != Global.ListenAddrTLS) {
 		g.Go(func() error {
 			if Global.LogLang == "zh" {
-				log.Info("🌐 https 监听在 ", Blink(config.ListenAddrTLS))
+				log.Info("🌐 https 监听在 ", aurora.Blink(config.ListenAddrTLS))
 			} else {
-				log.Info("🌐 https listen at ", Blink(config.ListenAddrTLS))
+				log.Info("🌐 https listen at ", aurora.Blink(config.ListenAddrTLS))
 			}
 			cer, _ := tls.X509KeyPair(LocalCert, LocalKey)
 			var server = http.Server{
@@ -111,9 +116,9 @@ func (config *HTTP) Listen(ctx context.Context) error {
 	if config.ListenAddr != "" && (config == &Global.HTTP || config.ListenAddr != Global.ListenAddr) {
 		g.Go(func() error {
 			if Global.LogLang == "zh" {
-				log.Info("🌐 http 监听在 ", Blink(config.ListenAddr))
+				log.Info("🌐 http 监听在 ", aurora.Blink(config.ListenAddr))
 			} else {
-				log.Info("🌐 http listen at ", Blink(config.ListenAddr))
+				log.Info("🌐 http listen at ", aurora.Blink(config.ListenAddr))
 			}
 			var server = http.Server{
 				Addr:         config.ListenAddr,

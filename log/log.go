@@ -1,14 +1,13 @@
 package log
 
 import (
-	// . "github.com/logrusorgru/aurora"
 	"io"
 
 	// "github.com/mattn/go-colorable"
 	"gopkg.in/yaml.v3"
 
 	// log "github.com/sirupsen/logrus"
-	. "github.com/logrusorgru/aurora"
+	. "github.com/logrusorgru/aurora/v4"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
