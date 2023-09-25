@@ -123,6 +123,10 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 	} else {
 		switch naluType {
 		case codec.NALU_STAPA, codec.NALU_STAPB:
+			if len(frame.Payload) <= naluType.Offset() {
+				vt.Error("invalid nalu size", zap.Int("naluType", int(naluType)))
+				return
+			}
 			for buffer := util.Buffer(frame.Payload[naluType.Offset():]); buffer.CanRead(); {
 				nextSize := int(buffer.ReadUint16())
 				if buffer.Len() >= nextSize {

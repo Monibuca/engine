@@ -7,7 +7,6 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/config"
 )
-
 type IPusher interface {
 	ISubscriber
 	Push() error
@@ -48,7 +47,7 @@ func (pub *Pusher) startPush(pusher IPusher) {
 				}
 				pusher.Error("push connect", zap.Error(err))
 				time.Sleep(time.Second * 5)
-				stream.Receive(pusher) // 通知stream移除订阅者
+				stream.Receive(Unsubscribe(pusher)) // 通知stream移除订阅者
 				if badPusher {
 					return
 				}

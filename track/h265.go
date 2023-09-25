@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
@@ -32,7 +33,9 @@ func NewH265(stream IStream, stuff ...any) (vt *H265) {
 
 func (vt *H265) WriteSliceBytes(slice []byte) {
 	t := codec.ParseH265NALUType(slice[0])
-	// fmt.Println("H265 NALU Type:", t)
+	if log.Trace {
+		vt.Trace("naluType", zap.Uint8("naluType", byte(t)))
+	}
 	switch t {
 	case codec.NAL_UNIT_VPS:
 		vt.VPS = slice
@@ -54,7 +57,7 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 				vt.WriteSequenceHead(extraData)
 			} else {
 				vt.Error("H265 BuildH265SeqHeaderFromVpsSpsPps", zap.Error(err))
-				vt.Stream.Close()
+				// vt.Stream.Close()
 			}
 		}
 	case
