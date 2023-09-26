@@ -24,8 +24,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
-	aac.SetStuff("aac", stream, byte(97), aac)
-	aac.SetStuff(stuff...)
+	aac.SetStuff("aac", byte(97), aac, stuff, stream)
 	if aac.BytesPool == nil {
 		aac.BytesPool = make(util.BytesPool, 17)
 	}

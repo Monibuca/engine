@@ -219,13 +219,14 @@ func ReadTsHeader(r io.Reader) (header MpegTsHeader, err error) {
 	// header.payloadUnitStartIndicator = uint8(h & 0x400000)
 
 	// | 1111 1111 | 0000 0000 | 0000 0000 | 0000 0000 |
-	if (h&0xff000000)>>24 != 0x47 {
-		err = errors.New("mpegts header sync error!")
-		return
-	}
 
 	// | 1111 1111 | 0000 0000 | 0000 0000 | 0000 0000 |
 	header.SyncByte = byte((h & 0xff000000) >> 24)
+
+	if header.SyncByte != 0x47 {
+		err = errors.New("mpegts header sync error!")
+		return
+	}
 
 	// | 0000 0000 | 1000 0000 | 0000 0000 | 0000 0000 |
 	header.TransportErrorIndicator = byte((h & 0x800000) >> 23)
@@ -541,9 +542,6 @@ func (s *MpegTsStream) Feed(ts io.Reader) (err error) {
 		lr.N = TS_PACKET_SIZE
 		if tsHeader, err = ReadTsHeader(&lr); err != nil {
 			return
-		}
-		if tsHeader.SyncByte != 0x47 {
-			return errors.New("sync byte error")
 		}
 		if tsHeader.Pid == PID_PAT {
 			if s.PAT, err = ReadPAT(&lr); err != nil {

@@ -19,8 +19,7 @@ type H264 struct {
 func NewH264(stream IStream, stuff ...any) (vt *H264) {
 	vt = &H264{}
 	vt.Video.CodecID = codec.CodecID_H264
-	vt.SetStuff("h264", byte(96), uint32(90000), stream, vt)
-	vt.SetStuff(stuff...)
+	vt.SetStuff("h264", byte(96), uint32(90000), vt, stuff, stream)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
 	}
@@ -34,10 +33,6 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	naluType := codec.ParseH264NALUType(slice[0])
 	if log.Trace {
 		vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))
-	}
-	if vt.Value.IFrame {
-		vt.AppendAuBytes(slice)
-		return
 	}
 	switch naluType {
 	case codec.NALU_SPS:
@@ -69,12 +64,18 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 		b.Write(vt.Video.PPS)
 		vt.WriteSequenceHead(b)
 	case codec.NALU_IDR_Picture:
+		if vt.Value.AUList.ByteLength > 0 && !vt.Value.IFrame {
+			vt.Flush()
+		}
 		vt.Value.IFrame = true
 		vt.AppendAuBytes(slice)
 	case codec.NALU_Non_IDR_Picture,
 		codec.NALU_Data_Partition_A,
 		codec.NALU_Data_Partition_B,
 		codec.NALU_Data_Partition_C:
+		if vt.Value.AUList.ByteLength > 0 {
+			vt.Flush()
+		}
 		vt.Value.IFrame = false
 		vt.AppendAuBytes(slice)
 	case codec.NALU_SEI:
@@ -82,6 +83,10 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	case codec.NALU_Access_Unit_Delimiter:
 	case codec.NALU_Filler_Data:
 	default:
+		if vt.Value.IFrame {
+			vt.AppendAuBytes(slice)
+			return
+		}
 		vt.Error("nalu type not support", zap.Int("type", int(naluType)))
 	}
 }

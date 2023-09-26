@@ -28,8 +28,7 @@ func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
 	g711.SampleSize = 8
 	g711.Channels = 1
 	g711.AVCCHead = []byte{(byte(g711.CodecID) << 4) | (1 << 1)}
-	g711.SetStuff(stream, uint32(8000), g711)
-	g711.SetStuff(stuff...)
+	g711.SetStuff(uint32(8000), g711, stuff, stream)
 	if g711.BytesPool == nil {
 		g711.BytesPool = make(util.BytesPool, 17)
 	}

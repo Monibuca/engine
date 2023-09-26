@@ -20,8 +20,7 @@ type H265 struct {
 func NewH265(stream IStream, stuff ...any) (vt *H265) {
 	vt = &H265{}
 	vt.Video.CodecID = codec.CodecID_H265
-	vt.SetStuff("h265", byte(96), uint32(90000), stream, vt)
-	vt.SetStuff(stuff...)
+	vt.SetStuff("h265", byte(96), uint32(90000), vt, stuff, stream)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
 	}
@@ -67,13 +66,20 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 		codec.NAL_UNIT_CODED_SLICE_IDR,
 		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 		codec.NAL_UNIT_CODED_SLICE_CRA:
+		if vt.Value.AUList.ByteLength > 0 && !vt.Value.IFrame {
+			vt.Flush()
+		}
 		vt.Value.IFrame = true
 		vt.AppendAuBytes(slice)
 	case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
+		if vt.Value.AUList.ByteLength > 0 {
+			vt.Flush()
+		}
 		vt.Value.IFrame = false
 		vt.AppendAuBytes(slice)
 	case codec.NAL_UNIT_SEI, codec.NAL_UNIT_SEI_SUFFIX:
 		vt.AppendAuBytes(slice)
+	case codec.NAL_UNIT_ACCESS_UNIT_DELIMITER:
 	default:
 		vt.Warn("nalu type not supported", zap.Uint("type", uint(t)))
 	}

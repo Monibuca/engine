@@ -164,6 +164,8 @@ func (av *Media) SetStuff(stuff ...any) {
 			av.BytesPool = v
 		case SpesificTrack:
 			av.SpesificTrack = v
+		case []any:
+			av.SetStuff(v...)
 		default:
 			av.Base.SetStuff(v)
 		}
