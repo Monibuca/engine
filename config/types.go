@@ -2,7 +2,9 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -75,14 +77,57 @@ func (c *Subscribe) GetSubscribeConfig() *Subscribe {
 }
 
 type Pull struct {
-	RePull      int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
-	PullOnStart map[string]string // 启动时拉流的列表
-	PullOnSub   map[string]string // 订阅时自动拉流的列表
-	Proxy       string            // 代理地址
+	RePull       int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
+	EnableRegexp bool              // 是否启用正则表达式
+	PullOnStart  map[string]string // 启动时拉流的列表
+	PullOnSub    map[string]string // 订阅时自动拉流的列表
+	Proxy        string            // 代理地址
 }
 
 func (p *Pull) GetPullConfig() *Pull {
 	return p
+}
+
+func (p *Pull) CheckPullOnStart(streamPath string) string {
+	if p.PullOnStart == nil {
+		return ""
+	}
+	url, ok := p.PullOnStart[streamPath]
+	if !ok && p.EnableRegexp {
+		for k, url := range p.PullOnStart {
+			if r, err := regexp.Compile(k); err != nil {
+				if group := r.FindStringSubmatch(streamPath); group != nil {
+					for i, value := range group {
+						url = strings.Replace(url, fmt.Sprintf("$%d", i), value, -1)
+					}
+					return url
+				}
+			}
+			return ""
+		}
+	}
+	return url
+}
+
+func (p *Pull) CheckPullOnSub(streamPath string) string {
+	if p.PullOnSub == nil {
+		return ""
+	}
+	url, ok := p.PullOnSub[streamPath]
+	if !ok && p.EnableRegexp {
+		for k, url := range p.PullOnSub {
+			if r, err := regexp.Compile(k); err == nil {
+				if group := r.FindStringSubmatch(streamPath); group != nil {
+					for i, value := range group {
+						url = strings.Replace(url, fmt.Sprintf("$%d", i), value, -1)
+					}
+					return url
+				}
+			}
+			return ""
+		}
+	}
+	return url
 }
 
 func (p *Pull) AddPullOnStart(streamPath string, url string) {

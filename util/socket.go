@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -83,7 +84,57 @@ func ReturnError(code int, msg string, rw http.ResponseWriter, r *http.Request) 
 		}
 	}
 }
-
+func ReturnFetchList[T any](fetch func() []T, rw http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	isYaml := query.Get("format") == "yaml"
+	isJson := query.Get("format") == "json"
+	pageSize := query.Get("pageSize")
+	pageNum := query.Get("pageNum")
+	data := fetch()
+	var output any
+	output = data
+	if pageSize != "" && pageNum != "" {
+		pageSizeInt, _ := strconv.Atoi(pageSize)
+		pageNumInt, _ := strconv.Atoi(pageNum)
+		if pageSizeInt > 0 && pageNumInt > 0 {
+			start := (pageNumInt - 1) * pageSizeInt
+			end := pageNumInt * pageSizeInt
+			if start > len(data) {
+				start = len(data)
+			}
+			if end > len(data) {
+				end = len(data)
+			}
+			output = map[string]any{
+				"total":    len(data),
+				"list":     data[start:end],
+				"pageSize": pageSizeInt,
+				"pageNum":  pageNumInt,
+			}
+		}
+	}
+	rw.Header().Set("Content-Type", Conditoinal(isYaml, "text/yaml", "application/json"))
+	if isYaml {
+		if err := yaml.NewEncoder(rw).Encode(output); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
+	} else if isJson {
+		if err := json.NewEncoder(rw).Encode(APIResult{
+			Code:    0,
+			Data:    output,
+			Message: "ok",
+		}); err != nil {
+			json.NewEncoder(rw).Encode(APIError{
+				Code:    APIErrorJSONEncode,
+				Message: err.Error(),
+			})
+		}
+	} else {
+		if err := json.NewEncoder(rw).Encode(output); err != nil {
+			http.Error(rw, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
 func ReturnFetchValue[T any](fetch func() T, rw http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	isYaml := query.Get("format") == "yaml"
