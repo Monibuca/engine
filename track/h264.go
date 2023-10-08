@@ -64,18 +64,12 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 		b.Write(vt.Video.PPS)
 		vt.WriteSequenceHead(b)
 	case codec.NALU_IDR_Picture:
-		if vt.Value.AUList.ByteLength > 0 && !vt.Value.IFrame {
-			vt.Flush()
-		}
 		vt.Value.IFrame = true
 		vt.AppendAuBytes(slice)
 	case codec.NALU_Non_IDR_Picture,
 		codec.NALU_Data_Partition_A,
 		codec.NALU_Data_Partition_B,
 		codec.NALU_Data_Partition_C:
-		if vt.Value.AUList.ByteLength > 0 {
-			vt.Flush()
-		}
 		vt.Value.IFrame = false
 		vt.AppendAuBytes(slice)
 	case codec.NALU_SEI:

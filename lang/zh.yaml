@@ -28,6 +28,7 @@ initialize: 初始化
 created:  已创建
 create:   创建
 timeout:  超时
+"track available": 轨道可用
 track:    轨道
 "track timeout": 轨道超时
 "last writetime": 最后写入时间

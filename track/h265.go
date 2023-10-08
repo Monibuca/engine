@@ -66,15 +66,9 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 		codec.NAL_UNIT_CODED_SLICE_IDR,
 		codec.NAL_UNIT_CODED_SLICE_IDR_N_LP,
 		codec.NAL_UNIT_CODED_SLICE_CRA:
-		if vt.Value.AUList.ByteLength > 0 && !vt.Value.IFrame {
-			vt.Flush()
-		}
 		vt.Value.IFrame = true
 		vt.AppendAuBytes(slice)
 	case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
-		if vt.Value.AUList.ByteLength > 0 {
-			vt.Flush()
-		}
 		vt.Value.IFrame = false
 		vt.AppendAuBytes(slice)
 	case codec.NAL_UNIT_SEI, codec.NAL_UNIT_SEI_SUFFIX:

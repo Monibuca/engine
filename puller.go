@@ -48,8 +48,14 @@ func (pub *Puller) startPull(puller IPuller) {
 	if i := strings.Index(streamPath, "?"); i >= 0 {
 		streamPath = streamPath[:i]
 	}
-	if _, loaded := Pullers.LoadOrStore(streamPath, puller); loaded {
-		puller.Error("puller already exists")
+	if oldPuller, loaded := Pullers.LoadOrStore(streamPath, puller); loaded {
+		pub := oldPuller.(IPuller).GetPublisher()
+		stream = pub.Stream
+		if stream != nil {
+			puller.Error("puller already exists", zap.Int8("streamState", int8(stream.State)))
+		} else {
+			puller.Error("puller already exists", zap.Time("createAt", pub.StartTime))
+		}
 		return
 	}
 	defer func() {
