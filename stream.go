@@ -286,7 +286,7 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		return s, false
 	} else {
 		s.Subscribers.Init()
-		s.actionChan.Init(1)
+		s.actionChan.Init(10)
 		s.Info("created")
 		go s.run()
 		return s, true
