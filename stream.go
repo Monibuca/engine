@@ -120,8 +120,13 @@ type StreamTimeoutConfig struct {
 type Tracks struct {
 	sync.Map
 	MainVideo   *track.Video
+	MainAudio   *track.Audio
 	SEI         *track.Data[[]byte]
 	marshalLock sync.Mutex
+}
+
+func (tracks *Tracks) HasAV() bool {
+	return tracks.MainVideo != nil && tracks.MainAudio != nil
 }
 
 func (tracks *Tracks) Range(f func(name string, t Track)) {
@@ -143,6 +148,9 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 			v.SEIReader.Ring = tracks.SEI.Ring
 		}
 	case *track.Audio:
+		if tracks.MainAudio == nil {
+			tracks.MainAudio = v
+		}
 		if tracks.MainVideo != nil {
 			v.Narrow()
 		}
@@ -328,11 +336,14 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
 		case STATE_PUBLISHING:
 			stateEvent = SEtrackAvaliable{event}
+			r.Subscribers.SendInviteTrack(r)
+			//订阅者等待音视频轨道超时了，放弃等待，订阅成功
+			r.Subscribers.AbortWait()
 			r.Subscribers.Broadcast(stateEvent)
 			if puller, ok := r.Publisher.(IPuller); ok {
 				puller.OnConnected()
 			}
-			r.timeout.Reset(r.PublishTimeout) // 检测track的存活度
+			r.timeout.Reset(time.Second * 5) // 5秒心跳，检测track的存活度
 		case STATE_WAITCLOSE:
 			stateEvent = SEwaitClose{event}
 			if r.IdleTimeout > 0 {
@@ -480,10 +491,9 @@ func (s *Stream) run() {
 				}
 				if s.State == STATE_WAITTRACK {
 					s.action(ACTION_TRACKAVAILABLE)
+				} else {
+					s.timeout.Reset(time.Second * 5)
 				}
-				s.timeout.Reset(time.Second * 5)
-				//订阅者等待音视频轨道超时了，放弃等待，订阅成功
-				s.Subscribers.AbortWait()
 			} else {
 				s.Debug("timeout", timeOutInfo)
 				s.action(ACTION_TIMEOUT)
@@ -610,8 +620,9 @@ func (s *Stream) run() {
 					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubVideo {
 						s.Subscribers.AbortWait()
 					}
-					// 这里重置的目的是当PublishTimeout设置很大的情况下，需要及时取消订阅者的等待
-					s.timeout.Reset(time.Second * 5)
+					if s.Tracks.HasAV() {
+						s.action(ACTION_TRACKAVAILABLE)
+					}
 				} else {
 					v.Reject(ErrBadTrackName)
 				}

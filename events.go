@@ -94,3 +94,8 @@ func TryInvitePublish(streamPath string) {
 		EventBus <- InvitePublish{Event: CreateEvent(streamPath)}
 	}
 }
+// InviteTrackEvent 邀请推送指定 Track 事件(转码需要)
+type InviteTrack struct {
+	Event[string]
+	*Stream
+}

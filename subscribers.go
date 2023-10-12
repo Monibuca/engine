@@ -86,6 +86,32 @@ func (s *Subscribers) OnPublisherLost(event StateEvent) {
 	})
 }
 
+// SendInviteTrack 广播需要的 Track（转码插件可以用到）
+func (s *Subscribers) SendInviteTrack(stream *Stream) {
+	var video = map[string]struct{}{}
+	var audio = map[string]struct{}{}
+	for wait := range s.waits {
+		for _, name := range wait.video {
+			video[name] = struct{}{}
+		}
+		for _, name := range wait.audio {
+			audio[name] = struct{}{}
+		}
+	}
+	for v := range video {
+		EventBus <- InviteTrack{
+			Event:  CreateEvent(v),
+			Stream: stream,
+		}
+	}
+	for a := range audio {
+		EventBus <- InviteTrack{
+			Event:  CreateEvent(a),
+			Stream: stream,
+		}
+	}
+}
+
 func (s *Subscribers) AbortWait() {
 	s.waitAborted = true
 	for wait := range s.waits {

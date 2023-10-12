@@ -98,7 +98,7 @@ func (config Config) Unmarshal(s any) {
 	for k, v := range config {
 		name, ok := nameMap[k]
 		if !ok {
-			log.Error("no config named:", k)
+			log.Warn("no config named:", k)
 			continue
 		}
 		// 需要被写入的字段
