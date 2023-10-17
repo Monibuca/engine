@@ -11,14 +11,14 @@ import (
 type Subscribers struct {
 	public      map[ISubscriber]*waitTracks
 	internal    map[ISubscriber]*waitTracks
-	waits       map[*waitTracks]struct{}
+	waits       map[*waitTracks]ISubscriber
 	waitAborted bool // 不再等待了
 }
 
 func (s *Subscribers) Init() {
 	s.public = make(map[ISubscriber]*waitTracks)
 	s.internal = make(map[ISubscriber]*waitTracks)
-	s.waits = make(map[*waitTracks]struct{})
+	s.waits = make(map[*waitTracks]ISubscriber)
 }
 
 func (s *Subscribers) MarshalJSON() ([]byte, error) {
@@ -88,27 +88,21 @@ func (s *Subscribers) OnPublisherLost(event StateEvent) {
 
 // SendInviteTrack 广播需要的 Track（转码插件可以用到）
 func (s *Subscribers) SendInviteTrack(stream *Stream) {
-	var video = map[string]struct{}{}
-	var audio = map[string]struct{}{}
-	for wait := range s.waits {
+	var video = map[string]ISubscriber{}
+	var audio = map[string]ISubscriber{}
+	for wait, suber := range s.waits {
 		for _, name := range wait.video {
-			video[name] = struct{}{}
+			video[name] = suber
 		}
 		for _, name := range wait.audio {
-			audio[name] = struct{}{}
+			audio[name] = suber
 		}
 	}
-	for v := range video {
-		EventBus <- InviteTrack{
-			Event:  CreateEvent(v),
-			Stream: stream,
-		}
+	for v, suber := range video {
+		InviteTrack(v, suber)
 	}
-	for a := range audio {
-		EventBus <- InviteTrack{
-			Event:  CreateEvent(a),
-			Stream: stream,
-		}
+	for a, suber := range audio {
+		InviteTrack(a, suber)
 	}
 }
 
@@ -130,9 +124,18 @@ func (s *Subscribers) Find(id string) ISubscriber {
 }
 
 func (s *Subscribers) Delete(suber ISubscriber) {
-	delete(s.public, suber)
 	io := suber.GetSubscriber()
-	io.Info("suber -1", zap.Int("remains", s.Len()))
+	for _, reader := range io.readers {
+		reader.Track.ReaderCount.Add(-1)
+	}
+	if _, ok := s.public[suber]; ok {
+		delete(s.public, suber)
+		io.Info("suber -1", zap.Int("remains", s.Len()))
+	}
+	if _, ok := s.internal[suber]; ok {
+		delete(s.internal, suber)
+		io.Info("innersuber -1", zap.Int("remains", len(s.internal)))
+	}
 	if config.Global.EnableSubEvent {
 		EventBus <- UnsubscribeEvent{CreateEvent(suber)}
 	}
@@ -151,7 +154,7 @@ func (s *Subscribers) Add(suber ISubscriber, wait *waitTracks) {
 		}
 	}
 	if wait.NeedWait() {
-		s.waits[wait] = struct{}{}
+		s.waits[wait] = suber
 	} else {
 		wait.Resolve()
 	}

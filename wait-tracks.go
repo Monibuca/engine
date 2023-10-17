@@ -32,7 +32,11 @@ func (w *waitTrackNames) Wait(names ...string) {
 func (w *waitTrackNames) StopWait() {
 	*w = nil
 }
-
+func (w waitTrackNames) InviteTrack(suber ISubscriber) {
+	if len(w) > 0 {
+		InviteTrack(w[0], suber)
+	}
+}
 // Accept 检查名称是否在等待候选项中
 func (w *waitTrackNames) Accept(name string) bool {
 	if !w.Waiting() {

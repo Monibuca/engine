@@ -97,6 +97,7 @@ func (bt *Base[T, F]) Dispose() {
 }
 
 type Track interface {
+	GetReaderCount() int32
 	GetName() string
 	GetBPS() int
 	GetFPS() int

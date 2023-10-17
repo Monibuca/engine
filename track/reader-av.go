@@ -44,6 +44,7 @@ func (r *AVRingReader) DecConfChanged() bool {
 }
 
 func NewAVRingReader(t *Media) *AVRingReader {
+	t.ReaderCount.Add(1)
 	return &AVRingReader{
 		Track: t,
 	}

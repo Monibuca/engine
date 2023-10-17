@@ -121,6 +121,7 @@ type TrackPlayer struct {
 type Subscriber struct {
 	IO
 	Config      *config.Subscribe
+	readers 	 []*track.AVRingReader
 	TrackPlayer `json:"-" yaml:"-"`
 }
 
@@ -149,6 +150,7 @@ func (s *Subscriber) OnEvent(event any) {
 
 func (s *Subscriber) CreateTrackReader(t *track.Media) (result *track.AVRingReader) {
 	result = track.NewAVRingReader(t)
+	s.readers = append(s.readers, result)
 	result.Logger = s.With(zap.String("track", t.Name))
 	return
 }

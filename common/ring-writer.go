@@ -1,6 +1,8 @@
 package common
 
 import (
+	"sync/atomic"
+
 	"m7s.live/engine/v4/util"
 )
 
@@ -13,6 +15,7 @@ var EmptyLocker emptyLocker
 
 type RingWriter[T any, F IDataFrame[T]] struct {
 	*util.Ring[F] `json:"-" yaml:"-"`
+	ReaderCount   atomic.Int32 `json:"-" yaml:"-"`
 	pool          *util.Ring[F]
 	poolSize      int
 	Size          int
@@ -108,4 +111,8 @@ func (rb *RingWriter[T, F]) Step() (normal bool) {
 	rb.Value.SetSequence(nextSeq)
 	rb.LastValue.Ready()
 	return
+}
+
+func (rb *RingWriter[T, F]) GetReaderCount() int32 {
+	return rb.ReaderCount.Load()
 }

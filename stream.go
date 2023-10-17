@@ -125,10 +125,6 @@ type Tracks struct {
 	marshalLock sync.Mutex
 }
 
-func (tracks *Tracks) HasAV() bool {
-	return tracks.MainVideo != nil && tracks.MainAudio != nil
-}
-
 func (tracks *Tracks) Range(f func(name string, t Track)) {
 	tracks.Map.Range(func(k, v any) bool {
 		f(k.(string), v.(Track))
@@ -337,8 +333,6 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 		case STATE_PUBLISHING:
 			stateEvent = SEtrackAvaliable{event}
 			r.Subscribers.SendInviteTrack(r)
-			//订阅者等待音视频轨道超时了，放弃等待，订阅成功
-			r.Subscribers.AbortWait()
 			r.Subscribers.Broadcast(stateEvent)
 			if puller, ok := r.Publisher.(IPuller); ok {
 				puller.OnConnected()
@@ -492,6 +486,7 @@ func (s *Stream) run() {
 				if s.State == STATE_WAITTRACK {
 					s.action(ACTION_TRACKAVAILABLE)
 				} else {
+					s.Subscribers.AbortWait()
 					s.timeout.Reset(time.Second * 5)
 				}
 			} else {
@@ -573,10 +568,18 @@ func (s *Stream) run() {
 					s.Tracks.Range(func(name string, t Track) {
 						waits.Accept(t)
 					})
-					if !pubConfig.PubAudio || s.Subscribers.waitAborted {
+					if !pubConfig.PubAudio {
+						waits.audio.StopWait()
+					} else if s.State == STATE_PUBLISHING && len(waits.audio) > 0 {
+						waits.audio.InviteTrack(suber)
+					} else if s.Subscribers.waitAborted {
 						waits.audio.StopWait()
 					}
-					if !pubConfig.PubVideo || s.Subscribers.waitAborted {
+					if !pubConfig.PubVideo {
+						waits.video.StopWait()
+					} else if s.State == STATE_PUBLISHING && len(waits.video) > 0 {
+						waits.video.InviteTrack(suber)
+					} else if s.Subscribers.waitAborted {
 						waits.video.StopWait()
 					}
 				}
@@ -620,7 +623,7 @@ func (s *Stream) run() {
 					if _, ok := v.Value.(*track.Audio); ok && !pubConfig.PubVideo {
 						s.Subscribers.AbortWait()
 					}
-					if s.Tracks.HasAV() {
+					if (s.Tracks.MainVideo != nil || !pubConfig.PubVideo) && (!pubConfig.PubAudio || s.Tracks.MainAudio != nil) {
 						s.action(ACTION_TRACKAVAILABLE)
 					}
 				} else {
