@@ -356,9 +356,18 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.Subscribers.Dispose()
 			r.actionChan.Close()
 		}
+		if actionCoust := time.Since(event.Time); actionCoust > 100*time.Millisecond {
+			r.Warn("action timeout", zap.String("action", action.String()), zap.Duration("cost", actionCoust))
+		}
 		EventBus <- stateEvent
+		if actionCoust := time.Since(event.Time); actionCoust > 100*time.Millisecond {
+			r.Warn("action timeout after eventbus", zap.String("action", action.String()), zap.Duration("cost", actionCoust))
+		}
 		if r.Publisher != nil {
 			r.Publisher.OnEvent(stateEvent)
+			if actionCoust := time.Since(event.Time); actionCoust > 100*time.Millisecond {
+				r.Warn("action timeout after send to publisher", zap.String("action", action.String()), zap.Duration("cost", actionCoust))
+			}
 		}
 	} else {
 		r.Debug("wrong action", zap.String("action", action.String()))

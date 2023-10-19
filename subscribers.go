@@ -126,7 +126,7 @@ func (s *Subscribers) Find(id string) ISubscriber {
 func (s *Subscribers) Delete(suber ISubscriber) {
 	io := suber.GetSubscriber()
 	for _, reader := range io.readers {
-		reader.Track.ReaderCount.Add(-1)
+		reader.Track.Debug("reader -1", zap.Int32("count", reader.Track.ReaderCount.Add(-1)))
 	}
 	if _, ok := s.public[suber]; ok {
 		delete(s.public, suber)
