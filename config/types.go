@@ -145,9 +145,10 @@ func (p *Pull) AddPullOnSub(streamPath string, url string) {
 }
 
 type Push struct {
-	RePush   int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
-	PushList map[string]string // 自动推流列表
-	Proxy    string            // 代理地址
+	EnableRegexp bool              // 是否启用正则表达式
+	RePush       int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
+	PushList     map[string]string // 自动推流列表
+	Proxy        string            // 代理地址
 }
 
 func (p *Push) GetPushConfig() *Push {
@@ -159,6 +160,24 @@ func (p *Push) AddPush(url string, streamPath string) {
 		p.PushList = make(map[string]string)
 	}
 	p.PushList[streamPath] = url
+}
+
+func (p *Push) CheckPush(streamPath string) string {
+	url, ok := p.PushList[streamPath]
+	if !ok && p.EnableRegexp {
+		for k, url := range p.PushList {
+			if r, err := regexp.Compile(k); err == nil {
+				if group := r.FindStringSubmatch(streamPath); group != nil {
+					for i, value := range group {
+						url = strings.Replace(url, fmt.Sprintf("$%d", i), value, -1)
+					}
+					return url
+				}
+			}
+			return ""
+		}
+	}
+	return url
 }
 
 type Console struct {
@@ -180,6 +199,7 @@ type Engine struct {
 	LogLang             string        `default:"zh"`    //日志语言
 	LogLevel            string        `default:"info"`  //日志级别
 	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
+	RTPFlushMode        int           `default:"0"`     //RTP分帧写入模式，0：按 Marker 标志位，1：按时间戳
 	EventBusSize        int           `default:"10"`    //事件总线大小
 	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
 	DisableAll          bool          `default:"false"` //禁用所有插件

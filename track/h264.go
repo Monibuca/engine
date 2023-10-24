@@ -2,10 +2,12 @@ package track
 
 import (
 	"io"
+	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
@@ -116,6 +118,17 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 		vt.lostFlag = true
 		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq), zap.Uint16("lastSeq2", vt.lastSeq2))
 	}
+	if config.Global.RTPFlushMode == 1 {
+		if vt.Value.AUList.ByteLength == 0 {
+			vt.generateTimestamp(frame.Timestamp)
+		} else if vt.Value.PTS != time.Duration(frame.Timestamp) {
+			if !vt.dcChanged && vt.Value.IFrame {
+				vt.insertDCRtp()
+			}
+			vt.Flush()
+			vt.generateTimestamp(frame.Timestamp)
+		}
+	}
 	rv := vt.Value
 	if naluType := frame.H264Type(); naluType < 24 {
 		vt.WriteSliceBytes(frame.Payload)
@@ -145,9 +158,15 @@ func (vt *H264) WriteRTPFrame(frame *RTPFrame) {
 				vt.Error("fu have no start")
 				return
 			}
+			if !util.Bit1(frame.Payload[1], 1) {
+				return
+			}
 		}
 	}
-	if frame.Marker && rv.AUList.ByteLength > 0 {
+	if rv.AUList.ByteLength == 0 {
+		return
+	}
+	if config.Global.RTPFlushMode == 0 && frame.Marker {
 		vt.generateTimestamp(frame.Timestamp)
 		if !vt.dcChanged && rv.IFrame {
 			vt.insertDCRtp()
