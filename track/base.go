@@ -61,7 +61,7 @@ type SpesificTrack interface {
 	CompleteRTP(*AVFrame)
 	CompleteAVCC(*AVFrame)
 	WriteSliceBytes([]byte)
-	WriteRTPFrame(*RTPFrame)
+	WriteRTPFrame(*util.ListItem[RTPFrame])
 	generateTimestamp(uint32)
 	WriteSequenceHead([]byte)
 	GetNALU_SEI() *util.ListItem[util.Buffer]

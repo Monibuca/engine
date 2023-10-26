@@ -16,6 +16,10 @@ type ListItem[T any] struct {
 	reset     bool // 是否需要重置
 }
 
+func NewListItem[T any](value T) *ListItem[T] {
+	return &ListItem[T]{Value: value, reset: true}
+}
+
 func (item *ListItem[T]) InsertBefore(insert *ListItem[T]) {
 	if insert.list != nil {
 		panic("item already in list")

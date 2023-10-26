@@ -209,9 +209,7 @@ func Run(ctx context.Context, conf any) (err error) {
 	}{UUID, id, EngineConfig.GetInstanceId(), version, runtime.GOOS, runtime.GOARCH}
 	json.NewEncoder(contentBuf).Encode(&rp)
 	req.Body = io.NopCloser(contentBuf)
-	if EngineConfig.Secret != "" {
-		EngineConfig.OnEvent(ctx)
-	}
+	EngineConfig.OnEvent(ctx)
 	go func() {
 		var c http.Client
 		reportTimer := time.NewTimer(time.Minute)

@@ -191,18 +191,17 @@ type Engine struct {
 	Publish
 	Subscribe
 	HTTP
-	EnableAVCC     bool `default:"true"` //启用AVCC格式，rtmp、http-flv协议使用
-	EnableRTP      bool `default:"true"` //启用RTP格式，rtsp、webrtc等协议使用
-	EnableSubEvent bool `default:"true"` //启用订阅事件,禁用可以提高性能
-	EnableAuth     bool `default:"true"` //启用鉴权
 	Console
+	EnableAVCC          bool          `default:"true"`  //启用AVCC格式，rtmp、http-flv协议使用
+	EnableRTP           bool          `default:"true"`  //启用RTP格式，rtsp、webrtc等协议使用,已废弃，在 rtp 下面配置
+	EnableSubEvent      bool          `default:"true"`  //启用订阅事件,禁用可以提高性能
+	EnableAuth          bool          `default:"true"`  //启用鉴权
 	LogLang             string        `default:"zh"`    //日志语言
 	LogLevel            string        `default:"info"`  //日志级别
-	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲长度
-	RTPFlushMode        int           `default:"0"`     //RTP分帧写入模式，0：按 Marker 标志位，1：按时间戳
 	EventBusSize        int           `default:"10"`    //事件总线大小
 	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
 	DisableAll          bool          `default:"false"` //禁用所有插件
+	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲区长度
 	PoolSize            int           //内存池大小
 	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
 	reportStream        quic.Stream   // console server connection
@@ -310,10 +309,12 @@ func (cfg *Engine) OnEvent(event any) {
 		}
 	case context.Context:
 		util.RTPReorderBufferLen = uint16(cfg.RTPReorderBufferLen)
-		if strings.HasPrefix(cfg.Console.Server, "wss") {
-			go cfg.WsRemote()
-		} else {
-			go cfg.WtRemote(v)
+		if cfg.Secret != "" && cfg.Server != "" {
+			if strings.HasPrefix(cfg.Console.Server, "wss") {
+				go cfg.WsRemote()
+			} else {
+				go cfg.WtRemote(v)
+			}
 		}
 	}
 }

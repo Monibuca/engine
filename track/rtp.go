@@ -19,12 +19,11 @@ func (av *Media) WriteRTPPack(p *rtp.Packet) {
 	p.PaddingSize = 0
 	frame.Packet = p
 	av.Value.BytesIn += len(frame.Payload) + 12
-	av.Value.RTP.PushValue(frame)
 	av.lastSeq2 = av.lastSeq
 	av.lastSeq = frame.SequenceNumber
 	av.DropCount += int(av.lastSeq - av.lastSeq2 - 1)
 	if len(p.Payload) > 0 {
-		av.WriteRTPFrame(&frame)
+		av.WriteRTPFrame(util.NewListItem(frame))
 	}
 }
 
@@ -35,8 +34,7 @@ func (av *Media) WriteRTP(raw *util.ListItem[RTPFrame]) {
 		av.Value.BytesIn += len(frame.Value.Payload) + 12
 		av.DropCount += int(av.lastSeq - av.lastSeq2 - 1)
 		if len(frame.Value.Payload) > 0 {
-			av.Value.RTP.Push(frame)
-			av.WriteRTPFrame(&frame.Value)
+			av.WriteRTPFrame(frame)
 			// av.Info("rtp", zap.Uint32("ts", (frame.Value.Timestamp)), zap.Int("len", len(frame.Value.Payload)), zap.Bool("marker", frame.Value.Marker), zap.Uint16("seq", frame.Value.SequenceNumber))
 		} else {
 			av.Debug("rtp payload is empty", zap.Uint32("ts", (frame.Value.Timestamp)), zap.Any("ext", frame.Value.GetExtensionIDs()), zap.Uint16("seq", frame.Value.SequenceNumber))

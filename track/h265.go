@@ -2,12 +2,10 @@ package track
 
 import (
 	"io"
-	"time"
 
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
-	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
@@ -138,18 +136,8 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 	return
 }
 
-func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
-	if config.Global.RTPFlushMode == 1 {
-		if vt.Value.AUList.ByteLength == 0 {
-			vt.generateTimestamp(frame.Timestamp)
-		} else if vt.Value.PTS != time.Duration(frame.Timestamp) {
-			if !vt.dcChanged && vt.Value.IFrame {
-				vt.insertDCRtp()
-			}
-			vt.Flush()
-			vt.generateTimestamp(frame.Timestamp)
-		}
-	}
+func (vt *H265) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
+	frame := &rtpItem.Value
 	rv := vt.Value
 	// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
 	var usingDonlField bool
@@ -189,7 +177,7 @@ func (vt *H265) WriteRTPFrame(frame *RTPFrame) {
 	default:
 		vt.WriteSliceBytes(frame.Payload)
 	}
-	if config.Global.RTPFlushMode == 0 && frame.Marker {
+	if frame.Marker {
 		vt.generateTimestamp(frame.Timestamp)
 		if !vt.dcChanged && rv.IFrame {
 			vt.insertDCRtp()
