@@ -325,7 +325,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int)
 	pullConf := conf.GetPullConfig()
 	if save < 2 {
 		zurl := zap.String("url", url)
-		zpath := zap.String("path", streamPath)
+		zpath := zap.String("stream", streamPath)
 		opt.Info("pull", zpath, zurl)
 		puller.init(streamPath, url, pullConf)
 		opt.AssignPubConfig(puller.GetPublisher())

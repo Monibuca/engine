@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -479,7 +480,7 @@ func (s *Stream) run() {
 							s.Warn("no tracks")
 							lost = true
 						} else if s.Publisher != nil && s.Publisher.IsClosed() {
-							s.Warn("publish is closed")
+							s.Warn("publish is closed", zap.Error(context.Cause(s.Publisher.GetPublisher())), zap.Error(Engine.Err()))
 							lost = true
 						}
 					}

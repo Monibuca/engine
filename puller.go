@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"context"
 	"io"
 	"strings"
 	"time"
@@ -86,13 +85,7 @@ func (pub *Puller) startPull(puller IPuller) {
 				puller.Error("pull publish", zap.Error(err))
 				return
 			}
-			s := puber.Stream
-			if stream != s && stream != nil { // 这段代码说明老流已经中断，创建了新流，需要把track置空，从而避免复用
-				puber.AudioTrack = nil
-				puber.VideoTrack = nil
-				puber.Context, puber.CancelFunc = context.WithCancel(Engine) // 老流的上下文已经取消，需要重新创建
-			}
-			stream = s
+			stream = puber.Stream
 			badPuller = false
 			if err = puller.Pull(); err != nil && !puller.IsShutdown() {
 				puller.Error("pull interrupt", zap.Error(err))
