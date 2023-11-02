@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"errors"
+	"fmt"
 	"io"
 	"net/url"
 	"reflect"
@@ -110,11 +111,11 @@ func (i *IO) close(err StopError) bool {
 		return false
 	}
 	i.Info("close", err...)
-	if i.Closer != nil {
-		i.Closer.Close()
-	}
 	if i.CancelCauseFunc != nil {
 		i.CancelCauseFunc(err)
+	}
+	if i.Closer != nil {
+		i.Closer.Close()
 	}
 	return true
 }
@@ -177,10 +178,6 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if s == nil {
 		return ErrBadStreamName
 	}
-	if Engine.Err() != nil {
-		return Engine.Err()
-	}
-	io.SetParentCtx(util.Conditoinal(io.Context == nil || io.Err() != nil, Engine.Context, io.Context))
 	if io.Stream == nil { //初次
 		if io.Type == "" {
 			io.Type = reflect.TypeOf(specific).Elem().Name()
@@ -199,10 +196,20 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	io.Stream = s
 	io.Spesific = specific
 	io.StartTime = time.Now()
+	if io.Context == nil {
+		io.Debug("create context")
+		io.SetParentCtx(Engine.Context)
+	} else if io.IsClosed() {
+		io.Debug("recreate context")
+		io.SetParentCtx(Engine.Context)
+	} else {
+		io.Debug("warp context")
+		io.SetParentCtx(io.Context)
+	}
 	if v, ok := specific.(IPublisher); ok {
 		puber := v.GetPublisher()
 		conf := puber.Config
-		io.Info("publish")
+		io.Info("publish", zap.String("ptr", fmt.Sprintf("%p", io.Context)))
 		s.pubLocker.Lock()
 		defer s.pubLocker.Unlock()
 		oldPublisher := s.Publisher

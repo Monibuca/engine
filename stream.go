@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -480,7 +481,7 @@ func (s *Stream) run() {
 							s.Warn("no tracks")
 							lost = true
 						} else if s.Publisher != nil && s.Publisher.IsClosed() {
-							s.Warn("publish is closed", zap.Error(context.Cause(s.Publisher.GetPublisher())), zap.Error(Engine.Err()))
+							s.Warn("publish is closed", zap.Error(context.Cause(s.Publisher.GetPublisher())), zap.String("ptr", fmt.Sprintf("%p", s.Publisher.GetPublisher().Context)))
 							lost = true
 						}
 					}
