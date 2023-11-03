@@ -60,6 +60,7 @@ func (g711 *G711) WriteAVCC(ts uint32, frame *util.BLL) error {
 
 func (g711 *G711) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 	frame := &rtpItem.Value
+	g711.Value.RTP.Push(rtpItem)
 	if g711.SampleRate != 90000 {
 		g711.generateTimestamp(uint32(uint64(frame.Timestamp) * 90000 / uint64(g711.SampleRate)))
 	}

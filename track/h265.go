@@ -139,6 +139,7 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 func (vt *H265) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 	frame := &rtpItem.Value
 	rv := vt.Value
+	rv.RTP.Push(rtpItem)
 	// TODO: DONL may need to be parsed if `sprop-max-don-diff` is greater than 0 on the RTP stream.
 	var usingDonlField bool
 	var buffer = util.Buffer(frame.Payload)

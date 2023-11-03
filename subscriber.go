@@ -121,7 +121,7 @@ type TrackPlayer struct {
 type Subscriber struct {
 	IO
 	Config      *config.Subscribe
-	readers 	 []*track.AVRingReader
+	readers     []*track.AVRingReader
 	TrackPlayer `json:"-" yaml:"-"`
 }
 
@@ -263,7 +263,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		}
 
 		sendAudioFrame = func(frame *AVFrame) {
-			// fmt.Println("a", frame.Sequence, frame.AbsTime, s.AudioReader.AbsTime)
+			// fmt.Println("a", frame.Sequence, frame.Timestamp, s.AudioReader.AbsTime)
 			delta := uint32(s.AudioReader.SkipTs / time.Millisecond * time.Duration(s.AudioReader.Track.SampleRate) / 1000)
 			frame.RTP.Range(func(ap RTPFrame) bool {
 				audioSeq++
