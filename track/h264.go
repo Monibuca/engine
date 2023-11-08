@@ -36,6 +36,10 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 	if len(slice) > 4 && bytes.Equal(slice[:4], codec.NALU_Delimiter2) {
 		slice = slice[4:] // 有些设备厂商不规范，所以需要移除前导的 00 00 00 01
 	}
+	if len(slice) == 0 {
+		vt.Error("H264 WriteSliceBytes got empty slice")
+		return
+	}
 	naluType := codec.ParseH264NALUType(slice[0])
 	if log.Trace {
 		vt.Trace("naluType", zap.Uint8("naluType", naluType.Byte()))

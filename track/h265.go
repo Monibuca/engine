@@ -31,6 +31,10 @@ func NewH265(stream IStream, stuff ...any) (vt *H265) {
 }
 
 func (vt *H265) WriteSliceBytes(slice []byte) {
+	if len(slice) == 0 {
+		vt.Error("H265 WriteSliceBytes got empty slice")
+		return
+	}
 	t := codec.ParseH265NALUType(slice[0])
 	if log.Trace {
 		vt.Trace("naluType", zap.Uint8("naluType", byte(t)))
