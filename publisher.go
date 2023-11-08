@@ -2,7 +2,6 @@ package engine
 
 import (
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"m7s.live/engine/v4/codec"
 	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
@@ -35,10 +34,10 @@ func (p *Publisher) GetPublisher() *Publisher {
 	return p
 }
 
-func (p *Publisher) Stop(reason ...zapcore.Field) {
-	p.IO.Stop(reason...)
-	p.Stream.Receive(ACTION_PUBLISHCLOSE)
-}
+// func (p *Publisher) Stop(reason ...zapcore.Field) {
+// 	p.IO.Stop(reason...)
+// 	p.Stream.Receive(ACTION_PUBLISHCLOSE)
+// }
 
 func (p *Publisher) getAudioTrack() common.AudioTrack {
 	return p.AudioTrack
@@ -49,19 +48,20 @@ func (p *Publisher) getVideoTrack() common.VideoTrack {
 func (p *Publisher) Equal(p2 IPublisher) bool {
 	return p == p2.GetPublisher()
 }
-func (p *Publisher) OnEvent(event any) {
-	switch v := event.(type) {
-	case IPublisher:
-		if p.Equal(v) { //第一任
 
-		} else { // 使用前任的track，因为订阅者都挂在前任的上面
-			p.AudioTrack = v.getAudioTrack()
-			p.VideoTrack = v.getVideoTrack()
-		}
-	default:
-		p.IO.OnEvent(event)
-	}
-}
+// func (p *Publisher) OnEvent(event any) {
+// 	switch v := event.(type) {
+// 	case IPublisher:
+// 		if p.Equal(v) { //第一任
+
+// 		} else { // 使用前任的track，因为订阅者都挂在前任的上面
+// 			p.AudioTrack = v.getAudioTrack()
+// 			p.VideoTrack = v.getVideoTrack()
+// 		}
+// 	default:
+// 		p.IO.OnEvent(event)
+// 	}
+// }
 
 func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPool) {
 	if frame.ByteLength < 6 {

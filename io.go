@@ -171,8 +171,13 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	}
 	io.Args = u.Query()
 	wt := time.Second * 5
-	if v, ok := specific.(ISubscriber); ok {
-		wt = v.GetSubscriber().Config.WaitTimeout
+	var iSub ISubscriber
+	var iPub IPublisher
+	var isSubscribe bool
+	if iSub, isSubscribe = specific.(ISubscriber); isSubscribe {
+		wt = iSub.GetSubscriber().Config.WaitTimeout
+	} else {
+		iPub = specific.(IPublisher)
 	}
 	s, create := findOrCreateStream(u.Path, wt)
 	if s == nil {
@@ -206,44 +211,24 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 		io.Debug("warp context")
 		io.SetParentCtx(io.Context)
 	}
-	if v, ok := specific.(IPublisher); ok {
-		puber := v.GetPublisher()
+	defer func() {
+		if err == nil {
+			specific.OnEvent(specific)
+		}
+	}()
+	if !isSubscribe {
+		puber := iPub.GetPublisher()
 		conf := puber.Config
 		io.Info("publish", zap.String("ptr", fmt.Sprintf("%p", io.Context)))
 		s.pubLocker.Lock()
 		defer s.pubLocker.Unlock()
-		oldPublisher := s.Publisher
-		if oldPublisher != nil {
-			zot := zap.String("old type", oldPublisher.GetPublisher().Type)
-			if oldPublisher == specific { // 断线重连
-				s.Info("republish", zot)
-			} else if conf.KickExist { // 根据配置是否剔出原来的发布者
-				s.Warn("kick", zot)
-				oldPublisher.OnEvent(SEKick{})
-			} else {
-				s.Warn("duplicate publish", zot)
-				return ErrDuplicatePublish
-			}
-		} else {
-			puber.AudioTrack = nil
-			puber.VideoTrack = nil
-		}
-		s.PublishTimeout = conf.PublishTimeout
-		s.DelayCloseTimeout = conf.DelayCloseTimeout
-		s.IdleTimeout = conf.IdleTimeout
-		s.PauseTimeout = conf.PauseTimeout
-		defer func() {
-			if err == nil {
-				specific.OnEvent(util.Conditoinal[IIO](oldPublisher == nil, specific, oldPublisher))
-			}
-		}()
 		if config.Global.EnableAuth {
 			onAuthPub := OnAuthPub
 			if auth, ok := specific.(AuthPub); ok {
 				onAuthPub = auth.OnAuth
 			}
 			if onAuthPub != nil {
-				authPromise := util.NewPromise(specific.(IPublisher))
+				authPromise := util.NewPromise(iPub)
 				if err = onAuthPub(authPromise); err == nil {
 					err = authPromise.Await()
 				}
@@ -256,28 +241,23 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				}
 			}
 		}
-		if promise := util.NewPromise(specific.(IPublisher)); s.Receive(promise) {
+		if promise := util.NewPromise(iPub); s.Receive(promise) {
 			err = promise.Await()
 			return err
 		}
 	} else {
-		conf := specific.(ISubscriber).GetSubscriber().Config
+		conf := iSub.GetSubscriber().Config
 		io.Info("subscribe")
 		if create {
 			EventBus <- InvitePublish{CreateEvent(s.Path)} // 通知发布者按需拉流
 		}
-		defer func() {
-			if err == nil {
-				specific.OnEvent(specific)
-			}
-		}()
 		if config.Global.EnableAuth && !conf.Internal {
 			onAuthSub := OnAuthSub
 			if auth, ok := specific.(AuthSub); ok {
 				onAuthSub = auth.OnAuth
 			}
 			if onAuthSub != nil {
-				authPromise := util.NewPromise(specific.(ISubscriber))
+				authPromise := util.NewPromise(iSub)
 				if err = onAuthSub(authPromise); err == nil {
 					err = authPromise.Await()
 				}
@@ -290,7 +270,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 				}
 			}
 		}
-		if promise := util.NewPromise(specific.(ISubscriber)); s.Receive(promise) {
+		if promise := util.NewPromise(iSub); s.Receive(promise) {
 			err = promise.Await()
 			return err
 		}

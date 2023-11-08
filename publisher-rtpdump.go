@@ -36,9 +36,9 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 	if t.VideoTrack == nil {
 		switch t.VCodec {
 		case codec.CodecID_H264:
-			t.VideoTrack = track.NewH264(t.Publisher.Stream)
+			t.VideoTrack = track.NewH264(t.Publisher.Stream, t.VPayloadType)
 		case codec.CodecID_H265:
-			t.VideoTrack = track.NewH265(t.Publisher.Stream)
+			t.VideoTrack = track.NewH265(t.Publisher.Stream, t.VPayloadType)
 		}
 		if t.VideoTrack != nil {
 			t.VideoTrack.SetSpeedLimit(500 * time.Millisecond)
@@ -47,7 +47,7 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 	if t.AudioTrack == nil {
 		switch t.ACodec {
 		case codec.CodecID_AAC:
-			at := track.NewAAC(t.Publisher.Stream)
+			at := track.NewAAC(t.Publisher.Stream, t.APayloadType)
 			t.AudioTrack = at
 			var c mpeg4audio.Config
 			c.ChannelCount = 2
@@ -55,9 +55,9 @@ func (t *RTPDumpPublisher) Feed(file *os.File) {
 			asc, _ := c.Marshal()
 			at.WriteSequenceHead(append([]byte{0xAF, 0x00}, asc...))
 		case codec.CodecID_PCMA:
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, true)
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, true, t.APayloadType)
 		case codec.CodecID_PCMU:
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, false)
+			t.AudioTrack = track.NewG711(t.Publisher.Stream, false, t.APayloadType)
 		}
 		if t.AudioTrack != nil {
 			t.AudioTrack.SetSpeedLimit(500 * time.Millisecond)
