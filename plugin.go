@@ -354,7 +354,7 @@ var ErrNoPushConfig = errors.New("no push config")
 var Pushers sync.Map
 
 func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool) (err error) {
-	zp, zu := zap.String("path", streamPath), zap.String("url", url)
+	zp, zu := zap.String("stream", streamPath), zap.String("url", url)
 	opt.Info("push", zp, zu)
 	defer func() {
 		if err != nil {

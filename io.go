@@ -192,7 +192,6 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 			logFeilds = append(logFeilds, zap.String("ID", io.ID))
 		}
 		if io.Logger == nil {
-			logFeilds = append(logFeilds, zap.String("stream", s.Path))
 			io.Logger = s.With(logFeilds...)
 		} else {
 			io.Logger = io.Logger.With(logFeilds...)
