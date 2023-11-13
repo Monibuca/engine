@@ -673,7 +673,9 @@ func (s *Stream) run() {
 
 func (s *Stream) AddTrack(t Track) (promise *util.Promise[Track]) {
 	promise = util.NewPromise(t)
-	s.Receive(promise)
+	if !s.Receive(promise) {
+		promise.Reject(ErrStreamIsClosed)
+	}
 	return
 }
 
