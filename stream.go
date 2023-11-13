@@ -528,8 +528,9 @@ func (s *Stream) run() {
 				republish := s.Publisher == v.Value // 重复发布
 				if republish {
 					s.Info("republish")
-					puber.AudioTrack = nil
-					puber.VideoTrack = nil
+					s.Tracks.Range(func(name string, t Track) {
+						t.SetStuff(TrackStateOffline)
+					})
 				}
 				needKick := !republish && s.Publisher != nil && conf.KickExist // 需要踢掉老的发布者
 				if needKick {

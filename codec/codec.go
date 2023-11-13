@@ -12,8 +12,10 @@ const (
 	CodecID_AAC      AudioCodecID = 0xA
 	CodecID_PCMA     AudioCodecID = 7
 	CodecID_PCMU     AudioCodecID = 8
+	CodecID_OPUS     AudioCodecID = 0xC
 	CodecID_H264     VideoCodecID = 7
 	CodecID_H265     VideoCodecID = 0xC
+	CodecID_AV1      VideoCodecID = 0xD
 )
 
 func (codecId AudioCodecID) String() string {
@@ -24,6 +26,8 @@ func (codecId AudioCodecID) String() string {
 		return "pcma"
 	case CodecID_PCMU:
 		return "pcmu"
+	case CodecID_OPUS:
+		return "opus"
 	}
 	return "unknow"
 }
@@ -34,6 +38,8 @@ func (codecId VideoCodecID) String() string {
 		return "h264"
 	case CodecID_H265:
 		return "h265"
+	case CodecID_AV1:
+		return "av1"
 	}
 	return "unknow"
 }
