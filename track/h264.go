@@ -122,6 +122,13 @@ func (vt *H264) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 }
 
 func (vt *H264) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			vt.Error("WriteRTPFrame panic", zap.Any("err", err))
+			vt.Stream.Close()
+		}
+	}()
 	if vt.lastSeq != vt.lastSeq2+1 && vt.lastSeq2 != 0 {
 		vt.lostFlag = true
 		vt.Warn("lost rtp packet", zap.Uint16("lastSeq", vt.lastSeq), zap.Uint16("lastSeq2", vt.lastSeq2))

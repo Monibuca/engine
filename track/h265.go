@@ -141,6 +141,13 @@ func (vt *H265) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 }
 
 func (vt *H265) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
+	defer func() {
+		err := recover()
+		if err != nil {
+			vt.Error("WriteRTPFrame panic", zap.Any("err", err))
+			vt.Stream.Close()
+		}
+	}()
 	frame := &rtpItem.Value
 	rv := vt.Value
 	rv.RTP.Push(rtpItem)
