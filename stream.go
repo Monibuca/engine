@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -196,10 +197,13 @@ func (tracks *Tracks) MarshalJSON() ([]byte, error) {
 	return json.Marshal(trackList)
 }
 
+var streamIdGen atomic.Uint32
+
 // Stream 流定义
 type Stream struct {
 	timeout    *time.Timer //当前状态的超时定时器
 	actionChan util.SafeChan[any]
+	ID         uint32 // 流ID
 	*log.Logger
 	StartTime time.Time //创建时间
 	StreamTimeoutConfig
@@ -276,13 +280,14 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		AppName:    p[0],
 		StreamName: strings.Join(p[1:], "/"),
 		StartTime:  time.Now(),
-		Logger:     log.LocaleLogger.With(zap.String("stream", streamPath)),
 		timeout:    time.NewTimer(waitTimeout),
 	})
 	if s := actual.(*Stream); loaded {
 		s.Debug("Stream Found")
 		return s, false
 	} else {
+		s.ID = streamIdGen.Add(1)
+		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath), zap.Uint32("id", s.ID))
 		s.Subscribers.Init()
 		s.actionChan.Init(10)
 		s.Info("created")

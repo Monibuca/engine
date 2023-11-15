@@ -52,6 +52,9 @@ func (pub *Puller) startPull(puller IPuller) {
 		stream = pub.Stream
 		if stream != nil {
 			puller.Error("puller already exists", zap.Int8("streamState", int8(stream.State)))
+			if stream.State == STATE_CLOSED {
+				oldPuller.(IPuller).Stop(zap.String("reason", "dead puller"))
+			}
 		} else {
 			puller.Error("puller already exists", zap.Time("createAt", pub.StartTime))
 		}
