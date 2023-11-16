@@ -1,7 +1,6 @@
 package track
 
 import (
-
 	"time"
 
 	"github.com/pion/rtp"
@@ -127,41 +126,64 @@ func (vt *Video) WriteAVCC(ts uint32, frame *util.BLL) (e error) {
 	if err != nil {
 		return err
 	}
-	b = (b >> 4) & 0b0111
-	vt.Value.IFrame = b == 1 || b == 4
-	r.ReadByte() //sequence frame flag
-	cts, err := r.ReadBE(3)
+	isExtHeader := (b >> 4) & 0b1000
+	frameType := (b >> 4) & 0b0111
+	vt.Value.IFrame = frameType == 1 || frameType == 4
+	packetType := b & 0b1111
+	var cts uint32
+	if isExtHeader != 0 {
+		fourcCC, _ := r.ReadBE(4) //sequence frame flag
+		switch packetType {
+		case codec.PacketTypeSequenceStart:
+		case codec.PacketTypeCodedFrames:
+			if fourcCC == codec.FourCC_H265_32 {
+				cts, err = r.ReadBE(3)
+			}
+		case codec.PacketTypeCodedFramesX:
+		}
+	} else {
+		r.ReadByte() //sequence frame flag
+		cts, err = r.ReadBE(3)
+		if err != nil {
+			return err
+		}
+	}
 	if err != nil {
 		return err
 	}
 	vt.Value.PTS = time.Duration(ts+cts) * 90
 	vt.Value.DTS = time.Duration(ts) * 90
 	// println(":", vt.Value.Sequence)
-	var nalulen uint32
-	for nalulen, e = r.ReadBE(vt.nalulenSize); e == nil; nalulen, e = r.ReadBE(vt.nalulenSize) {
-		if remain := frame.ByteLength - r.GetOffset(); remain < int(nalulen) {
-			vt.Error("read nalu length error", zap.Int("nalulen", int(nalulen)), zap.Int("remain", remain))
-			frame.Recycle()
-			vt.Value.Reset()
-			return
-			// for bbb.CanRead() {
-			// 	nalulen = bbb.ReadUint32()
-			// 	if bbb.CanReadN(int(nalulen)) {
-			// 		bbb.ReadN(int(nalulen))
-			// 	} else {
-			// 		panic("read nalu error1")
-			// 	}
+	if isExtHeader == 0 {
+		var nalulen uint32
+		for nalulen, e = r.ReadBE(vt.nalulenSize); e == nil; nalulen, e = r.ReadBE(vt.nalulenSize) {
+			if remain := frame.ByteLength - r.GetOffset(); remain < int(nalulen) {
+				vt.Error("read nalu length error", zap.Int("nalulen", int(nalulen)), zap.Int("remain", remain))
+				frame.Recycle()
+				vt.Value.Reset()
+				return
+				// for bbb.CanRead() {
+				// 	nalulen = bbb.ReadUint32()
+				// 	if bbb.CanReadN(int(nalulen)) {
+				// 		bbb.ReadN(int(nalulen))
+				// 	} else {
+				// 		panic("read nalu error1")
+				// 	}
+				// }
+				// panic("read nalu error2")
+			}
+			// var au util.BLL
+			// for _, bb := range r.ReadN(int(nalulen)) {
+			// 	au.Push(vt.BytesPool.GetShell(bb))
 			// }
-			// panic("read nalu error2")
+			// println(":", nalulen, au.ByteLength)
+			// vt.Value.AUList.PushValue(&au)
+			vt.AppendAuBytes(r.ReadN(int(nalulen))...)
 		}
-		// var au util.BLL
-		// for _, bb := range r.ReadN(int(nalulen)) {
-		// 	au.Push(vt.BytesPool.GetShell(bb))
-		// }
-		// println(":", nalulen, au.ByteLength)
-		// vt.Value.AUList.PushValue(&au)
-		vt.AppendAuBytes(r.ReadN(int(nalulen))...)
+	} else {
+		vt.AppendAuBytes(r.ReadN(frame.ByteLength - 5)...)
 	}
+
 	vt.Value.WriteAVCC(ts, frame)
 	// {
 	// 	b := util.Buffer(vt.Value.AVCC.ToBytes()[5:])

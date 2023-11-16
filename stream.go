@@ -512,11 +512,6 @@ func (s *Stream) run() {
 		case action, ok := <-s.actionChan.C:
 			if !ok {
 				return
-			} else if s.State == STATE_CLOSED {
-				if s.actionChan.Close() { //再次尝试关闭
-					return
-				}
-				continue
 			}
 			timeStart = time.Now()
 			switch v := action.(type) {
@@ -527,6 +522,7 @@ func (s *Stream) run() {
 				timeOutInfo = zap.String("action", "Publish")
 				if s.IsClosed() {
 					v.Reject(ErrStreamIsClosed)
+					break
 				}
 				puber := v.Value.GetPublisher()
 				conf := puber.Config
@@ -571,6 +567,7 @@ func (s *Stream) run() {
 				timeOutInfo = zap.String("action", "Subscribe")
 				if s.IsClosed() {
 					v.Reject(ErrStreamIsClosed)
+					break
 				}
 				suber := v.Value
 				io := suber.GetSubscriber()
@@ -628,6 +625,9 @@ func (s *Stream) run() {
 				s.onSuberClose(v)
 			case TrackRemoved:
 				timeOutInfo = zap.String("action", "TrackRemoved")
+				if s.IsClosed() {
+					break
+				}
 				name := v.GetName()
 				if t, ok := s.Tracks.LoadAndDelete(name); ok {
 					s.Info("track -1", zap.String("name", name))
@@ -636,6 +636,10 @@ func (s *Stream) run() {
 				}
 			case *util.Promise[Track]:
 				timeOutInfo = zap.String("action", "Track")
+				if s.IsClosed() {
+					v.Reject(ErrStreamIsClosed)
+					break
+				}
 				if s.State == STATE_WAITPUBLISH {
 					s.action(ACTION_PUBLISH)
 				}
@@ -672,6 +676,9 @@ func (s *Stream) run() {
 			default:
 				timeOutInfo = zap.String("action", "unknown")
 				s.Error("unknown action", timeOutInfo)
+			}
+			if s.IsClosed() && s.actionChan.Close() { //再次尝试关闭
+				return
 			}
 		}
 	}

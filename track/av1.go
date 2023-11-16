@@ -15,6 +15,7 @@ var _ SpesificTrack = (*AV1)(nil)
 type AV1 struct {
 	Video
 	decoder rtpav1.Decoder
+	encoder rtpav1.Encoder
 }
 
 func NewAV1(stream IStream, stuff ...any) (vt *AV1) {
@@ -24,8 +25,11 @@ func NewAV1(stream IStream, stuff ...any) (vt *AV1) {
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
 	}
-	vt.nalulenSize = 4
+	vt.nalulenSize = 0
 	vt.dtsEst = NewDTSEstimator()
+	vt.decoder.Init()
+	vt.encoder.Init()
+	vt.encoder.PayloadType = vt.PayloadType
 	return
 }
 
@@ -33,7 +37,7 @@ func (vt *AV1) writeSequenceHead(head []byte) (err error) {
 	vt.WriteSequenceHead(head)
 	var info codec.AV1CodecConfigurationRecord
 	info.Unmarshal(head[5:])
-	vt.ParamaterSets[0] = info.ConfigOBUs
+	vt.ParamaterSets = [][]byte{info.ConfigOBUs, {info.SeqLevelIdx0, info.SeqProfile, info.SeqTier0}}
 	return
 }
 
@@ -44,32 +48,32 @@ func (vt *AV1) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
 	}
 	b0 := frame.GetByte(0)
 	if isExtHeader := (b0 >> 4) & 0b1000; isExtHeader != 0 {
-		firstBuffer := frame.Next.Value
+		// firstBuffer := frame.Next.Value
 		packetType := b0 & 0b1111
 		switch packetType {
 		case codec.PacketTypeSequenceStart:
 			header := frame.ToBytes()
-			header[0] = 0x1d
-			header[1] = 0x00
-			header[2] = 0x00
-			header[3] = 0x00
-			header[4] = 0x00
+			// header[0] = 0x1d
+			// header[1] = 0x00
+			// header[2] = 0x00
+			// header[3] = 0x00
+			// header[4] = 0x00
 			err = vt.writeSequenceHead(header)
 			frame.Recycle()
 			return
 		case codec.PacketTypeCodedFrames:
-			firstBuffer[0] = b0 & 0b0111_1111 & 0xFD
-			firstBuffer[1] = 0x01
-			copy(firstBuffer[2:], firstBuffer[5:])
-			frame.Next.Value = firstBuffer[:firstBuffer.Len()-3]
-			frame.ByteLength -= 3
+			// firstBuffer[0] = b0 & 0b0111_1111 & 0xFD
+			// firstBuffer[1] = 0x01
+			// copy(firstBuffer[2:], firstBuffer[5:])
+			// frame.Next.Value = firstBuffer[:firstBuffer.Len()-3]
+			// frame.ByteLength -= 3
 			return vt.Video.WriteAVCC(ts, frame)
 		case codec.PacketTypeCodedFramesX:
-			firstBuffer[0] = b0 & 0b0111_1111 & 0xFD
-			firstBuffer[1] = 0x01
-			firstBuffer[2] = 0
-			firstBuffer[3] = 0
-			firstBuffer[4] = 0
+			// firstBuffer[0] = b0 & 0b0111_1111 & 0xFD
+			// firstBuffer[1] = 0x01
+			// firstBuffer[2] = 0
+			// firstBuffer[3] = 0
+			// firstBuffer[4] = 0
 			return vt.Video.WriteAVCC(ts, frame)
 		}
 	} else {
@@ -106,5 +110,28 @@ func (vt *AV1) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 	if err == nil {
 		vt.generateTimestamp(frame.Timestamp)
 		vt.Flush()
+	}
+}
+
+// RTP格式补完
+func (vt *AV1) CompleteRTP(value *AVFrame) {
+	rtps, err := vt.encoder.Encode(vt.Value.AUList.ToBuffers())
+	if err != nil {
+		vt.Error("AV1 encoder encode error", zap.Error(err))
+		return
+	}
+	if vt.Value.IFrame {
+		rtpItem := vt.GetRTPFromPool()
+		packet := &rtpItem.Value
+		br := util.LimitBuffer{Buffer: packet.Payload}
+		packet.Timestamp = uint32(vt.Value.PTS)
+		packet.Marker = false
+		br.Write(vt.ParamaterSets[0])
+		packet.Payload = br.Bytes()
+		vt.Value.RTP.Push(rtpItem)
+	}
+
+	for _, rtp := range rtps {
+		vt.Value.RTP.PushValue(RTPFrame{Packet: rtp})
 	}
 }

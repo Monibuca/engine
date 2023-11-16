@@ -1,8 +1,11 @@
 package util
 
 import (
+	"context"
+	"errors"
 	"math"
 	"sync/atomic"
+	"time"
 )
 
 // SafeChan安全的channel，可以防止close后被写入的问题
@@ -46,33 +49,40 @@ func (sc *SafeChan[T]) IsFull() bool {
 	return atomic.LoadInt32(&sc.senders) > 0
 }
 
+var errResolved = errors.New("resolved")
+
 type Promise[S any] struct {
+	context.Context
+	context.CancelCauseFunc
+	context.CancelFunc
 	Value S
-	c     chan error
-	state int32 // 0 pendding  1 fullfilled -1 rejected
 }
 
 func (r *Promise[S]) Resolve() {
-	if atomic.CompareAndSwapInt32(&r.state, 0, 1) {
-		r.c <- nil
-		close(r.c)
-	}
+	r.CancelCauseFunc(errResolved)
 }
 
 func (r *Promise[S]) Reject(err error) {
-	if atomic.CompareAndSwapInt32(&r.state, 0, -1) {
-		r.c <- err
-		close(r.c)
-	}
+	r.CancelCauseFunc(err)
 }
 
-func (p *Promise[S]) Await() error {
-	return <-p.c
+func (p *Promise[S]) Await() (err error) {
+	<-p.Done()
+	err = context.Cause(p.Context)
+	if err == errResolved {
+		err = nil
+	}
+	p.CancelFunc()
+	return
 }
 
 func NewPromise[S any](value S) *Promise[S] {
+	ctx0, cancel0 := context.WithTimeout(context.Background(), time.Second*10)
+	ctx, cancel := context.WithCancelCause(ctx0)
 	return &Promise[S]{
-		Value: value,
-		c:     make(chan error, 1),
+		Value:           value,
+		Context:         ctx,
+		CancelCauseFunc: cancel,
+		CancelFunc:      cancel0,
 	}
 }
