@@ -2,7 +2,6 @@ package track
 
 import (
 	"bytes"
-	"io"
 	"time"
 
 	"go.uber.org/zap"
@@ -94,31 +93,21 @@ func (vt *H264) WriteSliceBytes(slice []byte) {
 		vt.Error("nalu type not support", zap.Int("type", int(naluType)))
 	}
 }
-
-func (vt *H264) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
-	if l := frame.ByteLength; l < 6 {
-		vt.Error("AVCC data too short", zap.Int("len", l))
-		return io.ErrShortWrite
-	}
-	if frame.GetByte(1) == 0 {
-		vt.WriteSequenceHead(frame.ToBytes())
-		frame.Recycle()
-		var info codec.AVCDecoderConfigurationRecord
-		if _, err = info.Unmarshal(vt.SequenceHead[5:]); err == nil {
-			vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)
-			vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
-			vt.SPS = info.SequenceParameterSetNALUnit
-			vt.PPS = info.PictureParameterSetNALUnit
-			vt.ParamaterSets[0] = vt.SPS
-			vt.ParamaterSets[1] = vt.PPS
-		} else {
-			vt.Stream.Error("H264 ParseSpsPps Error")
-			vt.Stream.Close()
-		}
-		return
+func (vt *H264) WriteSequenceHead(head []byte) (err error) {
+	var info codec.AVCDecoderConfigurationRecord
+	if _, err = info.Unmarshal(head[5:]); err == nil {
+		vt.SPSInfo, _ = codec.ParseSPS(info.SequenceParameterSetNALUnit)
+		vt.nalulenSize = int(info.LengthSizeMinusOne&3 + 1)
+		vt.SPS = info.SequenceParameterSetNALUnit
+		vt.PPS = info.PictureParameterSetNALUnit
+		vt.ParamaterSets[0] = vt.SPS
+		vt.ParamaterSets[1] = vt.PPS
+		vt.Video.WriteSequenceHead(head)
 	} else {
-		return vt.Video.WriteAVCC(ts, frame)
+		vt.Stream.Error("H264 ParseSpsPps Error")
+		vt.Stream.Close()
 	}
+	return
 }
 
 func (vt *H264) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {

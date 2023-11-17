@@ -166,13 +166,14 @@ func (aac *AAC) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 	}
 }
 
-func (aac *AAC) WriteSequenceHead(sh []byte) {
+func (aac *AAC) WriteSequenceHead(sh []byte) error {
 	aac.Media.WriteSequenceHead(sh)
 	config1, config2 := aac.SequenceHead[2], aac.SequenceHead[3]
 	aac.Channels = ((config2 >> 3) & 0x0F) //声道
 	aac.SampleRate = uint32(codec.SamplingFrequencies[((config1&0x7)<<1)|(config2>>7)])
 	aac.Parse(aac.SequenceHead[2:])
 	go aac.Attach()
+	return nil
 }
 
 func (aac *AAC) WriteAVCC(ts uint32, frame *util.BLL) error {

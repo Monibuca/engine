@@ -63,7 +63,8 @@ type SpesificTrack interface {
 	WriteSliceBytes([]byte)
 	WriteRTPFrame(*util.ListItem[RTPFrame])
 	generateTimestamp(uint32)
-	WriteSequenceHead([]byte)
+	WriteSequenceHead([]byte) error
+	writeAVCCFrame(uint32, *util.BLLReader, *util.BLL) error
 	GetNALU_SEI() *util.ListItem[util.Buffer]
 	Flush()
 }

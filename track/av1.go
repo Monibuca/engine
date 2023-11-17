@@ -1,12 +1,14 @@
 package track
 
 import (
-	"io"
+	"time"
 
 	"github.com/bluenviron/gortsplib/v4/pkg/format/rtpav1"
+	"github.com/bluenviron/mediacommon/pkg/codecs/av1"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/codec"
 	. "m7s.live/engine/v4/common"
+	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
 )
 
@@ -14,8 +16,11 @@ var _ SpesificTrack = (*AV1)(nil)
 
 type AV1 struct {
 	Video
-	decoder rtpav1.Decoder
-	encoder rtpav1.Encoder
+	decoder         rtpav1.Decoder
+	encoder         rtpav1.Encoder
+	seqHeader       av1.SequenceHeader
+	seenFrameHeader bool
+	refFrameType    map[byte]byte
 }
 
 func NewAV1(stream IStream, stuff ...any) (vt *AV1) {
@@ -30,61 +35,16 @@ func NewAV1(stream IStream, stuff ...any) (vt *AV1) {
 	vt.decoder.Init()
 	vt.encoder.Init()
 	vt.encoder.PayloadType = vt.PayloadType
+	vt.ParamaterSets = [][]byte{nil, {0, 0, 0}}
 	return
 }
 
-func (vt *AV1) writeSequenceHead(head []byte) (err error) {
-	vt.WriteSequenceHead(head)
+func (vt *AV1) WriteSequenceHead(head []byte) (err error) {
+	vt.Video.WriteSequenceHead(head)
 	var info codec.AV1CodecConfigurationRecord
 	info.Unmarshal(head[5:])
+	vt.seqHeader.Unmarshal(info.ConfigOBUs)
 	vt.ParamaterSets = [][]byte{info.ConfigOBUs, {info.SeqLevelIdx0, info.SeqProfile, info.SeqTier0}}
-	return
-}
-
-func (vt *AV1) WriteAVCC(ts uint32, frame *util.BLL) (err error) {
-	if l := frame.ByteLength; l < 6 {
-		vt.Error("AVCC data too short", zap.Int("len", l))
-		return io.ErrShortWrite
-	}
-	b0 := frame.GetByte(0)
-	if isExtHeader := (b0 >> 4) & 0b1000; isExtHeader != 0 {
-		// firstBuffer := frame.Next.Value
-		packetType := b0 & 0b1111
-		switch packetType {
-		case codec.PacketTypeSequenceStart:
-			header := frame.ToBytes()
-			// header[0] = 0x1d
-			// header[1] = 0x00
-			// header[2] = 0x00
-			// header[3] = 0x00
-			// header[4] = 0x00
-			err = vt.writeSequenceHead(header)
-			frame.Recycle()
-			return
-		case codec.PacketTypeCodedFrames:
-			// firstBuffer[0] = b0 & 0b0111_1111 & 0xFD
-			// firstBuffer[1] = 0x01
-			// copy(firstBuffer[2:], firstBuffer[5:])
-			// frame.Next.Value = firstBuffer[:firstBuffer.Len()-3]
-			// frame.ByteLength -= 3
-			return vt.Video.WriteAVCC(ts, frame)
-		case codec.PacketTypeCodedFramesX:
-			// firstBuffer[0] = b0 & 0b0111_1111 & 0xFD
-			// firstBuffer[1] = 0x01
-			// firstBuffer[2] = 0
-			// firstBuffer[3] = 0
-			// firstBuffer[4] = 0
-			return vt.Video.WriteAVCC(ts, frame)
-		}
-	} else {
-		if frame.GetByte(1) == 0 {
-			err = vt.writeSequenceHead(frame.ToBytes())
-			frame.Recycle()
-			return
-		} else {
-			return vt.Video.WriteAVCC(ts, frame)
-		}
-	}
 	return
 }
 
@@ -105,7 +65,19 @@ func (vt *AV1) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 	rv.RTP.Push(rtpItem)
 	obus, err := vt.decoder.Decode(frame.Packet)
 	for _, obu := range obus {
-		rv.AUList.Push(vt.BytesPool.GetShell(obu))
+		var obuHeader av1.OBUHeader
+		obuHeader.Unmarshal(obu)
+		switch obuHeader.Type {
+		case av1.OBUTypeSequenceHeader:
+			rtmpHead := []byte{0b1001_0000 | byte(codec.PacketTypeMPEG2TSSequenceStart), 0, 0, 0, 0}
+			util.BigEndian.PutUint32(rtmpHead[1:], codec.FourCC_AV1_32)
+			// TODO: 生成 head
+			rtmpHead = append(rtmpHead, obu...)
+			vt.Video.WriteSequenceHead(rtmpHead)
+			vt.ParamaterSets[0] = obu
+		default:
+			rv.AUList.Push(vt.BytesPool.GetShell(obu))
+		}
 	}
 	if err == nil {
 		vt.generateTimestamp(frame.Timestamp)
@@ -113,22 +85,85 @@ func (vt *AV1) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 	}
 }
 
+func (vt *AV1) writeAVCCFrame(ts uint32, r *util.BLLReader, frame *util.BLL) (err error) {
+	vt.Value.PTS = time.Duration(ts) * 90
+	vt.Value.DTS = time.Duration(ts) * 90
+	var obuHeader av1.OBUHeader
+	for r.CanRead() {
+		offset := r.GetOffset()
+		b, _ := r.ReadByte()
+		obuHeader.Unmarshal([]byte{b})
+		if log.Trace {
+			vt.Trace("obu", zap.Any("type", obuHeader.Type), zap.Bool("iframe", vt.Value.IFrame))
+		}
+		obuSize, _, _ := r.LEB128Unmarshal()
+		end := r.GetOffset()
+		size := end - offset + int(obuSize)
+		r = frame.NewReader()
+		r.Skip(offset)
+		obu := r.ReadN(size)
+		switch obuHeader.Type {
+		case codec.AV1_OBU_SEQUENCE_HEADER:
+		// 	vt.seqHeader.Unmarshal(util.ConcatBuffers(obu))
+		// 	vt.seenFrameHeader = false
+		// 	vt.AppendAuBytes(obu...)
+		case codec.AV1_OBU_FRAME:
+			// 	if !vt.seenFrameHeader {
+			// 		if vt.seqHeader.ReducedStillPictureHeader {
+			// 			vt.Value.IFrame = true
+			// 			vt.seenFrameHeader = true
+			// 		} else {
+			// 			showframe := obu[0][0] >> 7
+			// 			if showframe != 0 {
+			// 				frame_to_show_map_idx := (obu[0][0] >> 4) & 0b0111
+			// 				vt.Value.IFrame = vt.refFrameType[frame_to_show_map_idx] == 0
+			// 			} else {
+			// 				vt.Value.IFrame = (obu[0][0])&0b0110_0000 == 0
+			// 			}
+			// 			vt.seenFrameHeader = showframe == 0
+			// 		}
+			// 	}
+			// 	vt.AppendAuBytes(obu...)
+		case codec.AV1_OBU_TEMPORAL_DELIMITER:
+		case codec.AV1_OBU_FRAME_HEADER:
+		}
+		vt.AppendAuBytes(obu...)
+	}
+	return
+}
+
+func (vt *AV1) CompleteAVCC(rv *AVFrame) {
+	mem := vt.BytesPool.Get(5)
+	b := mem.Value
+	if rv.IFrame {
+		b[0] = 0b1001_0000 | byte(codec.PacketTypeCodedFrames)
+	} else {
+		b[0] = 0b1010_0000 | byte(codec.PacketTypeCodedFrames)
+	}
+	util.BigEndian.PutUint32(b[1:], codec.FourCC_AV1_32)
+	// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
+	// 写入CTS
+	rv.AVCC.Push(mem)
+
+	rv.AUList.Range(func(au *util.BLL) bool {
+		au.Range(func(slice util.Buffer) bool {
+			rv.AVCC.Push(vt.BytesPool.GetShell(slice))
+			return true
+		})
+		return true
+	})
+}
+
 // RTP格式补完
 func (vt *AV1) CompleteRTP(value *AVFrame) {
-	rtps, err := vt.encoder.Encode(vt.Value.AUList.ToBuffers())
+	obus := vt.Value.AUList.ToBuffers()
+	// if vt.Value.IFrame {
+	// 	obus = append(net.Buffers{vt.ParamaterSets[0]}, obus...)
+	// }
+	rtps, err := vt.encoder.Encode(obus)
 	if err != nil {
 		vt.Error("AV1 encoder encode error", zap.Error(err))
 		return
-	}
-	if vt.Value.IFrame {
-		rtpItem := vt.GetRTPFromPool()
-		packet := &rtpItem.Value
-		br := util.LimitBuffer{Buffer: packet.Payload}
-		packet.Timestamp = uint32(vt.Value.PTS)
-		packet.Marker = false
-		br.Write(vt.ParamaterSets[0])
-		packet.Payload = br.Bytes()
-		vt.Value.RTP.Push(rtpItem)
 	}
 
 	for _, rtp := range rtps {

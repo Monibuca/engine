@@ -127,9 +127,9 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 		return nil, nil, nil, ErrHevc
 	}
 
-	if payload[0] != 0x1c || payload[1] != 0x00 {
-		return nil, nil, nil, ErrHevc
-	}
+	// if payload[0] != 0x1c || payload[1] != 0x00 {
+	// 	return nil, nil, nil, ErrHevc
+	// }
 
 	if len(payload) < 33 {
 		return nil, nil, nil, ErrHevc
@@ -189,14 +189,12 @@ func ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(payload []byte) (vps, sps, pps []b
 
 	return
 }
+
 func BuildH265SeqHeaderFromVpsSpsPps(vps, sps, pps []byte) ([]byte, error) {
 	sh := make([]byte, 43+len(vps)+len(sps)+len(pps))
-	sh[0] = 0x1c
-	sh[1] = 0x0
-	sh[2] = 0x0
-	sh[3] = 0x0
-	sh[4] = 0x0
 
+	sh[0] =  0b1001_0000 | byte(PacketTypeMPEG2TSSequenceStart)
+	util.BigEndian.PutUint32(sh[1:], FourCC_H265_32)
 	// unsigned int(8) configurationVersion = 1;
 	sh[5] = 0x1
 

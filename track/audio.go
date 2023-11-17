@@ -47,6 +47,11 @@ func (av *Audio) WriteADTS(pts uint32, adts util.IBytes) {
 
 }
 
+func (av *Audio) WriteSequenceHead(sh []byte) error {
+	av.Media.WriteSequenceHead(sh)
+	return nil
+}
+
 func (av *Audio) Flush() {
 	if av.CodecID == codec.CodecID_AAC && av.Value.ADTS == nil {
 		item := av.BytesPool.Get(7)

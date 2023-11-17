@@ -47,6 +47,26 @@ func (r *BLLReader) ReadByte() (b byte, err error) {
 	return 0, io.EOF
 }
 
+func (r *BLLReader) LEB128Unmarshal() (uint, int, error) {
+	v := uint(0)
+	n := 0
+
+	for i := 0; i < 8; i++ {
+		b, err := r.ReadByte()
+		if err != nil {
+			return 0, 0, err
+		}
+		v |= (uint(b&0b01111111) << (i * 7))
+		n++
+
+		if (b & 0b10000000) == 0 {
+			break
+		}
+	}
+
+	return v, n, nil
+}
+
 func (r *BLLReader) ReadBE(n int) (be uint32, err error) {
 	for i := 0; i < n; i++ {
 		b, err := r.ReadByte()
