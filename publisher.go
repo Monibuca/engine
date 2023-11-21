@@ -50,16 +50,11 @@ func (p *Publisher) Equal(p2 IPublisher) bool {
 }
 
 // func (p *Publisher) OnEvent(event any) {
-// 	switch v := event.(type) {
-// 	case IPublisher:
-// 		if p.Equal(v) { //第一任
-
-// 		} else { // 使用前任的track，因为订阅者都挂在前任的上面
-// 			p.AudioTrack = v.getAudioTrack()
-// 			p.VideoTrack = v.getVideoTrack()
-// 		}
-// 	default:
-// 		p.IO.OnEvent(event)
+// 	p.IO.OnEvent(event)
+// 	switch event.(type) {
+// 	case SEclose, SEKick:
+// 		p.AudioTrack = nil
+// 		p.VideoTrack = nil
 // 	}
 // }
 
