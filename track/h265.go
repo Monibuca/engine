@@ -55,7 +55,8 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 		if vt.VPS != nil && vt.SPS != nil && vt.PPS != nil {
 			extraData, err := codec.BuildH265SeqHeaderFromVpsSpsPps(vt.VPS, vt.SPS, vt.PPS)
 			if err == nil {
-				vt.WriteSequenceHead(extraData)
+				vt.nalulenSize = (int(extraData[26]) & 0x03) + 1
+				vt.Video.WriteSequenceHead(extraData)
 			} else {
 				vt.Error("H265 BuildH265SeqHeaderFromVpsSpsPps", zap.Error(err))
 				// vt.Stream.Close()
@@ -83,6 +84,9 @@ func (vt *H265) WriteSliceBytes(slice []byte) {
 
 func (vt *H265) WriteSequenceHead(head []byte) (err error) {
 	if vt.VPS, vt.SPS, vt.PPS, err = codec.ParseVpsSpsPpsFromSeqHeaderWithoutMalloc(head); err == nil {
+		vt.ParamaterSets[0] = vt.VPS
+		vt.ParamaterSets[1] = vt.SPS
+		vt.ParamaterSets[2] = vt.PPS
 		vt.SPSInfo, _ = codec.ParseHevcSPS(vt.SPS)
 		vt.nalulenSize = (int(head[26]) & 0x03) + 1
 		vt.Video.WriteSequenceHead(head)
@@ -184,6 +188,7 @@ func (vt *H265) CompleteAVCC(rv *AVFrame) {
 		return true
 	})
 }
+
 // RTP格式补完
 func (vt *H265) CompleteRTP(value *AVFrame) {
 	// H265打包： https://blog.csdn.net/fanyun_01/article/details/114234290
