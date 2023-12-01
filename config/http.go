@@ -16,16 +16,16 @@ var _ HTTPConfig = (*HTTP)(nil)
 
 type Middleware func(string, http.Handler) http.Handler
 type HTTP struct {
-	ListenAddr    string
-	ListenAddrTLS string
-	CertFile      string
-	KeyFile       string
-	CORS          bool `default:"true"` //是否自动添加CORS头
-	UserName      string
-	Password      string
-	ReadTimeout   time.Duration
-	WriteTimeout  time.Duration
-	IdleTimeout   time.Duration
+	ListenAddr    string        `desc:"监听地址"`
+	ListenAddrTLS string        `desc:"监听地址HTTPS"`
+	CertFile      string        `desc:"HTTPS证书文件"`
+	KeyFile       string        `desc:"HTTPS密钥文件"`
+	CORS          bool          `default:"true" desc:"是否自动添加CORS头"` //是否自动添加CORS头
+	UserName      string        `desc:"基本身份认证用户名"`
+	Password      string        `desc:"基本身份认证密码"`
+	ReadTimeout   time.Duration `desc:"读取超时"`
+	WriteTimeout  time.Duration `desc:"写入超时"`
+	IdleTimeout   time.Duration `desc:"空闲超时"`
 	mux           *http.ServeMux
 	middlewares   []Middleware
 }

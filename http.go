@@ -88,18 +88,20 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 	}
 	var data any
 	if q.Get("yaml") != "" {
-		mm, err := yaml.Marshal(p.RawConfig)
+		data = struct {
+			File     any
+			Modified any
+			Merged   any
+		}{
+			p.RawConfig.File, p.RawConfig.Modify, p.RawConfig.GetMap(),
+		}
+		mm, err := yaml.Marshal(data)
 		if err != nil {
 			mm = []byte("")
 		}
-		data = struct {
-			File     string
-			Modified string
-			Merged   string
-		}{
-			p.Yaml, p.modifiedYaml, string(mm),
-		}
-
+		data = mm
+	} else if q.Get("formily") != "" {
+		data = p.RawConfig.GetFormily()
 	} else {
 		data = p.RawConfig
 	}
@@ -121,19 +123,16 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 	} else {
 		p = Engine
 	}
+	var modified map[string]any
 	if q.Get("yaml") != "" {
-		err = yaml.NewDecoder(r.Body).Decode(&p.Modified)
+		err = yaml.NewDecoder(r.Body).Decode(&modified)
 	} else {
-		err = json.NewDecoder(r.Body).Decode(&p.Modified)
+		err = json.NewDecoder(r.Body).Decode(&modified)
 	}
 	if err != nil {
 		util.ReturnError(util.APIErrorDecode, err.Error(), w, r)
 	} else if err = p.Save(); err == nil {
-		p.RawConfig.Assign(p.Modified)
-		out, err := yaml.Marshal(p.Modified)
-		if err == nil {
-			p.modifiedYaml = string(out)
-		}
+		p.RawConfig.ParseModifyFile(modified)
 		util.ReturnOK(w, r)
 	} else {
 		util.ReturnError(util.APIErrorSave, err.Error(), w, r)
@@ -154,7 +153,7 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 	} else {
 		p = Engine
 	}
-	p.Update(p.Modified)
+	p.Update(&p.RawConfig)
 	util.ReturnOK(w, r)
 }
 

@@ -21,7 +21,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
-	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/lang"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -62,7 +61,7 @@ func Run(ctx context.Context, conf any) (err error) {
 	SysInfo.StartTime = time.Now()
 	SysInfo.Version = Engine.Version
 	Engine.Context = ctx
-	var cg config.Config
+	var cg map[string]map[string]any
 	switch v := conf.(type) {
 	case string:
 		if _, err = os.Stat(v); err != nil {
@@ -73,7 +72,7 @@ func Run(ctx context.Context, conf any) (err error) {
 		}
 	case []byte:
 		ConfigRaw = v
-	case config.Config:
+	case map[string]map[string]any:
 		cg = v
 	}
 
@@ -91,13 +90,9 @@ func Run(ctx context.Context, conf any) (err error) {
 			log.Error("parsing yml error:", err)
 		}
 	}
+	Engine.RawConfig.Parse(&EngineConfig.Engine, "GLOBAL")
 	if cg != nil {
-		Engine.RawConfig = cg.GetChild("global")
-		if b, err := yaml.Marshal(Engine.RawConfig); err == nil {
-			Engine.Yaml = string(b)
-		}
-		//将配置信息同步到结构体
-		Engine.RawConfig.Unmarshal(&EngineConfig.Engine)
+		Engine.RawConfig.ParseUserFile(cg["global"])
 	}
 	var logger log.Logger
 	log.LocaleLogger = logger.Lang(lang.Get(EngineConfig.LogLang))
@@ -114,8 +109,7 @@ func Run(ctx context.Context, conf any) (err error) {
 	}
 
 	Engine.Logger = log.LocaleLogger.Named("engine")
-	// 使得RawConfig具备全量配置信息，用于合并到插件配置中
-	Engine.RawConfig = config.Struct2Config(&EngineConfig.Engine, "GLOBAL")
+
 	Engine.assign()
 	Engine.Logger.Debug("", zap.Any("config", EngineConfig))
 	util.PoolSize = EngineConfig.PoolSize
@@ -129,21 +123,36 @@ func Run(ctx context.Context, conf any) (err error) {
 			continue
 		}
 		plugin.Info("initialize", zap.String("version", plugin.Version))
-		userConfig := cg.GetChild(plugin.Name)
-		if userConfig != nil {
-			if b, err := yaml.Marshal(userConfig); err == nil {
-				plugin.Yaml = string(b)
+
+		plugin.RawConfig.Parse(plugin.Config, strings.ToUpper(plugin.Name))
+		for _, fname := range MergeConfigs {
+			if name := strings.ToLower(fname); plugin.RawConfig.Has(name) {
+				plugin.RawConfig.Get(name).ParseGlobal(Engine.RawConfig.Get(name))
 			}
 		}
+		var userConfig map[string]any
 		if defaultYaml := reflect.ValueOf(plugin.Config).Elem().FieldByName("DefaultYaml"); defaultYaml.IsValid() {
-			if err := yaml.Unmarshal([]byte(defaultYaml.String()), &plugin.RawConfig); err != nil {
+			if err := yaml.Unmarshal([]byte(defaultYaml.String()), &userConfig); err != nil {
 				log.Error("parsing default config error:", err)
+			} else {
+				plugin.RawConfig.ParseDefaultYaml(userConfig)
 			}
 		}
-		if plugin.Yaml != "" {
-			yaml.Unmarshal([]byte(plugin.Yaml), &plugin.RawConfig)
+		userConfig = cg[strings.ToLower(plugin.Name)]
+		plugin.RawConfig.ParseUserFile(userConfig)
+		if EngineConfig.DisableAll {
+			plugin.Disabled = true
 		}
-		plugin.assign()
+		if userConfig["enable"] == false {
+			plugin.Disabled = true
+		} else if userConfig["enable"] == true {
+			plugin.Disabled = false
+		}
+		if plugin.Disabled {
+			plugin.Warn("plugin disabled")
+		} else {
+			plugin.assign()
+		}
 	}
 	UUID := uuid.NewString()
 

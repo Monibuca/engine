@@ -30,21 +30,21 @@ type PushConfig interface {
 }
 
 type Publish struct {
-	PubAudio          bool          `default:"true"`
-	PubVideo          bool          `default:"true"`
-	InsertSEI         bool          // 是否启用SEI插入
-	KickExist         bool          // 是否踢掉已经存在的发布者
-	PublishTimeout    time.Duration `default:"10s"` // 发布无数据超时
-	WaitCloseTimeout  time.Duration // 延迟自动关闭（等待重连）
-	DelayCloseTimeout time.Duration // 延迟自动关闭（无订阅时）
-	IdleTimeout       time.Duration // 空闲(无订阅)超时
-	PauseTimeout      time.Duration `default:"30s"` // 暂停超时
-	BufferTime        time.Duration // 缓冲长度(单位：秒)，0代表取最近关键帧
-	SpeedLimit        time.Duration `default:"500ms"` //速度限制最大等待时间
-	Key               string        // 发布鉴权key
-	SecretArgName     string        `default:"secret"`   // 发布鉴权参数名
-	ExpireArgName     string        `default:"expire"`   // 发布鉴权失效时间参数名
-	RingSize          string        `default:"256-1024"` // 初始缓冲区大小
+	PubAudio          bool          `default:"true" desc:"是否发布音频"`
+	PubVideo          bool          `default:"true" desc:"是否发布视频"`
+	InsertSEI         bool          `desc:"是否启用SEI插入"`                        // 是否启用SEI插入
+	KickExist         bool          `desc:"是否踢掉已经存在的发布者"`                     // 是否踢掉已经存在的发布者
+	PublishTimeout    time.Duration `default:"10s" desc:"发布无数据超时"`            // 发布无数据超时
+	WaitCloseTimeout  time.Duration `desc:"延迟自动关闭（等待重连）"`                     // 延迟自动关闭（等待重连）
+	DelayCloseTimeout time.Duration `desc:"延迟自动关闭（无订阅时）"`                     // 延迟自动关闭（无订阅时）
+	IdleTimeout       time.Duration `desc:"空闲(无订阅)超时"`                        // 空闲(无订阅)超时
+	PauseTimeout      time.Duration `default:"30s" desc:"暂停超时时间"`             // 暂停超时
+	BufferTime        time.Duration `desc:"缓冲长度(单位：秒)，0代表取最近关键帧"`             // 缓冲长度(单位：秒)，0代表取最近关键帧
+	SpeedLimit        time.Duration `default:"500ms" desc:"速度限制最大等待时间,0则不等待"` //速度限制最大等待时间
+	Key               string        `desc:"发布鉴权key"`                          // 发布鉴权key
+	SecretArgName     string        `default:"secret" desc:"发布鉴权参数名"`         // 发布鉴权参数名
+	ExpireArgName     string        `default:"expire" desc:"发布鉴权失效时间参数名"`     // 发布鉴权失效时间参数名
+	RingSize          string        `default:"256-1024" desc:"缓冲范围"`          // 初始缓冲区大小
 }
 
 func (c Publish) GetPublishConfig() Publish {
@@ -52,24 +52,24 @@ func (c Publish) GetPublishConfig() Publish {
 }
 
 type Subscribe struct {
-	SubAudio        bool          `default:"true"`
-	SubVideo        bool          `default:"true"`
-	SubVideoArgName string        `default:"vts"`  // 指定订阅的视频轨道参数名
-	SubAudioArgName string        `default:"ats"`  // 指定订阅的音频轨道参数名
-	SubDataArgName  string        `default:"dts"`  // 指定订阅的数据轨道参数名
-	SubModeArgName  string        `default:"mode"` // 指定订阅的模式参数名
-	SubAudioTracks  []string      // 指定订阅的音频轨道
-	SubVideoTracks  []string      // 指定订阅的视频轨道
-	SubDataTracks   []string      // 指定订阅的数据轨道
-	SubMode         int           // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
-	SyncMode        int           // 0，采用时间戳同步，1，采用写入时间同步
-	IFrameOnly      bool          // 只要关键帧
-	WaitTimeout     time.Duration `default:"10s"` // 等待流超时
-	WriteBufferSize int           `default:"0"`   // 写缓冲大小
-	Key             string        // 订阅鉴权key
-	SecretArgName   string        `default:"secret"` // 订阅鉴权参数名
-	ExpireArgName   string        `default:"expire"` // 订阅鉴权失效时间参数名
-	Internal        bool          `default:"false"`  // 是否内部订阅
+	SubAudio        bool          `default:"true" desc:"是否订阅音频"`
+	SubVideo        bool          `default:"true" desc:"是否订阅视频"`
+	SubVideoArgName string        `default:"vts" desc:"定订阅的视频轨道参数名"`                     // 指定订阅的视频轨道参数名
+	SubAudioArgName string        `default:"ats" desc:"指定订阅的音频轨道参数名"`                    // 指定订阅的音频轨道参数名
+	SubDataArgName  string        `default:"dts" desc:"指定订阅的数据轨道参数名"`                    // 指定订阅的数据轨道参数名
+	SubModeArgName  string        `desc:"指定订阅的模式参数名"`                                    // 指定订阅的模式参数名
+	SubAudioTracks  []string      `desc:"指定订阅的音频轨道"`                                     // 指定订阅的音频轨道
+	SubVideoTracks  []string      `desc:"指定订阅的视频轨道"`                                     // 指定订阅的视频轨道
+	SubDataTracks   []string      `desc:"指定订阅的数据轨道"`                                     // 指定订阅的数据轨道
+	SubMode         int           `desc:"订阅模式" enum:"0:实时模式,1:首屏后不进行追赶,2:从缓冲最大的关键帧开始播放"` // 0，实时模式：追赶发布者进度，在播放首屏后等待发布者的下一个关键帧，然后跳到该帧。1、首屏后不进行追赶。2、从缓冲最大的关键帧开始播放，也不追赶，需要发布者配置缓存长度
+	SyncMode        int           `desc:"同步模式" enum:"0:采用时间戳同步,1:采用写入时间同步"`              // 0，采用时间戳同步，1，采用写入时间同步
+	IFrameOnly      bool          `desc:"只要关键帧"`                                         // 只要关键帧
+	WaitTimeout     time.Duration `default:"10s" desc:"等待流超时时间"`                         // 等待流超时
+	WriteBufferSize int           `desc:"写缓冲大小"`                                         // 写缓冲大小
+	Key             string        `desc:"订阅鉴权key"`                                       // 订阅鉴权key
+	SecretArgName   string        `default:"secret" desc:"订阅鉴权参数名"`                      // 订阅鉴权参数名
+	ExpireArgName   string        `default:"expire" desc:"订阅鉴权失效时间参数名"`                  // 订阅鉴权失效时间参数名
+	Internal        bool          `default:"false" desc:"是否内部订阅"`                        // 是否内部订阅
 }
 
 func (c *Subscribe) GetSubscribeConfig() *Subscribe {
@@ -181,10 +181,10 @@ func (p *Push) CheckPush(streamPath string) string {
 }
 
 type Console struct {
-	Server        string `default:"console.monibuca.com:44944"` //远程控制台地址
-	Secret        string //远程控制台密钥
-	PublicAddr    string //公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
-	PublicAddrTLS string
+	Server        string `default:"console.monibuca.com:44944" desc:"远程控制台地址"` //远程控制台地址
+	Secret        string `desc:"远程控制台密钥"`                                      //远程控制台密钥
+	PublicAddr    string `desc:"远程控制台公网地址"`                                    //公网地址，提供远程控制台访问的地址，不配置的话使用自动识别的地址
+	PublicAddrTLS string `desc:"远程控制台公网TLS地址"`
 }
 
 type Engine struct {
@@ -192,18 +192,18 @@ type Engine struct {
 	Subscribe
 	HTTP
 	Console
-	EnableAVCC          bool          `default:"true"`  //启用AVCC格式，rtmp、http-flv协议使用
-	EnableRTP           bool          `default:"true"`  //启用RTP格式，rtsp、webrtc等协议使用,已废弃，在 rtp 下面配置
-	EnableSubEvent      bool          `default:"true"`  //启用订阅事件,禁用可以提高性能
-	EnableAuth          bool          `default:"true"`  //启用鉴权
-	LogLang             string        `default:"zh"`    //日志语言
-	LogLevel            string        `default:"info"`  //日志级别
-	EventBusSize        int           `default:"10"`    //事件总线大小
-	PulseInterval       time.Duration `default:"5s"`    //心跳事件间隔
-	DisableAll          bool          `default:"false"` //禁用所有插件
-	RTPReorderBufferLen int           `default:"50"`    //RTP重排序缓冲区长度
-	PoolSize            int           //内存池大小
-	enableReport        bool          `default:"false"` //启用报告,用于统计和监控
+	EnableAVCC          bool          `default:"true" desc:"启用AVCC格式，rtmp、http-flv协议使用"`                 //启用AVCC格式，rtmp、http-flv协议使用
+	EnableRTP           bool          `default:"true" desc:"启用RTP格式，rtsp、webrtc等协议使用"`                   //启用RTP格式，rtsp、webrtc等协议使用
+	EnableSubEvent      bool          `default:"true" desc:"启用订阅事件,禁用可以提高性能"`                            //启用订阅事件,禁用可以提高性能
+	EnableAuth          bool          `default:"true" desc:"启用鉴权"`                                       //启用鉴权
+	LogLang             string        `default:"zh" desc:"日志语言" enum:"zh:中文,en:英文"`                      //日志语言
+	LogLevel            string        `default:"info" enum:"trace:跟踪,debug:调试,info:信息,warn:警告,error:错误"` //日志级别
+	EventBusSize        int           `default:"10" desc:"事件总线大小"`                                       //事件总线大小
+	PulseInterval       time.Duration `default:"5s" desc:"心跳事件间隔"`                                       //心跳事件间隔
+	DisableAll          bool          `default:"false" desc:"禁用所有插件"`                                    //禁用所有插件
+	RTPReorderBufferLen int           `default:"50" desc:"RTP重排序缓冲区长度"`                                  //RTP重排序缓冲区长度
+	PoolSize            int           `desc:"内存池大小"`                                                     //内存池大小
+	enableReport        bool          `default:"false"`                                                  //启用报告,用于统计和监控
 	reportStream        quic.Stream   // console server connection
 	instanceId          string        // instance id 来自console
 }
