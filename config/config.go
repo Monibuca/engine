@@ -26,7 +26,7 @@ type Config struct {
 	Default any           //默认值
 	Enum    []struct {
 		Label string `json:"label"`
-		Value string `json:"value"`
+		Value any    `json:"value"`
 	}
 	name     string // 小写
 	propsMap map[string]*Config
@@ -144,12 +144,16 @@ func (config *Config) Parse(s any, prefix ...string) {
 				if len(kvs) != 2 {
 					continue
 				}
+				var tmp struct {
+					Value any
+				}
+				yaml.Unmarshal([]byte(fmt.Sprintf("value: %s", strings.TrimSpace(kvs[0]))), &tmp)
 				prop.Enum = append(prop.Enum, struct {
 					Label string `json:"label"`
-					Value string `json:"value"`
+					Value any    `json:"value"`
 				}{
 					Label: strings.TrimSpace(kvs[1]),
-					Value: strings.TrimSpace(kvs[0]),
+					Value: tmp.Value,
 				})
 			}
 		}
@@ -272,6 +276,9 @@ func (config *Config) schema(index int) (r any) {
 			"title": config.name,
 		}
 		for i, v := range config.props {
+			if strings.HasPrefix(v.tag.Get("desc"), "废弃") {
+				continue
+			}
 			r.Properties[v.name] = v.schema(i)
 		}
 		return r
@@ -332,7 +339,7 @@ func (config *Config) schema(index int) (r any) {
 			case reflect.Map:
 				var children []struct {
 					Key   string `json:"mkey"`
-					Value any 	`json:"mvalue"`
+					Value any    `json:"mvalue"`
 				}
 				p := Property{
 					Type:      "array",
@@ -402,7 +409,7 @@ func (config *Config) schema(index int) (r any) {
 				for iter.Next() {
 					children = append(children, struct {
 						Key   string `json:"mkey"`
-						Value any 	`json:"mvalue"`
+						Value any    `json:"mvalue"`
 					}{
 						Key:   iter.Key().String(),
 						Value: iter.Value().Interface(),
@@ -427,6 +434,9 @@ func (config *Config) GetFormily() (r Formily) {
 		Properties: make(map[string]any),
 	}
 	for i, v := range config.props {
+		if strings.HasPrefix(v.tag.Get("desc"), "废弃") {
+			continue
+		}
 		r.Schema.Properties[v.name] = v.schema(i)
 	}
 	return

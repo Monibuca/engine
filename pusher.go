@@ -34,10 +34,14 @@ func (pub *Pusher) startPush(pusher IPusher) {
 	Pushers.Store(pub.RemoteURL, pusher)
 	defer Pushers.Delete(pub.RemoteURL)
 	defer pusher.Disconnect()
+	var startTime time.Time
 	for pusher.Info("start push"); pusher.Reconnect(); pusher.Warn("restart push") {
+		if time.Since(startTime) < 5*time.Second {
+			time.Sleep(5 * time.Second)
+		}
+		startTime = time.Now()
 		if err = pusher.Subscribe(pub.StreamPath, pusher); err != nil {
 			pusher.Error("push subscribe", zap.Error(err))
-			time.Sleep(time.Second * 5)
 		} else {
 			stream := pusher.GetSubscriber().Stream
 			if err = pusher.Connect(); err != nil {

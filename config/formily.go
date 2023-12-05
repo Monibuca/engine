@@ -6,7 +6,7 @@ type Property struct {
 	Description string `json:"description"`
 	Enum        []struct {
 		Label string `json:"label"`
-		Value string `json:"value"`
+		Value any `json:"value"`
 	} `json:"enum,omitempty"`
 	Items          *Object        `json:"items,omitempty"`
 	Properties     map[string]any `json:"properties,omitempty"`

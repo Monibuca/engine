@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"reflect"
 	"time"
 
 	"m7s.live/engine/v4/common"
@@ -103,4 +104,18 @@ type InviteTrackEvent struct {
 
 func InviteTrack(name string, suber ISubscriber) {
 	EventBus <- InviteTrackEvent{Event: CreateEvent(name), ISubscriber: suber}
+}
+
+var handlers = make(map[reflect.Type][]any)
+
+func ListenEvent[T any](handler func(event T)) {
+	t := reflect.TypeOf(handler).In(0)
+	handlers[t] = append(handlers[t], handler)
+}
+
+func EmitEvent[T any](event T) {
+	t := reflect.TypeOf(event)
+	for _, handler := range handlers[t] {
+		handler.(func(event T))(event)
+	}
 }
