@@ -426,18 +426,25 @@ func (config *Config) schema(index int) (r any) {
 	}
 }
 
-func (config *Config) GetFormily() (r Formily) {
-	r.Form.LabelCol = 4
-	r.Form.WrapperCol = 20
-	r.Schema = Object{
-		Type:       "object",
-		Properties: make(map[string]any),
+func (config *Config) GetFormily() (r Object) {
+	var fromItems = make(map[string]any)
+	r.Type = "object"
+	r.Properties = map[string]any{
+		"layout": Card{
+			Type:      "void",
+			Component: "FormLayout",
+			ComponentProps: map[string]any{
+				"labelCol":   4,
+				"wrapperCol": 20,
+			},
+			Properties: fromItems,
+		},
 	}
 	for i, v := range config.props {
 		if strings.HasPrefix(v.tag.Get("desc"), "废弃") {
 			continue
 		}
-		r.Schema.Properties[v.name] = v.schema(i)
+		fromItems[v.name] = v.schema(i)
 	}
 	return
 }

@@ -30,11 +30,3 @@ type Object struct {
 	Type       string         `json:"type"`
 	Properties map[string]any `json:"properties"`
 }
-
-type Formily struct {
-	Form struct {
-		LabelCol   int `json:"labelCol"`
-		WrapperCol int `json:"wrapperCol"`
-	} `json:"form"`
-	Schema Object `json:"schema"`
-}
