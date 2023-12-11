@@ -88,22 +88,28 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 	}
 	var data any
 	if q.Get("yaml") != "" {
-		data = struct {
-			File     any
-			Modified any
-			Merged   any
-		}{
-			p.RawConfig.File, p.RawConfig.Modify, p.RawConfig.GetMap(),
+		var tmp  struct {
+			File     string
+			Modified string
+			Merged   string
 		}
-		mm, err := yaml.Marshal(data)
-		if err != nil {
-			mm = []byte("")
+		mm, err := yaml.Marshal(p.RawConfig.File)
+		if err == nil {
+			tmp.File = string(mm)
 		}
-		data = mm
+		mm, err = yaml.Marshal(p.RawConfig.Modify)
+		if err == nil {
+			tmp.Modified = string(mm)
+		}
+		mm, err = yaml.Marshal(p.RawConfig.GetMap())
+		if err == nil {
+			tmp.Merged = string(mm)
+		}
+		data = &tmp
 	} else if q.Get("formily") != "" {
 		data = p.RawConfig.GetFormily()
 	} else {
-		data = p.RawConfig
+		data = &p.RawConfig
 	}
 	util.ReturnValue(data, w, r)
 }

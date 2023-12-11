@@ -94,10 +94,10 @@ func (config Config) Has(key string) (ok bool) {
 }
 
 func (config *Config) MarshalJSON() ([]byte, error) {
-	if config.props == nil {
+	if config.propsMap == nil {
 		return json.Marshal(config.Value)
 	}
-	return json.Marshal(config.props)
+	return json.Marshal(config.propsMap)
 }
 
 // Parse 第一步读取配置结构体的默认值
