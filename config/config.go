@@ -35,6 +35,7 @@ type Config struct {
 }
 
 var durationType = reflect.TypeOf(time.Duration(0))
+var regexpType = reflect.TypeOf(Regexp{})
 
 type Plugin interface {
 	// 可能的入参类型：FirstConfig 第一次初始化配置，Config 后续配置更新，SE系列（StateEvent）流状态变化事件
@@ -118,9 +119,10 @@ func (config *Config) Parse(s any, prefix ...string) {
 	if len(prefix) > 0 { // 读取环境变量
 		envKey := strings.Join(prefix, "_")
 		if envValue := os.Getenv(envKey); envValue != "" {
-			yaml.Unmarshal([]byte(fmt.Sprintf("env: %s", envValue)), config)
+			envv := config.assign(strings.ToLower(prefix[0]), envValue)
+			config.Env = envv.Interface()
 			config.Value = config.Env
-			config.Ptr.Set(reflect.ValueOf(config.Env))
+			config.Ptr.Set(envv)
 		}
 	}
 	if t.Kind() == reflect.Struct {
@@ -303,7 +305,17 @@ func (config *Config) schema(index int) (r any) {
 			p.Description = "已使用全局配置中的值"
 		}
 		p.Enum = config.Enum
-		if config.Ptr.Type() == durationType {
+		switch config.Ptr.Type() {
+		case regexpType:
+			p.Type = "string"
+			p.Component = "Input"
+			p.DecoratorProps["addonAfter"] = "正则表达式"
+			str := config.Value.(Regexp).String()
+			p.ComponentProps = map[string]any{
+				"placeholder": str,
+			}
+			p.Default = str
+		case durationType:
 			p.Type = "string"
 			p.Component = "Input"
 			str := config.Value.(time.Duration).String()
@@ -312,11 +324,11 @@ func (config *Config) schema(index int) (r any) {
 			}
 			p.Default = str
 			p.DecoratorProps["addonAfter"] = "时间,单位：s,m,h,d，例如：100ms, 10s, 4m, 1h"
-		} else {
+		default:
 			switch config.Ptr.Kind() {
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64:
 				p.Type = "number"
-				p.Component = "NumberPicker"
+				p.Component = "InputNumber"
 				p.ComponentProps = map[string]any{
 					"placeholder": config.Value,
 				}
@@ -417,6 +429,8 @@ func (config *Config) schema(index int) (r any) {
 				}
 				p.Default = children
 				return p
+			default:
+
 			}
 		}
 		if len(p.Enum) > 0 {
@@ -449,23 +463,6 @@ func (config *Config) GetFormily() (r Object) {
 	return
 }
 
-// func (config *Config) GetModify() map[string]any {
-// 	m := make(map[string]any)
-// 	for k, v := range config.props {
-// 		if v.props != nil {
-// 			if vv := v.GetModify(); vv != nil {
-// 				m[k] = vv
-// 			}
-// 		} else if v.Modify != nil {
-// 			m[k] = v.Modify
-// 		}
-// 	}
-// 	if len(m) > 0 {
-// 		return m
-// 	}
-// 	return nil
-// }
-
 var regexPureNumber = regexp.MustCompile(`^\d+$`)
 
 func (config *Config) assign(k string, v any) (target reflect.Value) {
@@ -473,7 +470,8 @@ func (config *Config) assign(k string, v any) (target reflect.Value) {
 
 	source := reflect.ValueOf(v)
 
-	if ft == durationType {
+	switch ft {
+	case durationType:
 		target = reflect.New(ft).Elem()
 		if source.Type() == durationType {
 			target.Set(source)
@@ -492,59 +490,21 @@ func (config *Config) assign(k string, v any) (target reflect.Value) {
 				os.Exit(1)
 			}
 		}
-		return
+	case regexpType:
+		target = reflect.New(ft).Elem()
+		regexpStr := source.String()
+		target.Set(reflect.ValueOf(Regexp{regexp.MustCompile(regexpStr)}))
+	default:
+		tmpStruct := reflect.StructOf([]reflect.StructField{
+			{
+				Name: strings.ToUpper(k),
+				Type: ft,
+			},
+		})
+		tmpValue := reflect.New(tmpStruct)
+		tmpByte, _ := yaml.Marshal(map[string]any{k: v})
+		yaml.Unmarshal(tmpByte, tmpValue.Interface())
+		target = tmpValue.Elem().Field(0)
 	}
-
-	tmpStruct := reflect.StructOf([]reflect.StructField{
-		{
-			Name: strings.ToUpper(k),
-			Type: ft,
-		},
-	})
-	tmpValue := reflect.New(tmpStruct)
-	tmpByte, _ := yaml.Marshal(map[string]any{k: v})
-	yaml.Unmarshal(tmpByte, tmpValue.Interface())
-	return tmpValue.Elem().Field(0)
-	// switch target.Kind() {
-	// case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-	// 	target.SetUint(uint64(source.Int()))
-	// case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-	// 	target.SetInt(source.Int())
-	// case reflect.Float32, reflect.Float64:
-	// 	if source.CanFloat() {
-	// 		target.SetFloat(source.Float())
-	// 	} else {
-	// 		target.SetFloat(float64(source.Int()))
-	// 	}
-	// case reflect.Map:
-
-	// case reflect.Slice:
-	// 	var s reflect.Value
-	// 	if source.Kind() == reflect.Slice {
-	// 		l := source.Len()
-	// 		s = reflect.MakeSlice(ft, l, source.Cap())
-	// 		for i := 0; i < l; i++ {
-	// 			fv := source.Index(i)
-	// 			item := s.Index(i)
-	// 			if child, ok := fv.Interface().(map[string]any); ok {
-	// 				panic(child)
-	// 				// item.Set(child.CreateElem(ft.Elem()))
-	// 			} else if fv.Kind() == reflect.Interface {
-	// 				item.Set(reflect.ValueOf(fv.Interface()).Convert(item.Type()))
-	// 			} else {
-	// 				item.Set(fv)
-	// 			}
-	// 		}
-	// 	} else {
-	// 		//值是单值，但类型是数组，默认解析为一个元素的数组
-	// 		s = reflect.MakeSlice(ft, 1, 1)
-	// 		s.Index(0).Set(source)
-	// 	}
-	// 	target.Set(s)
-	// default:
-	// 	if source.IsValid() {
-	// 		target.Set(source.Convert(ft))
-	// 	}
-	// }
 	return
 }
