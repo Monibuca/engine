@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -131,8 +130,8 @@ func Run(ctx context.Context, conf any) (err error) {
 			}
 		}
 		var userConfig map[string]any
-		if defaultYaml := reflect.ValueOf(plugin.Config).Elem().FieldByName("DefaultYaml"); defaultYaml.IsValid() {
-			if err := yaml.Unmarshal([]byte(defaultYaml.String()), &userConfig); err != nil {
+		if plugin.defaultYaml != "" {
+			if err := yaml.Unmarshal([]byte(plugin.defaultYaml), &userConfig); err != nil {
 				log.Error("parsing default config error:", err)
 			} else {
 				plugin.RawConfig.ParseDefaultYaml(userConfig)

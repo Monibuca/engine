@@ -88,7 +88,7 @@ func (conf *GlobalConfig) API_getConfig(w http.ResponseWriter, r *http.Request) 
 	}
 	var data any
 	if q.Get("yaml") != "" {
-		var tmp  struct {
+		var tmp struct {
 			File     string
 			Modified string
 			Merged   string
@@ -137,12 +137,14 @@ func (conf *GlobalConfig) API_modifyConfig(w http.ResponseWriter, r *http.Reques
 	}
 	if err != nil {
 		util.ReturnError(util.APIErrorDecode, err.Error(), w, r)
-	} else if err = p.Save(); err == nil {
-		p.RawConfig.ParseModifyFile(modified)
-		util.ReturnOK(w, r)
-	} else {
-		util.ReturnError(util.APIErrorSave, err.Error(), w, r)
+		return
 	}
+	p.RawConfig.ParseModifyFile(modified)
+	if err = p.Save(); err != nil {
+		util.ReturnError(util.APIErrorSave, err.Error(), w, r)
+		return
+	}
+	util.ReturnOK(w, r)
 }
 
 // API_updateConfig 热更新配置
@@ -158,6 +160,22 @@ func (conf *GlobalConfig) API_updateConfig(w http.ResponseWriter, r *http.Reques
 		}
 	} else {
 		p = Engine
+	}
+	var err error
+	var modified map[string]any
+	if q.Get("yaml") != "" {
+		err = yaml.NewDecoder(r.Body).Decode(&modified)
+	} else {
+		err = json.NewDecoder(r.Body).Decode(&modified)
+	}
+	if err != nil {
+		util.ReturnError(util.APIErrorDecode, err.Error(), w, r)
+		return
+	}
+	p.RawConfig.ParseModifyFile(modified)
+	if err = p.Save(); err != nil {
+		util.ReturnError(util.APIErrorSave, err.Error(), w, r)
+		return
 	}
 	p.Update(&p.RawConfig)
 	util.ReturnOK(w, r)

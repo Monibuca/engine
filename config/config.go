@@ -125,7 +125,7 @@ func (config *Config) Parse(s any, prefix ...string) {
 			config.Ptr.Set(envv)
 		}
 	}
-	if t.Kind() == reflect.Struct {
+	if t.Kind() == reflect.Struct && t != regexpType {
 		for i, j := 0, t.NumField(); i < j; i++ {
 			ft, fv := t.Field(i), v.Field(i)
 			if !ft.IsExported() {
@@ -231,15 +231,60 @@ func (config *Config) ParseModifyFile(conf map[string]any) {
 		if config.Has(k) {
 			if prop := config.Get(k); prop.props != nil {
 				if v != nil {
-					prop.ParseModifyFile(v.(map[string]any))
+					vmap := v.(map[string]any)
+					prop.ParseModifyFile(vmap)
+					if len(vmap) == 0 {
+						delete(conf, k)
+					}
 				}
 			} else {
 				mv := prop.assign(k, v)
-				prop.Modify = mv.Interface()
-				prop.Value = mv.Interface()
+				v = mv.Interface()
+				vwm := prop.valueWithoutModify()
+				if equal(vwm, v) {
+					delete(conf, k)
+					if prop.Modify != nil {
+						prop.Modify = nil
+						prop.Value = vwm
+						prop.Ptr.Set(reflect.ValueOf(vwm))
+					}
+					continue
+				}
+				prop.Modify = v
+				prop.Value = v
 				prop.Ptr.Set(mv)
 			}
 		}
+	}
+	if len(conf) == 0 {
+		config.Modify = nil
+	}
+}
+
+func (config *Config) valueWithoutModify() any {
+	if config.Env != nil {
+		return config.Env
+	}
+	if config.File != nil {
+		return config.File
+	}
+	if config.Global != nil {
+		return config.Global.Value
+	}
+	return config.Default
+}
+
+func equal(vwm, v any) bool {
+	ft := reflect.TypeOf(vwm)
+	switch ft {
+	case regexpType:
+		return vwm.(Regexp).String() == v.(Regexp).String()
+	default:
+		switch ft.Kind() {
+		case reflect.Slice, reflect.Array, reflect.Map:
+			return reflect.DeepEqual(vwm, v)
+		}
+		return vwm == v
 	}
 }
 
@@ -258,209 +303,6 @@ func (config *Config) GetMap() map[string]any {
 		return m
 	}
 	return nil
-}
-
-func (config *Config) schema(index int) (r any) {
-	defer func() {
-		err := recover()
-		if err != nil {
-			log.Error(err)
-		}
-	}()
-	if config.props != nil {
-		r := Card{
-			Type:       "void",
-			Component:  "Card",
-			Properties: make(map[string]any),
-			Index:      index,
-		}
-		r.ComponentProps = map[string]any{
-			"title": config.name,
-		}
-		for i, v := range config.props {
-			if strings.HasPrefix(v.tag.Get("desc"), "废弃") {
-				continue
-			}
-			r.Properties[v.name] = v.schema(i)
-		}
-		return r
-	} else {
-		p := Property{
-			Title:   config.name,
-			Default: config.Value,
-			DecoratorProps: map[string]any{
-				"tooltip": config.tag.Get("desc"),
-			},
-			ComponentProps: map[string]any{},
-			Decorator:      "FormItem",
-			Index:          index,
-		}
-		if config.Modify != nil {
-			p.Description = "已动态修改"
-		} else if config.Env != nil {
-			p.Description = "使用环境变量中的值"
-		} else if config.File != nil {
-			p.Description = "使用配置文件中的值"
-		} else if config.Global != nil {
-			p.Description = "已使用全局配置中的值"
-		}
-		p.Enum = config.Enum
-		switch config.Ptr.Type() {
-		case regexpType:
-			p.Type = "string"
-			p.Component = "Input"
-			p.DecoratorProps["addonAfter"] = "正则表达式"
-			str := config.Value.(Regexp).String()
-			p.ComponentProps = map[string]any{
-				"placeholder": str,
-			}
-			p.Default = str
-		case durationType:
-			p.Type = "string"
-			p.Component = "Input"
-			str := config.Value.(time.Duration).String()
-			p.ComponentProps = map[string]any{
-				"placeholder": str,
-			}
-			p.Default = str
-			p.DecoratorProps["addonAfter"] = "时间,单位：s,m,h,d，例如：100ms, 10s, 4m, 1h"
-		default:
-			switch config.Ptr.Kind() {
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Float32, reflect.Float64:
-				p.Type = "number"
-				p.Component = "InputNumber"
-				p.ComponentProps = map[string]any{
-					"placeholder": config.Value,
-				}
-			case reflect.Bool:
-				p.Type = "boolean"
-				p.Component = "Switch"
-			case reflect.String:
-				p.Type = "string"
-				p.Component = "Input"
-				p.ComponentProps = map[string]any{
-					"placeholder": config.Value,
-				}
-			case reflect.Slice:
-				p.Type = "array"
-				p.Component = "Input"
-				p.ComponentProps = map[string]any{
-					"placeholder": config.Value,
-				}
-				p.DecoratorProps["addonAfter"] = "数组，每个元素用逗号分隔"
-			case reflect.Map:
-				var children []struct {
-					Key   string `json:"mkey"`
-					Value any    `json:"mvalue"`
-				}
-				p := Property{
-					Type:      "array",
-					Component: "ArrayTable",
-					Decorator: "FormItem",
-					Properties: map[string]any{
-						"addition": map[string]string{
-							"type":        "void",
-							"title":       "添加",
-							"x-component": "ArrayTable.Addition",
-						},
-					},
-					Index: index,
-					Title: config.name,
-					Items: &Object{
-						Type: "object",
-						Properties: map[string]any{
-							"c1": Card{
-								Type:      "void",
-								Component: "ArrayTable.Column",
-								ComponentProps: map[string]any{
-									"title": config.tag.Get("key"),
-									"width": 300,
-								},
-								Properties: map[string]any{
-									"mkey": Property{
-										Type:      "string",
-										Decorator: "FormItem",
-										Component: "Input",
-									},
-								},
-								Index: 0,
-							},
-							"c2": Card{
-								Type:      "void",
-								Component: "ArrayTable.Column",
-								ComponentProps: map[string]any{
-									"title": config.tag.Get("value"),
-								},
-								Properties: map[string]any{
-									"mvalue": Property{
-										Type:      "string",
-										Decorator: "FormItem",
-										Component: "Input",
-									},
-								},
-								Index: 1,
-							},
-							"operator": Card{
-								Type:      "void",
-								Component: "ArrayTable.Column",
-								ComponentProps: map[string]any{
-									"title": "操作",
-								},
-								Properties: map[string]any{
-									"remove": Card{
-										Type:      "void",
-										Component: "ArrayTable.Remove",
-									},
-								},
-								Index: 2,
-							},
-						},
-					},
-				}
-				iter := config.Ptr.MapRange()
-				for iter.Next() {
-					children = append(children, struct {
-						Key   string `json:"mkey"`
-						Value any    `json:"mvalue"`
-					}{
-						Key:   iter.Key().String(),
-						Value: iter.Value().Interface(),
-					})
-				}
-				p.Default = children
-				return p
-			default:
-
-			}
-		}
-		if len(p.Enum) > 0 {
-			p.Component = "Radio.Group"
-		}
-		return p
-	}
-}
-
-func (config *Config) GetFormily() (r Object) {
-	var fromItems = make(map[string]any)
-	r.Type = "object"
-	r.Properties = map[string]any{
-		"layout": Card{
-			Type:      "void",
-			Component: "FormLayout",
-			ComponentProps: map[string]any{
-				"labelCol":   4,
-				"wrapperCol": 20,
-			},
-			Properties: fromItems,
-		},
-	}
-	for i, v := range config.props {
-		if strings.HasPrefix(v.tag.Get("desc"), "废弃") {
-			continue
-		}
-		fromItems[v.name] = v.schema(i)
-	}
-	return
 }
 
 var regexPureNumber = regexp.MustCompile(`^\d+$`)

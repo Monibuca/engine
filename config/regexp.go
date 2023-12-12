@@ -10,22 +10,27 @@ type Regexp struct {
 	*regexp.Regexp
 }
 
+func (r *Regexp) Valid() bool {
+	return r.Regexp != nil
+}
+
+func (r Regexp) String() string {
+	if !r.Valid() {
+		return ""
+	}
+	return r.Regexp.String()
+}
+
 func (r *Regexp) UnmarshalYAML(node *yaml.Node) error {
 	r.Regexp = regexp.MustCompile(node.Value)
 	return nil
 }
 
 func (r *Regexp) MarshalYAML() (interface{}, error) {
-	if r.Regexp == nil {
-		return "", nil
-	}
 	return r.String(), nil
 }
 
 func (r *Regexp) MarshalJSON() ([]byte, error) {
-	if r.Regexp == nil {
-		return []byte(`""`), nil
-	}
 	return []byte(`"` + r.String() + `"`), nil
 }
 

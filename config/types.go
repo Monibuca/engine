@@ -77,11 +77,11 @@ func (c *Subscribe) GetSubscribeConfig() *Subscribe {
 }
 
 type Pull struct {
-	RePull       int               // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
-	EnableRegexp bool              // 是否启用正则表达式
-	PullOnStart  map[string]string // 启动时拉流的列表
-	PullOnSub    map[string]string // 订阅时自动拉流的列表
-	Proxy        string            // 代理地址
+	RePull       int               `desc:"断开后自动重试次数,0:不重试,-1:无限重试"` // 断开后自动重拉,0 表示不自动重拉，-1 表示无限重拉，高于0 的数代表最大重拉次数
+	EnableRegexp bool              `desc:"是否启用正则表达式"`               // 是否启用正则表达式
+	PullOnStart  map[string]string `desc:"启动时拉流的列表"`                // 启动时拉流的列表
+	PullOnSub    map[string]string `desc:"订阅时自动拉流的列表"`              // 订阅时自动拉流的列表
+	Proxy        string            `desc:"代理地址"`                    // 代理地址
 }
 
 func (p *Pull) GetPullConfig() *Pull {
@@ -145,10 +145,10 @@ func (p *Pull) AddPullOnSub(streamPath string, url string) {
 }
 
 type Push struct {
-	EnableRegexp bool              // 是否启用正则表达式
-	RePush       int               // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
-	PushList     map[string]string // 自动推流列表
-	Proxy        string            // 代理地址
+	EnableRegexp bool              `desc:"是否启用正则表达式"`               // 是否启用正则表达式
+	RePush       int               `desc:"断开后自动重试次数,0:不重试,-1:无限重试"` // 断开后自动重推,0 表示不自动重推，-1 表示无限重推，高于0 的数代表最大重推次数
+	PushList     map[string]string `desc:"自动推流列表"`                  // 自动推流列表
+	Proxy        string            `desc:"代理地址"`                    // 代理地址
 }
 
 func (p *Push) GetPushConfig() *Push {
