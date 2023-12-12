@@ -24,12 +24,12 @@ type TCPConfig interface {
 }
 
 type TCP struct {
-	ListenAddr    string
-	ListenAddrTLS string
-	CertFile      string
-	KeyFile       string
-	ListenNum     int  //同时并行监听数量，0为CPU核心数量
-	NoDelay       bool //是否禁用Nagle算法
+	ListenAddr    string `desc:"监听地址，格式为ip:port，ip 可省略默认监听所有网卡"`
+	ListenAddrTLS string `desc:"监听地址，格式为ip:port，ip 可省略默认监听所有网卡"`
+	CertFile      string `desc:"证书文件"`
+	KeyFile       string `desc:"私钥文件"`
+	ListenNum     int    `desc:"同时并行监听数量，0为CPU核心数量"` //同时并行监听数量，0为CPU核心数量
+	NoDelay       bool   `desc:"是否禁用Nagle算法"`        //是否禁用Nagle算法
 }
 
 func (tcp *TCP) listen(l net.Listener, handler func(net.Conn)) {
