@@ -279,11 +279,26 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int)
 	}
 	switch save {
 	case 1:
-		pullConf.AddPullOnStart(streamPath, url)
-		opt.RawConfig.Get("pull").Get("pullonstart").Modify = pullConf.PullOnStart
+		pullConf.PullOnStartLocker.Lock()
+		defer pullConf.PullOnStartLocker.Unlock()
+		m := map[string]string{streamPath: url}
+		opt.RawConfig.ParseModifyFile(map[string]any{
+			"pull": map[string]any{
+				"pullonstart": m,
+			},
+		})
 	case 2:
-		pullConf.AddPullOnSub(streamPath, url)
-		opt.RawConfig.Get("pull").Get("pullonsub").Modify = pullConf.PullOnSub
+		pullConf.PullOnSubLocker.Lock()
+		defer pullConf.PullOnSubLocker.Unlock()
+		m := map[string]string{streamPath: url}
+		for id := range pullConf.PullOnSub {
+			m[id] = pullConf.PullOnSub[id]
+		}
+		opt.RawConfig.ParseModifyFile(map[string]any{
+			"pull": map[string]any{
+				"pullonsub": m,
+			},
+		})
 	}
 	if save > 0 {
 		if err = opt.Save(); err != nil {
