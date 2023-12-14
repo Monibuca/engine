@@ -26,11 +26,11 @@ func (r *Regexp) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-func (r *Regexp) MarshalYAML() (interface{}, error) {
+func (r Regexp) MarshalYAML() (interface{}, error) {
 	return r.String(), nil
 }
 
-func (r *Regexp) MarshalJSON() ([]byte, error) {
+func (r Regexp) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + r.String() + `"`), nil
 }
 
