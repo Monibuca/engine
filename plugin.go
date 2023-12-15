@@ -147,14 +147,17 @@ func (opt *Plugin) registerHandler() {
 	// 注册http响应
 	for i, j := 0, t.NumMethod(); i < j; i++ {
 		name := t.Method(i).Name
-		patten := "/"
-		if name != "ServeHTTP" {
-			patten = strings.ToLower(strings.ReplaceAll(name, "_", "/"))
+		if name == "ServeHTTP" {
+			continue
 		}
 		switch handler := v.Method(i).Interface().(type) {
 		case func(http.ResponseWriter, *http.Request):
+			patten := strings.ToLower(strings.ReplaceAll(name, "_", "/"))
 			opt.handle(patten, http.HandlerFunc(handler))
 		}
+	}
+	if rootHandler, ok := opt.Config.(http.Handler); ok {
+		opt.handle("/", rootHandler)
 	}
 }
 
