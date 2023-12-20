@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -283,13 +284,16 @@ func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream
 		timeout:    time.NewTimer(waitTimeout),
 	})
 	if s := actual.(*Stream); loaded {
-		s.Debug("Stream Found")
+		for s.Logger == nil {
+			runtime.Gosched()
+		}
+		s.Debug("found")
 		return s, false
 	} else {
 		s.ID = streamIdGen.Add(1)
-		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath), zap.Uint32("id", s.ID))
 		s.Subscribers.Init()
 		s.actionChan.Init(10)
+		s.Logger = log.LocaleLogger.With(zap.String("stream", streamPath), zap.Uint32("id", s.ID))
 		s.Info("created")
 		go s.run()
 		return s, true
