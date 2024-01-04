@@ -1,11 +1,14 @@
 package common
 
+import "m7s.live/engine/v4/util"
+
 // DTSEstimator is a DTS estimator.
 type DTSEstimator struct {
-	hasB    bool
-	prevPTS uint32
-	prevDTS uint32
-	cache   []uint32
+	hasB     bool
+	prevPTS  uint32
+	prevDTS  uint32
+	cache    []uint32
+	interval uint32
 }
 
 // NewDTSEstimator allocates a DTSEstimator.
@@ -20,6 +23,7 @@ func (d *DTSEstimator) Clone() *DTSEstimator {
 		d.prevPTS,
 		d.prevDTS,
 		append([]uint32(nil), d.cache...),
+		d.interval,
 	}
 }
 
@@ -44,9 +48,11 @@ func (d *DTSEstimator) add(pts uint32) {
 
 // Feed provides PTS to the estimator, and returns the estimated DTS.
 func (d *DTSEstimator) Feed(pts uint32) uint32 {
-	if pts < d.prevPTS && d.prevPTS-pts > 0x80000000 {
+	interval := util.Conditoinal(pts > d.prevPTS, pts-d.prevPTS, d.prevPTS-pts)
+	if interval > 10*d.interval {
 		*d = *NewDTSEstimator()
 	}
+	d.interval = interval
 	d.add(pts)
 	dts := pts
 	if !d.hasB {

@@ -12,6 +12,8 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
+var deltaDTSRange time.Duration = 90 * 10000 // 超过 10 秒
+
 type 流速控制 struct {
 	起始时间戳 time.Duration
 	起始dts time.Duration
@@ -99,7 +101,7 @@ type Media struct {
 	RTPDemuxer
 	SpesificTrack `json:"-" yaml:"-"`
 	deltaTs       time.Duration //用于接续发布后时间戳连续
-	deltaDTSRange time.Duration //DTS差的范围
+
 	流速控制
 }
 
@@ -225,6 +227,7 @@ func (av *Media) AddIDR() {
 func (av *Media) Flush() {
 	curValue, preValue, nextValue := av.Value, av.LastValue, av.Next()
 	useDts := curValue.Timestamp == 0
+	originDTS := curValue.DTS
 	if av.State == TrackStateOffline {
 		av.State = TrackStateOnline
 		if useDts {
@@ -256,14 +259,12 @@ func (av *Media) Flush() {
 	} else {
 		if useDts {
 			deltaDts := curValue.DTS - preValue.DTS
-			if deltaDts <= 0 && deltaDts > -(1<<15) {
-				// 生成一个无奈的deltaDts
-				deltaDts = 90
-				// 必须保证DTS递增
-				curValue.DTS = preValue.DTS + deltaDts
-			} else if deltaDts != 90 {
-				// 正常情况下生成容错范围
-				av.deltaDTSRange = deltaDts * 2
+			if deltaDts > deltaDTSRange || deltaDts < -deltaDTSRange {
+				// 时间戳跳变，等同于离线重连
+				av.deltaTs = deltaDts
+				curValue.DTS = preValue.DTS + 90
+				curValue.PTS = preValue.PTS + 90
+				av.Warn("track dts reset", zap.Int64("delta", int64(deltaDts)))
 			}
 			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
 		}
@@ -271,7 +272,7 @@ func (av *Media) Flush() {
 		curValue.DeltaTime = uint32(deltaTS(curValue.Timestamp, preValue.Timestamp) / time.Millisecond)
 	}
 	if log.Trace {
-		av.Trace("write", zap.Uint32("seq", curValue.Sequence), zap.Duration("dts", curValue.DTS), zap.Duration("dts delta", curValue.DTS-preValue.DTS), zap.Uint32("delta", curValue.DeltaTime), zap.Duration("timestamp", curValue.Timestamp), zap.Int("au", curValue.AUList.Length), zap.Int("rtp", curValue.RTP.Length), zap.Int("avcc", curValue.AVCC.ByteLength), zap.Int("raw", curValue.AUList.ByteLength), zap.Int("bps", av.BPS))
+		av.Trace("write", zap.Uint32("seq", curValue.Sequence), zap.Int64("dts0", int64(preValue.DTS)), zap.Int64("dts1", int64(originDTS)), zap.Uint64("dts2", uint64(curValue.DTS)), zap.Uint32("delta", curValue.DeltaTime), zap.Duration("timestamp", curValue.Timestamp), zap.Int("au", curValue.AUList.Length), zap.Int("rtp", curValue.RTP.Length), zap.Int("avcc", curValue.AVCC.ByteLength), zap.Int("raw", curValue.AUList.ByteLength), zap.Int("bps", av.BPS))
 	}
 	bufferTime := av.Stream.GetPublisherConfig().BufferTime
 	if bufferTime > 0 && av.IDRingList.IDRList.Length > 1 && deltaTS(curValue.Timestamp, av.IDRingList.IDRList.Next.Next.Value.Value.Timestamp) > bufferTime {
