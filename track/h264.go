@@ -184,10 +184,11 @@ func (vt *H264) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 			} else if vt.buf.Len() > 0 {
 				vt.WriteAnnexB(uint32(rv.PTS), uint32(rv.DTS), vt.buf)
 				vt.buf = nil
+
 			}
 		}
 	}
-	if frame.Marker && rv.AUList.ByteLength > 0 {
+	if rv = vt.Value; frame.Marker && rv.AUList.ByteLength > 0 {
 		if !vt.dcChanged && rv.IFrame {
 			vt.insertDCRtp()
 		}

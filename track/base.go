@@ -235,8 +235,8 @@ func (av *Media) Flush() {
 		} else {
 			av.deltaTs = curValue.Timestamp - preValue.Timestamp
 		}
-		curValue.DTS = preValue.DTS + 90
-		curValue.PTS = preValue.PTS + 90
+		curValue.DTS = preValue.DTS + 900
+		curValue.PTS = preValue.PTS + 900
 		curValue.Timestamp = preValue.Timestamp + time.Millisecond
 		av.Info("track back online", zap.Duration("delta", av.deltaTs))
 	} else if av.deltaTs != 0 {
@@ -261,10 +261,10 @@ func (av *Media) Flush() {
 			deltaDts := curValue.DTS - preValue.DTS
 			if deltaDts > deltaDTSRange || deltaDts < -deltaDTSRange {
 				// 时间戳跳变，等同于离线重连
-				av.deltaTs = deltaDts
-				curValue.DTS = preValue.DTS + 90
-				curValue.PTS = preValue.PTS + 90
-				av.Warn("track dts reset", zap.Int64("delta", int64(deltaDts)))
+				av.deltaTs = originDTS - preValue.DTS
+				curValue.DTS = preValue.DTS + 900
+				curValue.PTS = preValue.PTS + 900
+				av.Warn("track dts reset", zap.Int64("delta1", int64(deltaDts)), zap.Int64("delta2", int64(av.deltaTs)))
 			}
 			curValue.Timestamp = av.根据起始DTS计算绝对时间戳(curValue.DTS)
 		}
