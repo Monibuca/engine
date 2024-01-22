@@ -529,6 +529,10 @@ func (s *Stream) run() {
 					break
 				}
 				puber := v.Value.GetPublisher()
+				var oldPuber *Publisher
+				if s.Publisher != nil {
+					oldPuber = s.Publisher.GetPublisher()
+				}
 				conf := puber.Config
 				republish := s.Publisher == v.Value // 重复发布
 				if republish {
@@ -539,11 +543,7 @@ func (s *Stream) run() {
 				}
 				needKick := !republish && s.Publisher != nil && conf.KickExist // 需要踢掉老的发布者
 				if needKick {
-					oldPuber := s.Publisher.GetPublisher()
 					s.Warn("kick", zap.String("old type", oldPuber.Type))
-					// 接管老的发布者的音视频轨道
-					puber.AudioTrack = oldPuber.AudioTrack
-					puber.VideoTrack = oldPuber.VideoTrack
 					s.Publisher.OnEvent(SEKick{CreateEvent[struct{}](util.Null)})
 				}
 				s.Publisher = v.Value
@@ -552,6 +552,11 @@ func (s *Stream) run() {
 				s.IdleTimeout = conf.IdleTimeout
 				s.PauseTimeout = conf.PauseTimeout
 				if s.action(ACTION_PUBLISH) || republish || needKick {
+					if oldPuber != nil {
+						// 接管老的发布者的音视频轨道
+						puber.AudioTrack = oldPuber.AudioTrack
+						puber.VideoTrack = oldPuber.VideoTrack
+					}
 					if conf.InsertSEI {
 						if s.Tracks.SEI == nil {
 							s.Tracks.SEI = track.NewDataTrack[[]byte]("sei")
