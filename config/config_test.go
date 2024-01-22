@@ -30,3 +30,24 @@ func TestModify(t *testing.T) {
 		}
 	})
 }
+
+// TestGlobal 测试全局配置
+func TestGlobal(t *testing.T) {
+	t.Run(t.Name(), func(t *testing.T) {
+		var defaultValue struct{
+			 Publish
+		}
+		var globalValue struct {
+			Publish
+		}
+		globalValue.Publish.KickExist = true
+		var conf Config
+		var globalConf Config
+		globalConf.Parse(&globalValue)
+		conf.Parse(&defaultValue)
+		conf.ParseGlobal(&globalConf)
+		if defaultValue.Publish.KickExist != true {
+			t.Fail()
+		}
+	})
+}

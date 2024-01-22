@@ -67,7 +67,7 @@ func (config *Config) schema(index int) (r any) {
 	} else {
 		p := Property{
 			Title:   config.name,
-			Default: config.Value,
+			Default: config.GetValue(),
 			DecoratorProps: map[string]any{
 				"tooltip": config.tag.Get("desc"),
 			},
@@ -90,7 +90,7 @@ func (config *Config) schema(index int) (r any) {
 			p.Type = "string"
 			p.Component = "Input"
 			p.DecoratorProps["addonAfter"] = "正则表达式"
-			str := config.Value.(Regexp).String()
+			str := config.GetValue().(Regexp).String()
 			p.ComponentProps = map[string]any{
 				"placeholder": str,
 			}
@@ -98,7 +98,7 @@ func (config *Config) schema(index int) (r any) {
 		case durationType:
 			p.Type = "string"
 			p.Component = "Input"
-			str := config.Value.(time.Duration).String()
+			str := config.GetValue().(time.Duration).String()
 			p.ComponentProps = map[string]any{
 				"placeholder": str,
 			}
@@ -110,7 +110,7 @@ func (config *Config) schema(index int) (r any) {
 				p.Type = "number"
 				p.Component = "InputNumber"
 				p.ComponentProps = map[string]any{
-					"placeholder": fmt.Sprintf("%v", config.Value),
+					"placeholder": fmt.Sprintf("%v", config.GetValue()),
 				}
 			case reflect.Bool:
 				p.Type = "boolean"
@@ -119,13 +119,13 @@ func (config *Config) schema(index int) (r any) {
 				p.Type = "string"
 				p.Component = "Input"
 				p.ComponentProps = map[string]any{
-					"placeholder": config.Value,
+					"placeholder": config.GetValue(),
 				}
 			case reflect.Slice:
 				p.Type = "array"
 				p.Component = "Input"
 				p.ComponentProps = map[string]any{
-					"placeholder": config.Value,
+					"placeholder": config.GetValue(),
 				}
 				p.DecoratorProps["addonAfter"] = "数组，每个元素用逗号分隔"
 			case reflect.Map:

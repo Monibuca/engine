@@ -17,8 +17,7 @@ import (
 )
 
 type Config struct {
-	Ptr     reflect.Value //指向配置结构体值
-	Value   any           //当前值,优先级：动态修改值>环境变量>配置文件>defaultYaml>全局配置>默认值
+	Ptr     reflect.Value //指向配置结构体值,优先级：动态修改值>环境变量>配置文件>defaultYaml>全局配置>默认值
 	Modify  any           //动态修改的值
 	Env     any           //环境变量中的值
 	File    any           //配置文件中的值
@@ -58,7 +57,7 @@ type QuicPlugin interface {
 }
 
 func (config *Config) Range(f func(key string, value Config)) {
-	if m, ok := config.Value.(map[string]Config); ok {
+	if m, ok := config.GetValue().(map[string]Config); ok {
 		for k, v := range m {
 			f(k, v)
 		}
@@ -66,7 +65,7 @@ func (config *Config) Range(f func(key string, value Config)) {
 }
 
 func (config *Config) IsMap() bool {
-	_, ok := config.Value.(map[string]Config)
+	_, ok := config.GetValue().(map[string]Config)
 	return ok
 }
 
@@ -96,9 +95,13 @@ func (config Config) Has(key string) (ok bool) {
 
 func (config *Config) MarshalJSON() ([]byte, error) {
 	if config.propsMap == nil {
-		return json.Marshal(config.Value)
+		return json.Marshal(config.GetValue())
 	}
 	return json.Marshal(config.propsMap)
+}
+
+func (config *Config) GetValue() any{
+	return config.Ptr.Interface()
 }
 
 // Parse 第一步读取配置结构体的默认值
@@ -115,13 +118,11 @@ func (config *Config) Parse(s any, prefix ...string) {
 	}
 	config.Ptr = v
 	config.Default = v.Interface()
-	config.Value = v.Interface()
 	if len(prefix) > 0 { // 读取环境变量
 		envKey := strings.Join(prefix, "_")
 		if envValue := os.Getenv(envKey); envValue != "" {
 			envv := config.assign(strings.ToLower(prefix[0]), envValue)
 			config.Env = envv.Interface()
-			config.Value = config.Env
 			config.Ptr.Set(envv)
 		}
 	}
@@ -170,7 +171,7 @@ func (config *Config) ParseGlobal(g *Config) {
 			v.ParseGlobal(g.Get(k))
 		}
 	} else {
-		config.Value = g.Value
+		config.Ptr.Set(g.Ptr)
 	}
 }
 
@@ -189,7 +190,6 @@ func (config *Config) ParseDefaultYaml(defaultYaml map[string]any) {
 				dv := prop.assign(k, v)
 				prop.Default = dv.Interface()
 				if prop.Env == nil {
-					prop.Value = dv.Interface()
 					prop.Ptr.Set(dv)
 				}
 			}
@@ -213,7 +213,6 @@ func (config *Config) ParseUserFile(conf map[string]any) {
 				fv := prop.assign(k, v)
 				prop.File = fv.Interface()
 				if prop.Env == nil {
-					prop.Value = fv.Interface()
 					prop.Ptr.Set(fv)
 				}
 			}
@@ -245,13 +244,11 @@ func (config *Config) ParseModifyFile(conf map[string]any) {
 					delete(conf, k)
 					if prop.Modify != nil {
 						prop.Modify = nil
-						prop.Value = vwm
 						prop.Ptr.Set(reflect.ValueOf(vwm))
 					}
 					continue
 				}
 				prop.Modify = v
-				prop.Value = v
 				prop.Ptr.Set(mv)
 			}
 		}
@@ -269,7 +266,7 @@ func (config *Config) valueWithoutModify() any {
 		return config.File
 	}
 	if config.Global != nil {
-		return config.Global.Value
+		return config.Global.GetValue()
 	}
 	return config.Default
 }
@@ -295,8 +292,8 @@ func (config *Config) GetMap() map[string]any {
 			if vv := v.GetMap(); vv != nil {
 				m[k] = vv
 			}
-		} else if v.Value != nil {
-			m[k] = v.Value
+		} else if v.GetValue() != nil {
+			m[k] = v.GetValue()
 		}
 	}
 	if len(m) > 0 {

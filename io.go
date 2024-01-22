@@ -218,7 +218,7 @@ func (io *IO) receive(streamPath string, specific IIO) error {
 	if !isSubscribe {
 		puber := iPub.GetPublisher()
 		conf := puber.Config
-		io.Info("publish", zap.String("ptr", fmt.Sprintf("%p", io.Context)))
+		io.Info("publish", zap.String("ptr", fmt.Sprintf("%p", iPub)))
 		s.pubLocker.Lock()
 		defer s.pubLocker.Unlock()
 		if config.Global.EnableAuth {
