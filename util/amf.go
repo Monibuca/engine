@@ -248,6 +248,10 @@ func (amf *AMF) Marshal(v any) []byte {
 			amf.WriteByte(0)
 		}
 	case EcmaArray:
+		if vv == nil {
+			amf.WriteByte(AMF0_NULL)
+			return amf.Buffer
+		}
 		amf.WriteByte(AMF0_ECMA_ARRAY)
 		amf.WriteUint32(uint32(len(vv)))
 		for k, v := range vv {
@@ -255,6 +259,10 @@ func (amf *AMF) Marshal(v any) []byte {
 		}
 		amf.Write(END_OBJ)
 	case map[string]any:
+		if vv == nil {
+			amf.WriteByte(AMF0_NULL)
+			return amf.Buffer
+		}
 		amf.WriteByte(AMF0_OBJECT)
 		for k, v := range vv {
 			amf.writeProperty(k, v)
