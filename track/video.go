@@ -253,6 +253,7 @@ func (vt *Video) Flush() {
 			var au util.BLL
 			au.Push(vt.SpesificTrack.GetNALU_SEI())
 			au.Push(vt.BytesPool.GetShell(seiFrame.Data))
+			vt.Info("sei", zap.Int("len", len(seiFrame.Data)))
 			vt.Value.AUList.UnshiftValue(&au)
 		} else if err != nil {
 			vt.SEIReader = nil

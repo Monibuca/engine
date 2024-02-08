@@ -123,6 +123,9 @@ type StreamTimeoutConfig struct {
 }
 type Tracks struct {
 	sync.Map
+	Video       []*track.Video
+	Audio       []*track.Audio
+	Data        []common.Track
 	MainVideo   *track.Video
 	MainAudio   *track.Audio
 	SEI         *track.Data[[]byte]
@@ -156,6 +159,16 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 		}
 	}
 	_, loaded := tracks.LoadOrStore(name, t)
+	if !loaded {
+		switch v := t.(type) {
+		case *track.Video:
+			tracks.Video = append(tracks.Video, v)
+		case *track.Audio:
+			tracks.Audio = append(tracks.Audio, v)
+		default:
+			tracks.Data = append(tracks.Data, v)
+		}
+	}
 	return !loaded
 }
 
@@ -489,9 +502,15 @@ func (s *Stream) run() {
 						if trackCount == 0 {
 							s.Warn("no tracks")
 							lost = true
+							s.action(ACTION_CLOSE)
+							continue
 						} else if s.Publisher != nil && s.Publisher.IsClosed() {
 							s.Warn("publish is closed", zap.Error(context.Cause(s.Publisher.GetPublisher())), zap.String("ptr", fmt.Sprintf("%p", s.Publisher.GetPublisher().Context)))
 							lost = true
+							if len(s.Tracks.Audio)+len(s.Tracks.Video) == 0 {
+								s.action(ACTION_CLOSE)
+								continue
+							}
 						}
 					}
 					if lost {
