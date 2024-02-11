@@ -104,7 +104,7 @@ func (r *AVRingReader) ReadFrame(mode int) (err error) {
 			if err = r.Read(r.Track.IDRing); err != nil {
 				return
 			}
-			r.SkipTs = r.Value.Timestamp - r.beforeJump - r.StartTs
+			r.SkipTs = r.Value.Timestamp - r.beforeJump - r.StartTs - 10*time.Millisecond
 			r.Info("jump", zap.Uint32("skipSeq", r.Track.IDRing.Value.Sequence-r.FirstSeq), zap.Duration("skipTs", r.SkipTs))
 			r.State = READSTATE_NORMAL
 		} else {

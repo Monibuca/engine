@@ -232,7 +232,6 @@ func (s *Subscriber) PlayBlock(subType byte) {
 	switch subType {
 	case SUBTYPE_RAW:
 		sendVideoFrame = func(frame *AVFrame) {
-			// fmt.Println("v", frame.Sequence, s.VideoReader.AbsTime, s.VideoReader.Delay)
 			if frame.AUList.ByteLength == 0 {
 				return
 			}

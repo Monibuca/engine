@@ -524,10 +524,9 @@ func (s *Stream) run() {
 				}
 				if s.State == STATE_WAITTRACK {
 					s.action(ACTION_TRACKAVAILABLE)
-				} else {
-					s.Subscribers.AbortWait()
-					s.timeout.Reset(time.Second * 5)
 				}
+				s.Subscribers.AbortWait()
+				s.timeout.Reset(time.Second * 5)
 			} else {
 				s.Debug("timeout", timeOutInfo)
 				s.action(ACTION_TIMEOUT)

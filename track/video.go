@@ -222,6 +222,7 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 	}
 	b[1] = 1
 	// println(rv.PTS < rv.DTS, "\t", rv.PTS, "\t", rv.DTS, "\t", rv.PTS-rv.DTS)
+	// vt.Info("cts", zap.Uint32("cts", uint32((rv.PTS-rv.DTS)/90)))
 	// 写入CTS
 	util.PutBE(b[2:5], (rv.PTS-rv.DTS)/90)
 	rv.AVCC.Push(mem)
