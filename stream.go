@@ -128,7 +128,7 @@ type Tracks struct {
 	Data        []common.Track
 	MainVideo   *track.Video
 	MainAudio   *track.Audio
-	SEI         *track.Data[[]byte]
+	SEI         *track.Channel[[]byte]
 	marshalLock sync.Mutex
 }
 
@@ -147,8 +147,7 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 			tracks.SetIDR(v)
 		}
 		if tracks.SEI != nil {
-			v.SEIReader = &track.DataReader[[]byte]{}
-			v.SEIReader.Ring = tracks.SEI.Ring
+			v.SEIReader = tracks.SEI.CreateReader(100)
 		}
 	case *track.Audio:
 		if tracks.MainAudio == nil {
@@ -194,7 +193,7 @@ func (tracks *Tracks) AddSEI(t byte, data []byte) bool {
 		buffer.WriteByte(byte(l))
 		buffer.Write(data)
 		buffer.WriteByte(0x80)
-		tracks.SEI.Push(buffer)
+		tracks.SEI.Write(buffer)
 		return true
 	}
 	return false
@@ -577,12 +576,8 @@ func (s *Stream) run() {
 					}
 					if conf.InsertSEI {
 						if s.Tracks.SEI == nil {
-							s.Tracks.SEI = track.NewDataTrack[[]byte]("sei")
-							s.Tracks.SEI.Locker = &sync.Mutex{}
-							s.Tracks.SEI.SetStuff(s)
-							if s.Tracks.Add("sei", s.Tracks.SEI) {
-								s.Info("sei track added")
-							}
+							s.Tracks.SEI = &track.Channel[[]byte]{}
+							s.Info("sei track added")
 						}
 					}
 					v.Resolve()

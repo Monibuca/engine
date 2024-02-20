@@ -125,9 +125,14 @@ func (s *Subscribers) Find(id string) ISubscriber {
 
 func (s *Subscribers) Delete(suber ISubscriber) {
 	io := suber.GetSubscriber()
+	io.TrackPlayer.Audio = nil
+	io.TrackPlayer.AudioReader = nil
+	io.TrackPlayer.Video = nil
+	io.TrackPlayer.VideoReader = nil
 	for _, reader := range io.readers {
 		reader.Track.Debug("reader -1", zap.Int32("count", reader.Track.ReaderCount.Add(-1)))
 	}
+	io.readers = nil
 	if _, ok := s.public[suber]; ok {
 		delete(s.public, suber)
 		io.Info("suber -1", zap.Int("remains", s.Len()))
