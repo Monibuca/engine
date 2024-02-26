@@ -10,11 +10,8 @@ import (
 )
 
 type IPublisher interface {
-	IIO
+	common.IPuber
 	GetPublisher() *Publisher
-	getAudioTrack() common.AudioTrack
-	getVideoTrack() common.VideoTrack
-	Publish(streamPath string, pub IPublisher) error
 }
 
 var _ IPublisher = (*Publisher)(nil)
@@ -26,7 +23,7 @@ type Publisher struct {
 	common.VideoTrack `json:"-" yaml:"-"`
 }
 
-func (p *Publisher) Publish(streamPath string, pub IPublisher) error {
+func (p *Publisher) Publish(streamPath string, pub common.IPuber) error {
 	return p.receive(streamPath, pub)
 }
 
@@ -39,16 +36,15 @@ func (p *Publisher) GetPublisher() *Publisher {
 // 	p.Stream.Receive(ACTION_PUBLISHCLOSE)
 // }
 
-func (p *Publisher) getAudioTrack() common.AudioTrack {
+func (p *Publisher) GetAudioTrack() common.AudioTrack {
 	return p.AudioTrack
 }
-func (p *Publisher) getVideoTrack() common.VideoTrack {
+func (p *Publisher) GetVideoTrack() common.VideoTrack {
 	return p.VideoTrack
 }
-func (p *Publisher) Equal(p2 IPublisher) bool {
-	return p == p2.GetPublisher()
+func (p *Publisher) GetConfig() *config.Publish {
+	return p.Config
 }
-
 // func (p *Publisher) OnEvent(event any) {
 // 	p.IO.OnEvent(event)
 // 	switch event.(type) {
@@ -69,10 +65,10 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 			fourCC := frame.GetUintN(1, 4)
 			switch fourCC {
 			case codec.FourCC_H265_32:
-				p.VideoTrack = track.NewH265(p.Stream, pool)
+				p.VideoTrack = track.NewH265(p, pool)
 				p.VideoTrack.WriteAVCC(ts, frame)
 			case codec.FourCC_AV1_32:
-				p.VideoTrack = track.NewAV1(p.Stream, pool)
+				p.VideoTrack = track.NewAV1(p, pool)
 				p.VideoTrack.WriteAVCC(ts, frame)
 			}
 		} else {
@@ -80,9 +76,9 @@ func (p *Publisher) WriteAVCCVideo(ts uint32, frame *util.BLL, pool util.BytesPo
 				ts = 0
 				switch codecID := codec.VideoCodecID(b0 & 0x0F); codecID {
 				case codec.CodecID_H264:
-					p.VideoTrack = track.NewH264(p.Stream, pool)
+					p.VideoTrack = track.NewH264(p, pool)
 				case codec.CodecID_H265:
-					p.VideoTrack = track.NewH265(p.Stream, pool)
+					p.VideoTrack = track.NewH265(p, pool)
 				default:
 					p.Stream.Error("video codecID not support", zap.Uint8("codeId", uint8(codecID)))
 					return
@@ -108,7 +104,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPo
 			if frame.GetByte(1) != 0 {
 				return
 			}
-			a := track.NewAAC(p.Stream, pool)
+			a := track.NewAAC(p, pool)
 			p.AudioTrack = a
 			a.AVCCHead = []byte{frame.GetByte(0), 1}
 			a.WriteAVCC(0, frame)
@@ -118,7 +114,7 @@ func (p *Publisher) WriteAVCCAudio(ts uint32, frame *util.BLL, pool util.BytesPo
 			if codecID == codec.CodecID_PCMU {
 				alaw = false
 			}
-			a := track.NewG711(p.Stream, alaw, pool)
+			a := track.NewG711(p, alaw, pool)
 			p.AudioTrack = a
 			a.Audio.SampleRate = uint32(codec.SoundRate[(b0&0x0c)>>2])
 			if b0&0x02 == 0 {

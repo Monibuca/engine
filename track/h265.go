@@ -15,16 +15,16 @@ type H265 struct {
 	VPS []byte `json:"-" yaml:"-"`
 }
 
-func NewH265(stream IStream, stuff ...any) (vt *H265) {
+func NewH265(puber IPuber, stuff ...any) (vt *H265) {
 	vt = &H265{}
 	vt.Video.CodecID = codec.CodecID_H265
-	vt.SetStuff("h265", byte(96), uint32(90000), vt, stuff, stream)
+	vt.SetStuff("h265", byte(96), uint32(90000), vt, stuff, puber)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
 	}
 	vt.ParamaterSets = make(ParamaterSets, 3)
 	vt.nalulenSize = 4
-	vt.dtsEst = NewDTSEstimator()
+	vt.dtsEst = util.NewDTSEstimator()
 	return
 }
 
@@ -92,7 +92,7 @@ func (vt *H265) WriteSequenceHead(head []byte) (err error) {
 		vt.Video.WriteSequenceHead(head)
 	} else {
 		vt.Error("H265 ParseVpsSpsPps Error")
-		vt.Stream.Close()
+		vt.Publisher.Stop(zap.Error(err))
 	}
 	return
 }
@@ -102,7 +102,7 @@ func (vt *H265) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 		err := recover()
 		if err != nil {
 			vt.Error("WriteRTPFrame panic", zap.Any("err", err))
-			vt.Stream.Close()
+			vt.Publisher.Stop(zap.Any("err", err))
 		}
 	}()
 	frame := &rtpItem.Value

@@ -76,6 +76,16 @@ func (p *Promise[S]) Await() (err error) {
 	return
 }
 
+func (p *Promise[S]) Then(resolved func(S), rejected func(error)) {
+	go func() {
+		if err := p.Await(); err == nil {
+			resolved(p.Value)
+		} else {
+			rejected(err)
+		}
+	}()
+}
+
 func NewPromise[S any](value S) *Promise[S] {
 	ctx0, cancel0 := context.WithTimeout(context.Background(), time.Second*10)
 	ctx, cancel := context.WithCancelCause(ctx0)

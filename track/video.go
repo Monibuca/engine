@@ -18,31 +18,26 @@ type Video struct {
 	GOP         int  //关键帧间隔
 	nalulenSize int  //avcc格式中表示nalu长度的字节数，通常为4
 	dcChanged   bool //解码器配置是否改变了，一般由于变码率导致
-	dtsEst      *DTSEstimator
+	dtsEst      *util.DTSEstimator
 	lostFlag    bool // 是否丢帧
 	codec.SPSInfo
-	ParamaterSets `json:"-" yaml:"-"`
-	SPS           []byte      `json:"-" yaml:"-"`
-	PPS           []byte      `json:"-" yaml:"-"`
-	SEIReader     chan []byte `json:"-" yaml:"-"`
+	ParamaterSets  `json:"-" yaml:"-"`
+	SPS            []byte `json:"-" yaml:"-"`
+	PPS            []byte `json:"-" yaml:"-"`
+	iframeReceived bool
 }
 
 func (v *Video) Attach() {
-	if v.Attached.CompareAndSwap(false, true) {
-		v.Info("attach video track", zap.Uint("width", v.Width), zap.Uint("height", v.Height))
-		if err := v.Stream.AddTrack(v).Await(); err != nil {
-			v.Error("attach video track failed", zap.Error(err))
-			v.Attached.Store(false)
-		} else {
-			v.Info("video track attached", zap.Uint("width", v.Width), zap.Uint("height", v.Height))
-		}
+	v.Info("attach video track", zap.Uint("width", v.Width), zap.Uint("height", v.Height))
+	if err := v.Publisher.GetStream().AddTrack(v).Await(); err != nil {
+		v.Error("attach video track failed", zap.Error(err))
+	} else {
+		v.Info("video track attached", zap.Uint("width", v.Width), zap.Uint("height", v.Height))
 	}
 }
 
 func (v *Video) Detach() {
-	if v.Attached.CompareAndSwap(true, false) {
-		v.Stream.RemoveTrack(v)
-	}
+	v.Publisher.GetStream().RemoveTrack(v)
 }
 
 func (vt *Video) GetName() string {
@@ -52,6 +47,9 @@ func (vt *Video) GetName() string {
 	return vt.Name
 }
 
+func (vt *Video) GetCodec() codec.VideoCodecID {
+	return vt.CodecID
+}
 // PlayFullAnnexB 订阅annex-b格式的流数据，每一个I帧增加sps、pps头
 // func (vt *Video) PlayFullAnnexB(ctx context.Context, onMedia func(net.Buffers) error) error {
 // 	for vr := vt.ReadRing(); ctx.Err() == nil; vr.MoveNext() {
@@ -202,7 +200,7 @@ func (vt *Video) insertDCRtp() {
 
 func (vt *Video) generateTimestamp(ts uint32) {
 	if vt.State == TrackStateOffline {
-		vt.dtsEst = NewDTSEstimator()
+		vt.dtsEst = util.NewDTSEstimator()
 	}
 	vt.Value.PTS = time.Duration(ts)
 	vt.Value.DTS = time.Duration(vt.dtsEst.Feed(ts))
@@ -249,26 +247,17 @@ func (vt *Video) CompleteAVCC(rv *AVFrame) {
 
 func (vt *Video) Flush() {
 	rv := vt.Value
-	if vt.SEIReader != nil && len(vt.SEIReader) > 0 {
-		for seiFrame := range vt.SEIReader {
-			var au util.BLL
-			au.Push(vt.SpesificTrack.GetNALU_SEI())
-			au.Push(vt.BytesPool.GetShell(seiFrame))
-			vt.Info("sei", zap.Int("len", len(seiFrame)))
-			vt.Value.AUList.UnshiftValue(&au)
-			if len(vt.SEIReader) == 0 {
-				break
-			}
-		}
-	}
 	if rv.IFrame {
 		vt.computeGOP()
-		vt.Stream.SetIDR(vt)
+		if audioTrack := vt.Publisher.GetAudioTrack(); audioTrack != nil {
+			audioTrack.Narrow()
+		}
 	}
 
-	if !vt.Attached.Load() {
+	if !vt.iframeReceived {
 		if vt.IDRing != nil && vt.SequenceHeadSeq > 0 {
 			defer vt.Attach()
+			vt.iframeReceived = true
 		} else {
 			rv.Reset()
 			return

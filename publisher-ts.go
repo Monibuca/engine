@@ -31,9 +31,9 @@ func (t *TSPublisher) OnEvent(event any) {
 	switch v := event.(type) {
 	case IPublisher:
 		t.pool = make(util.BytesPool, 17)
-		if !t.Equal(v) {
-			t.AudioTrack = v.getAudioTrack()
-			t.VideoTrack = v.getVideoTrack()
+		if v.GetPublisher() != &t.Publisher {
+			t.AudioTrack = v.GetAudioTrack()
+			t.VideoTrack = v.GetVideoTrack()
 		}
 	case SEKick, SEclose:
 		// close(t.PESChan)
@@ -47,23 +47,23 @@ func (t *TSPublisher) OnPmtStream(s mpegts.MpegTsPmtStream) {
 	switch s.StreamType {
 	case mpegts.STREAM_TYPE_H264:
 		if t.VideoTrack == nil {
-			t.VideoTrack = track.NewH264(t.Publisher.Stream, t.pool)
+			t.VideoTrack = track.NewH264(t, t.pool)
 		}
 	case mpegts.STREAM_TYPE_H265:
 		if t.VideoTrack == nil {
-			t.VideoTrack = track.NewH265(t.Publisher.Stream, t.pool)
+			t.VideoTrack = track.NewH265(t, t.pool)
 		}
 	case mpegts.STREAM_TYPE_AAC:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewAAC(t.Publisher.Stream, t.pool)
+			t.AudioTrack = track.NewAAC(t, t.pool)
 		}
 	case mpegts.STREAM_TYPE_G711A:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, true, t.pool)
+			t.AudioTrack = track.NewG711(t, true, t.pool)
 		}
 	case mpegts.STREAM_TYPE_G711U:
 		if t.AudioTrack == nil {
-			t.AudioTrack = track.NewG711(t.Publisher.Stream, false, t.pool)
+			t.AudioTrack = track.NewG711(t, false, t.pool)
 		}
 	default:
 		t.Warn("unsupport stream type:", zap.Uint8("type", s.StreamType))

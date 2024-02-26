@@ -14,6 +14,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/util"
@@ -48,7 +49,11 @@ type IO struct {
 	io.Writer               `json:"-" yaml:"-"`
 	io.Closer               `json:"-" yaml:"-"`
 	Args                    url.Values
-	Spesific                IIO `json:"-" yaml:"-"`
+	Spesific                common.IIO `json:"-" yaml:"-"`
+}
+
+func (io *IO) GetStream() common.IStream {
+	return io.Stream
 }
 
 func (io *IO) IsClosed() bool {
@@ -91,18 +96,6 @@ func (io *IO) IsShutdown() bool {
 		return false
 	}
 	return io.Stream.IsShutdown()
-}
-
-type IIO interface {
-	receive(string, IIO) error
-	IsClosed() bool
-	OnEvent(any)
-	Stop(reason ...zapcore.Field)
-	SetIO(any)
-	SetParentCtx(context.Context)
-	SetLogger(*log.Logger)
-	IsShutdown() bool
-	log.Zap
 }
 
 func (i *IO) close(err StopError) bool {
@@ -158,7 +151,7 @@ func (io *IO) auth(key string, secret string, expire string) bool {
 }
 
 // receive 用于接收发布或者订阅
-func (io *IO) receive(streamPath string, specific IIO) error {
+func (io *IO) receive(streamPath string, specific common.IIO) error {
 	streamPath = strings.Trim(streamPath, "/")
 	u, err := url.Parse(streamPath)
 	if err != nil {

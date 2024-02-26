@@ -33,7 +33,6 @@ type PushConfig interface {
 type Publish struct {
 	PubAudio          bool          `default:"true" desc:"是否发布音频"`
 	PubVideo          bool          `default:"true" desc:"是否发布视频"`
-	InsertSEI         bool          `desc:"是否启用SEI插入"`                        // 是否启用SEI插入
 	KickExist         bool          `desc:"是否踢掉已经存在的发布者"`                     // 是否踢掉已经存在的发布者
 	PublishTimeout    time.Duration `default:"10s" desc:"发布无数据超时"`            // 发布无数据超时
 	WaitCloseTimeout  time.Duration `desc:"延迟自动关闭（等待重连）"`                     // 延迟自动关闭（等待重连）

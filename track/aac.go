@@ -14,7 +14,7 @@ import (
 
 var _ SpesificTrack = (*AAC)(nil)
 
-func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
+func NewAAC(puber IPuber, stuff ...any) (aac *AAC) {
 	aac = &AAC{
 		Mode: 2,
 	}
@@ -24,7 +24,7 @@ func NewAAC(stream IStream, stuff ...any) (aac *AAC) {
 	aac.CodecID = codec.CodecID_AAC
 	aac.Channels = 2
 	aac.SampleSize = 16
-	aac.SetStuff("aac", byte(97), aac, stuff, stream)
+	aac.SetStuff("aac", byte(97), aac, stuff, puber)
 	if aac.BytesPool == nil {
 		aac.BytesPool = make(util.BytesPool, 17)
 	}

@@ -14,7 +14,6 @@ import (
 	. "github.com/logrusorgru/aurora/v4"
 	"go.uber.org/zap"
 	"m7s.live/engine/v4/common"
-	. "m7s.live/engine/v4/common"
 	"m7s.live/engine/v4/config"
 	"m7s.live/engine/v4/log"
 	"m7s.live/engine/v4/track"
@@ -128,26 +127,22 @@ type Tracks struct {
 	Data        []common.Track
 	MainVideo   *track.Video
 	MainAudio   *track.Audio
-	SEI         *track.Channel[[]byte]
 	marshalLock sync.Mutex
 }
 
-func (tracks *Tracks) Range(f func(name string, t Track)) {
+func (tracks *Tracks) Range(f func(name string, t common.Track)) {
 	tracks.Map.Range(func(k, v any) bool {
-		f(k.(string), v.(Track))
+		f(k.(string), v.(common.Track))
 		return true
 	})
 }
 
-func (tracks *Tracks) Add(name string, t Track) bool {
+func (tracks *Tracks) Add(name string, t common.Track) bool {
 	switch v := t.(type) {
 	case *track.Video:
 		if tracks.MainVideo == nil {
 			tracks.MainVideo = v
 			tracks.SetIDR(v)
-		}
-		if tracks.SEI != nil {
-			v.SEIReader = tracks.SEI.CreateReader(100)
 		}
 	case *track.Audio:
 		if tracks.MainAudio == nil {
@@ -171,9 +166,9 @@ func (tracks *Tracks) Add(name string, t Track) bool {
 	return !loaded
 }
 
-func (tracks *Tracks) SetIDR(video Track) {
+func (tracks *Tracks) SetIDR(video common.Track) {
 	if video == tracks.MainVideo {
-		tracks.Range(func(_ string, t Track) {
+		tracks.Range(func(_ string, t common.Track) {
 			if v, ok := t.(*track.Audio); ok {
 				v.Narrow()
 			}
@@ -181,29 +176,11 @@ func (tracks *Tracks) SetIDR(video Track) {
 	}
 }
 
-func (tracks *Tracks) AddSEI(t byte, data []byte) bool {
-	if tracks.SEI != nil {
-		l := len(data)
-		var buffer util.Buffer
-		buffer.WriteByte(t)
-		for l >= 255 {
-			buffer.WriteByte(255)
-			l -= 255
-		}
-		buffer.WriteByte(byte(l))
-		buffer.Write(data)
-		buffer.WriteByte(0x80)
-		tracks.SEI.Write(buffer)
-		return true
-	}
-	return false
-}
-
 func (tracks *Tracks) MarshalJSON() ([]byte, error) {
-	var trackList []Track
+	var trackList []common.Track
 	tracks.marshalLock.Lock()
 	defer tracks.marshalLock.Unlock()
-	tracks.Range(func(_ string, t Track) {
+	tracks.Range(func(_ string, t common.Track) {
 		t.SnapForJson()
 		trackList = append(trackList, t)
 	})
@@ -222,6 +199,7 @@ type Stream struct {
 	StreamTimeoutConfig
 	Path        string
 	Publisher   IPublisher
+	publisher   *Publisher
 	State       StreamState
 	SEHistory   []StateEvent // 事件历史
 	Subscribers Subscribers  // 订阅者
@@ -245,7 +223,11 @@ func (s *Stream) GetType() string {
 	if s.Publisher == nil {
 		return ""
 	}
-	return s.Publisher.GetPublisher().Type
+	return s.publisher.Type
+}
+
+func (s *Stream) GetPath() string {
+	return s.Path
 }
 
 func (s *Stream) GetStartTime() time.Time {
@@ -257,15 +239,15 @@ func (s *Stream) GetPublisherConfig() *config.Publish {
 		s.Error("GetPublisherConfig: Publisher is nil")
 		return nil
 	}
-	return s.Publisher.GetPublisher().Config
+	return s.Publisher.GetConfig()
 }
 
 // Summary 返回流的简要信息
 func (s *Stream) Summary() (r StreamSummay) {
-	if s.Publisher != nil {
-		r.Type = s.Publisher.GetPublisher().Type
+	if s.publisher != nil {
+		r.Type = s.publisher.Type
 	}
-	s.Tracks.Range(func(name string, t Track) {
+	s.Tracks.Range(func(name string, t common.Track) {
 		r.BPS += t.GetBPS()
 		r.Tracks = append(r.Tracks, name)
 	})
@@ -279,7 +261,7 @@ func (s *Stream) Summary() (r StreamSummay) {
 func (s *Stream) SSRC() uint32 {
 	return uint32(uintptr(unsafe.Pointer(s)))
 }
-func (s *Stream) SetIDR(video Track) {
+func (s *Stream) SetIDR(video common.Track) {
 	s.Tracks.SetIDR(video)
 }
 func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream, created bool) {
@@ -330,9 +312,9 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			stateEvent = SEwaitPublish{event, r.Publisher}
 			waitTime := time.Duration(0)
 			if r.Publisher != nil {
-				waitTime = r.Publisher.GetPublisher().Config.WaitCloseTimeout
-				r.Tracks.Range(func(name string, t Track) {
-					t.SetStuff(TrackStateOffline)
+				waitTime = r.Publisher.GetConfig().WaitCloseTimeout
+				r.Tracks.Range(func(name string, t common.Track) {
+					t.SetStuff(common.TrackStateOffline)
 				})
 			}
 			r.Subscribers.OnPublisherLost(event)
@@ -373,8 +355,10 @@ func (r *Stream) action(action StreamAction) (ok bool) {
 			r.timeout.Stop()
 			stateEvent = SEclose{event}
 			r.Subscribers.Broadcast(stateEvent)
-			r.Tracks.Range(func(_ string, t Track) {
-				t.Dispose()
+			r.Tracks.Range(func(_ string, t common.Track) {
+				if t.GetPublisher().GetStream() == r {
+					t.Dispose()
+				}
 			})
 			r.Subscribers.Dispose()
 			r.actionChan.Close()
@@ -486,7 +470,7 @@ func (s *Stream) run() {
 					if s.IsPause {
 						timeout = s.PauseTimeout
 					}
-					s.Tracks.Range(func(name string, t Track) {
+					s.Tracks.Range(func(name string, t common.Track) {
 						trackCount++
 						switch t.(type) {
 						case *track.Video, *track.Audio:
@@ -504,7 +488,7 @@ func (s *Stream) run() {
 							s.action(ACTION_CLOSE)
 							continue
 						} else if s.Publisher != nil && s.Publisher.IsClosed() {
-							s.Warn("publish is closed", zap.Error(context.Cause(s.Publisher.GetPublisher())), zap.String("ptr", fmt.Sprintf("%p", s.Publisher.GetPublisher().Context)))
+							s.Warn("publish is closed", zap.Error(context.Cause(s.publisher)), zap.String("ptr", fmt.Sprintf("%p", s.publisher.Context)))
 							lost = true
 							if len(s.Tracks.Audio)+len(s.Tracks.Video) == 0 {
 								s.action(ACTION_CLOSE)
@@ -546,19 +530,17 @@ func (s *Stream) run() {
 					break
 				}
 				puber := v.Value.GetPublisher()
-				var oldPuber *Publisher
-				if s.Publisher != nil {
-					oldPuber = s.Publisher.GetPublisher()
-				}
+				oldPuber := s.publisher
+				s.publisher = puber
 				conf := puber.Config
 				republish := s.Publisher == v.Value // 重复发布
 				if republish {
 					s.Info("republish")
-					s.Tracks.Range(func(name string, t Track) {
-						t.SetStuff(TrackStateOffline)
+					s.Tracks.Range(func(name string, t common.Track) {
+						t.SetStuff(common.TrackStateOffline)
 					})
 				}
-				needKick := !republish && s.Publisher != nil && conf.KickExist // 需要踢掉老的发布者
+				needKick := !republish && oldPuber != nil && conf.KickExist // 需要踢掉老的发布者
 				if needKick {
 					s.Warn("kick", zap.String("old type", oldPuber.Type))
 					s.Publisher.OnEvent(SEKick{CreateEvent[struct{}](util.Null)})
@@ -573,12 +555,6 @@ func (s *Stream) run() {
 						// 接管老的发布者的音视频轨道
 						puber.AudioTrack = oldPuber.AudioTrack
 						puber.VideoTrack = oldPuber.VideoTrack
-					}
-					if conf.InsertSEI {
-						if s.Tracks.SEI == nil {
-							s.Tracks.SEI = &track.Channel[[]byte]{}
-							s.Info("sei track added")
-						}
 					}
 					v.Resolve()
 				} else {
@@ -618,8 +594,8 @@ func (s *Stream) run() {
 				}
 				if s.Publisher != nil {
 					s.Publisher.OnEvent(v) // 通知Publisher有新的订阅者加入，在回调中可以去获取订阅者数量
-					pubConfig := s.Publisher.GetPublisher().Config
-					s.Tracks.Range(func(name string, t Track) {
+					pubConfig := s.Publisher.GetConfig()
+					s.Tracks.Range(func(name string, t common.Track) {
 						waits.Accept(t)
 					})
 					if !pubConfig.PubAudio {
@@ -656,7 +632,7 @@ func (s *Stream) run() {
 					s.Subscribers.Broadcast(t)
 					t.(common.Track).Dispose()
 				}
-			case *util.Promise[Track]:
+			case *util.Promise[common.Track]:
 				timeOutInfo = zap.String("action", "Track")
 				if s.IsClosed() {
 					v.Reject(ErrStreamIsClosed)
@@ -706,7 +682,7 @@ func (s *Stream) run() {
 	}
 }
 
-func (s *Stream) AddTrack(t Track) (promise *util.Promise[Track]) {
+func (s *Stream) AddTrack(t common.Track) (promise *util.Promise[common.Track]) {
 	promise = util.NewPromise(t)
 	if !s.Receive(promise) {
 		promise.Reject(ErrStreamIsClosed)
@@ -714,7 +690,7 @@ func (s *Stream) AddTrack(t Track) (promise *util.Promise[Track]) {
 	return
 }
 
-func (s *Stream) RemoveTrack(t Track) {
+func (s *Stream) RemoveTrack(t common.Track) {
 	s.Receive(TrackRemoved{t})
 }
 
@@ -727,7 +703,7 @@ func (s *Stream) Resume() {
 }
 
 type TrackRemoved struct {
-	Track
+	common.Track
 }
 
 type SubPulse struct {

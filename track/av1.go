@@ -23,15 +23,15 @@ type AV1 struct {
 	refFrameType    map[byte]byte
 }
 
-func NewAV1(stream IStream, stuff ...any) (vt *AV1) {
+func NewAV1(puber IPuber, stuff ...any) (vt *AV1) {
 	vt = &AV1{}
 	vt.Video.CodecID = codec.CodecID_AV1
-	vt.SetStuff("av1", byte(96), uint32(90000), vt, stuff, stream)
+	vt.SetStuff("av1", byte(96), uint32(90000), vt, stuff, puber)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
 	}
 	vt.nalulenSize = 0
-	vt.dtsEst = NewDTSEstimator()
+	vt.dtsEst = util.NewDTSEstimator()
 	vt.decoder.Init()
 	vt.encoder.Init()
 	vt.encoder.PayloadType = vt.PayloadType
@@ -53,7 +53,7 @@ func (vt *AV1) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 		err := recover()
 		if err != nil {
 			vt.Error("WriteRTPFrame panic", zap.Any("err", err))
-			vt.Stream.Close()
+			vt.Publisher.Stop(zap.Any("err", err))
 		}
 	}()
 	if vt.lastSeq != vt.lastSeq2+1 && vt.lastSeq2 != 0 {

@@ -5,7 +5,7 @@ import (
 	"m7s.live/engine/v4/util"
 )
 
-type RingReader[T any, F common.IDataFrame[T]] struct {
+type RingReader[T any, F util.IDataFrame[T]] struct {
 	*util.Ring[F]
 	Count int // 读取的帧数
 }

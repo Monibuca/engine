@@ -1,9 +1,8 @@
-package common
+package util
 
 import (
 	"sync/atomic"
 
-	"m7s.live/engine/v4/util"
 )
 
 type emptyLocker struct{}
@@ -13,18 +12,35 @@ func (emptyLocker) Unlock() {}
 
 var EmptyLocker emptyLocker
 
+type IDataFrame[T any] interface {
+	Init()               // 初始化
+	Reset()              // 重置数据,复用内存
+	Ready()              // 标记为可读取
+	ReaderEnter() int32  // 读取者数量+1
+	ReaderLeave() int32  // 读取者数量-1
+	StartWrite() bool    // 开始写入
+	SetSequence(uint32)  // 设置序号
+	GetSequence() uint32 // 获取序号
+	ReaderCount() int32  // 读取者数量
+	Discard() int32      // 如果写入时还有读取者没有离开则废弃该帧，剥离RingBuffer，防止并发读写
+	IsDiscarded() bool   // 是否已废弃
+	IsWriting() bool     // 是否正在写入
+	Wait()               // 阻塞等待可读取
+	Broadcast()          // 广播可读取
+}
+
 type RingWriter[T any, F IDataFrame[T]] struct {
-	*util.Ring[F] `json:"-" yaml:"-"`
+	*Ring[F] `json:"-" yaml:"-"`
 	ReaderCount   atomic.Int32 `json:"-" yaml:"-"`
-	pool          *util.Ring[F]
+	pool          *Ring[F]
 	poolSize      int
 	Size          int
 	LastValue     F
 	constructor   func() F
 }
 
-func (rb *RingWriter[T, F]) create(n int) (ring *util.Ring[F]) {
-	ring = util.NewRing[F](n)
+func (rb *RingWriter[T, F]) create(n int) (ring *Ring[F]) {
+	ring = NewRing[F](n)
 	for p, i := ring, n; i > 0; p, i = p.Next(), i-1 {
 		p.Value = rb.constructor()
 		p.Value.Init()
@@ -46,7 +62,7 @@ func (rb *RingWriter[T, F]) Init(n int, constructor func() F) *RingWriter[T, F] 
 // 	return rb.Value
 // }
 
-func (rb *RingWriter[T, F]) Glow(size int) (newItem *util.Ring[F]) {
+func (rb *RingWriter[T, F]) Glow(size int) (newItem *Ring[F]) {
 	if size < rb.poolSize {
 		newItem = rb.pool.Unlink(size)
 		rb.poolSize -= size
@@ -64,7 +80,7 @@ func (rb *RingWriter[T, F]) Glow(size int) (newItem *util.Ring[F]) {
 	return
 }
 
-func (rb *RingWriter[T, F]) Recycle(r *util.Ring[F]) {
+func (rb *RingWriter[T, F]) Recycle(r *Ring[F]) {
 	rb.poolSize++
 	r.Value.Init()
 	r.Value.Reset()

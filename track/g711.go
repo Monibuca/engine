@@ -11,7 +11,7 @@ import (
 
 var _ SpesificTrack = (*G711)(nil)
 
-func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
+func NewG711(puber IPuber, alaw bool, stuff ...any) (g711 *G711) {
 	g711 = &G711{}
 	if alaw {
 		g711.Name = "pcma"
@@ -28,7 +28,7 @@ func NewG711(stream IStream, alaw bool, stuff ...any) (g711 *G711) {
 	g711.SampleSize = 8
 	g711.Channels = 1
 	g711.AVCCHead = []byte{(byte(g711.CodecID) << 4) | (1 << 1)}
-	g711.SetStuff(uint32(8000), g711, stuff, stream)
+	g711.SetStuff(uint32(8000), g711, stuff, puber)
 	if g711.BytesPool == nil {
 		g711.BytesPool = make(util.BytesPool, 17)
 	}

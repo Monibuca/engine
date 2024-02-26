@@ -18,16 +18,16 @@ type H264 struct {
 	buf util.Buffer // rtp 包临时缓存,对于不规范的 rtp 包（sps 放到了 fua 中导致）需要缓存
 }
 
-func NewH264(stream IStream, stuff ...any) (vt *H264) {
+func NewH264(puber IPuber, stuff ...any) (vt *H264) {
 	vt = &H264{}
 	vt.Video.CodecID = codec.CodecID_H264
-	vt.SetStuff("h264", byte(96), uint32(90000), vt, stuff, stream)
+	vt.SetStuff("h264", byte(96), uint32(90000), vt, stuff, puber)
 	if vt.BytesPool == nil {
 		vt.BytesPool = make(util.BytesPool, 17)
 	}
 	vt.ParamaterSets = make(ParamaterSets, 2)
 	vt.nalulenSize = 4
-	vt.dtsEst = NewDTSEstimator()
+	vt.dtsEst = util.NewDTSEstimator()
 	return
 }
 
@@ -104,8 +104,8 @@ func (vt *H264) WriteSequenceHead(head []byte) (err error) {
 		vt.ParamaterSets[1] = vt.PPS
 		vt.Video.WriteSequenceHead(head)
 	} else {
-		vt.Stream.Error("H264 ParseSpsPps Error")
-		vt.Stream.Close()
+		vt.Error("H264 ParseSpsPps Error")
+		vt.Publisher.Stop(zap.Error(err))
 	}
 	return
 }
@@ -115,7 +115,7 @@ func (vt *H264) WriteRTPFrame(rtpItem *util.ListItem[RTPFrame]) {
 		err := recover()
 		if err != nil {
 			vt.Error("WriteRTPFrame panic", zap.Any("err", err))
-			vt.Stream.Close()
+			vt.Publisher.Stop(zap.Any("err", err))
 		}
 	}()
 	if vt.lastSeq != vt.lastSeq2+1 && vt.lastSeq2 != 0 {

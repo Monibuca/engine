@@ -45,23 +45,6 @@ func (r *RTPFrame) Unmarshal(raw []byte) *RTPFrame {
 	return r
 }
 
-type IDataFrame[T any] interface {
-	Init()               // 初始化
-	Reset()              // 重置数据,复用内存
-	Ready()              // 标记为可读取
-	ReaderEnter() int32  // 读取者数量+1
-	ReaderLeave() int32  // 读取者数量-1
-	StartWrite() bool    // 开始写入
-	SetSequence(uint32)  // 设置序号
-	GetSequence() uint32 // 获取序号
-	ReaderCount() int32  // 读取者数量
-	Discard() int32      // 如果写入时还有读取者没有离开则废弃该帧，剥离RingBuffer，防止并发读写
-	IsDiscarded() bool   // 是否已废弃
-	IsWriting() bool     // 是否正在写入
-	Wait()               // 阻塞等待可读取
-	Broadcast()          // 广播可读取
-}
-
 type DataFrame[T any] struct {
 	DeltaTime   uint32       // 相对上一帧时间戳，毫秒
 	WriteTime   time.Time    // 写入时间,可用于比较两个帧的先后
@@ -126,7 +109,7 @@ func (df *DataFrame[T]) Ready() {
 }
 
 func (df *DataFrame[T]) Init() {
-	df.L = EmptyLocker
+	df.L = util.EmptyLocker
 }
 
 func (df *DataFrame[T]) Reset() {
@@ -179,6 +162,25 @@ func (av *AVFrame) Reset() {
 	av.Timestamp = 0
 	av.IFrame = false
 	av.DataFrame.Reset()
+}
+
+func (av *AVFrame) Assign(source *AVFrame)  {
+	av.IFrame = source.IFrame
+	av.PTS = source.PTS
+	av.DTS = source.DTS
+	av.Timestamp = source.Timestamp
+	av.BytesIn = source.BytesIn
+	av.DeltaTime = source.DeltaTime
+	source.AUList.Range(func(au *util.BLL) bool {
+		var nau util.BLL
+		au.Range(func(b util.Buffer) bool {
+			nau.PushValue(b)
+			return true
+		})
+		nau.ByteLength = au.ByteLength
+		av.AUList.PushValue(&nau)
+		return true
+	})
 }
 
 type ParamaterSets [][]byte

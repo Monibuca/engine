@@ -1,6 +1,4 @@
-package common
-
-import "m7s.live/engine/v4/util"
+package util
 
 // DTSEstimator is a DTS estimator.
 type DTSEstimator struct {
@@ -48,7 +46,7 @@ func (d *DTSEstimator) add(pts uint32) {
 
 // Feed provides PTS to the estimator, and returns the estimated DTS.
 func (d *DTSEstimator) Feed(pts uint32) uint32 {
-	interval := util.Conditoinal(pts > d.prevPTS, pts-d.prevPTS, d.prevPTS-pts)
+	interval := Conditoinal(pts > d.prevPTS, pts-d.prevPTS, d.prevPTS-pts)
 	if interval > 10*d.interval {
 		*d = *NewDTSEstimator()
 	}

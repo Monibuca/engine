@@ -38,7 +38,6 @@
 - 获取所有向远端推流信息 `/api/list/push` 返回{RemoteURL:"",StreamPath:"",Type:"",StartTime:""}
 - 停止推流 `/api/stop/push?url=xxx` 停止向xxx推流 ，成功返回ok
 - 停止某个订阅者 `/api/stop/subscribe?streamPath=xxx&id=xxx` 停止xxx流的xxx订阅者 ，成功返回ok
-- 插入SEI帧 `/api/insertsei?streamPath=xxx&type=5` 向xxx流内插入SEI帧 ，成功返回ok。type为SEI类型，可选，默认是5
 # 引擎默认配置
 ```yaml
 global:
@@ -60,7 +59,6 @@ global:
       pubaudio: true # 是否发布音频流
       pubvideo: true # 是否发布视频流
       kickexist: false # 剔出已经存在的发布者，用于顶替原有发布者
-      insertsei: false # 是否开启插入SEI信息功能
       publishtimeout: 10s # 发布流默认过期时间，超过该时间发布者没有恢复流将被删除
       delayclosetimeout: 0 # 自动关闭触发后延迟的时间(期间内如果有新的订阅则取消触发关闭)，0为关闭该功能，保持连接。
       waitclosetimeout: 0 # 发布者断开后等待时间，超过该时间发布者没有恢复流将被删除，0为关闭该功能，由订阅者决定是否删除

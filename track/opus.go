@@ -9,13 +9,13 @@ import (
 
 var _ SpesificTrack = (*Opus)(nil)
 
-func NewOpus(stream IStream, stuff ...any) (opus *Opus) {
+func NewOpus(puber IPuber, stuff ...any) (opus *Opus) {
 	opus = &Opus{}
 	opus.CodecID = codec.CodecID_OPUS
 	opus.SampleSize = 16
 	opus.Channels = 2
 	opus.AVCCHead = []byte{(byte(opus.CodecID) << 4) | (1 << 1)}
-	opus.SetStuff("opus", uint32(48000), byte(111), opus, stuff, stream)
+	opus.SetStuff("opus", uint32(48000), byte(111), opus, stuff, puber)
 	if opus.BytesPool == nil {
 		opus.BytesPool = make(util.BytesPool, 17)
 	}

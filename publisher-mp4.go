@@ -32,15 +32,15 @@ func (p *MP4Publisher) ReadMP4Data(source io.ReadSeeker) error {
 			p.Info("MP4 track", zap.Any("track", t))
 			switch t.Cid {
 			case mp4.MP4_CODEC_H264:
-				p.VideoTrack = track.NewH264(p.Stream)
+				p.VideoTrack = track.NewH264(p)
 			case mp4.MP4_CODEC_H265:
-				p.VideoTrack = track.NewH265(p.Stream)
+				p.VideoTrack = track.NewH265(p)
 			case mp4.MP4_CODEC_AAC:
-				p.AudioTrack = track.NewAAC(p.Stream)
+				p.AudioTrack = track.NewAAC(p)
 			case mp4.MP4_CODEC_G711A:
-				p.AudioTrack = track.NewG711(p.Stream, true)
+				p.AudioTrack = track.NewG711(p, true)
 			case mp4.MP4_CODEC_G711U:
-				p.AudioTrack = track.NewG711(p.Stream, false)
+				p.AudioTrack = track.NewG711(p, false)
 			}
 		}
 		for {

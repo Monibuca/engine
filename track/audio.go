@@ -20,20 +20,15 @@ type Audio struct {
 }
 
 func (a *Audio) Attach() {
-	if a.Attached.CompareAndSwap(false, true) {
-		if err := a.Stream.AddTrack(a).Await(); err != nil {
-			a.Error("attach audio track failed", zap.Error(err))
-			a.Attached.Store(false)
-		} else {
-			a.Info("audio track attached", zap.Uint32("sample rate", a.SampleRate))
-		}
+	if err := a.Publisher.GetStream().AddTrack(a).Await(); err != nil {
+		a.Error("attach audio track failed", zap.Error(err))
+	} else {
+		a.Info("audio track attached", zap.Uint32("sample rate", a.SampleRate))
 	}
 }
 
 func (a *Audio) Detach() {
-	if a.Attached.CompareAndSwap(true, false) {
-		a.Stream.RemoveTrack(a)
-	}
+	a.Publisher.GetStream().RemoveTrack(a)
 }
 
 func (a *Audio) GetName() string {
@@ -41,6 +36,10 @@ func (a *Audio) GetName() string {
 		return a.CodecID.String()
 	}
 	return a.Name
+}
+
+func (a *Audio) GetCodec() codec.AudioCodecID {
+	return a.CodecID
 }
 
 func (av *Audio) WriteADTS(pts uint32, adts util.IBytes) {
