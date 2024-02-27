@@ -47,6 +47,8 @@ reamins:  剩余
 "http handle added to engine": http处理器已添加到引擎
 "plugin disabled": 插件已禁用
 "audio codec not support yet": 音频编码暂不支持
+"attach video track": 附加视频轨道
+"attach audio track": 附加音频轨道
 "video track attached": 视频轨道已附加
 "audio track attached": 音频轨道已附加
 "data track attached": 数据轨道已附加
@@ -56,7 +58,8 @@ reamins:  剩余
 "disabled by env": 被环境变量禁用
 "event cost too much time": 事件处理耗时过长
 "run timeout": 流事件处理耗时过长
-"cost": 耗时
+cost: 耗时
+jump:    跳过
 firstTs:  第一帧时间戳
 firstSeq: 第一帧序列号
 skipSeq:  跳过序列号
