@@ -70,7 +70,33 @@ type IBytes interface {
 	Bytes() []byte
 	Reuse() bool
 }
-
+type IBuffer interface {
+	Len() int
+	Bytes() []byte
+	Reuse() bool
+	SubBuf(start int, length int) Buffer
+	Malloc(count int) Buffer
+	Reset()
+	WriteUint32(v uint32)
+	WriteUint24(v uint32)
+	WriteUint16(v uint16)
+	WriteFloat64(v float64)
+	WriteByte(v byte)
+	WriteString(a string)
+	Write(a []byte) (n int, err error)
+	ReadN(n int) Buffer
+	ReadFloat64() float64
+	ReadUint64() uint64
+	ReadUint32() uint32
+	ReadUint24() uint32
+	ReadUint16() uint16
+	ReadByte() byte
+	Read(buf []byte) (n int, err error)
+	Clone() Buffer
+	CanRead() bool
+	CanReadN(n int) bool
+	Cap() int
+}
 func (Buffer) Reuse() bool {
 	return false
 }
@@ -202,10 +228,6 @@ func (b *Buffer) Split(n int) (result net.Buffers) {
 	}
 }
 
-func (b *Buffer) MarshalAMFs(v ...any) {
-	amf := AMF{*b}
-	*b = amf.Marshals(v...)
-}
 
 // ConcatBuffers 合并碎片内存为一个完整内存
 func ConcatBuffers[T ~[]byte](input []T) (out []byte) {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -28,9 +29,12 @@ func (conf *GlobalConfig) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		http.ServeFile(rw, r, "favicon.ico")
 		return
 	}
-	rw.Write([]byte("Monibuca API Server\n"))
+	fmt.Fprintf(rw, "Monibuca Engine %s StartTime:%s\n", SysInfo.Version, SysInfo.StartTime)
+	for _, plugin := range Plugins {
+		fmt.Fprintf(rw, "Plugin %s Version:%s\n", plugin.Name, plugin.Version)
+	}
 	for _, api := range apiList {
-		rw.Write([]byte(api + "\n"))
+		fmt.Fprintf(rw, "%s\n", api)
 	}
 }
 

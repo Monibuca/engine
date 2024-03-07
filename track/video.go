@@ -24,7 +24,6 @@ type Video struct {
 	ParamaterSets  `json:"-" yaml:"-"`
 	SPS            []byte `json:"-" yaml:"-"`
 	PPS            []byte `json:"-" yaml:"-"`
-	iframeReceived bool
 }
 
 func (v *Video) Attach() {

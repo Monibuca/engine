@@ -100,9 +100,9 @@ type Media struct {
 	SequenceHead    []byte              `json:"-" yaml:"-"` //H264(SPS、PPS) H265(VPS、SPS、PPS) AAC(config)
 	SequenceHeadSeq int
 	RTPDemuxer
-	SpesificTrack `json:"-" yaml:"-"`
-	deltaTs       time.Duration //用于接续发布后时间戳连续
-
+	SpesificTrack  `json:"-" yaml:"-"`
+	deltaTs        time.Duration //用于接续发布后时间戳连续
+	iframeReceived bool
 	流速控制
 }
 

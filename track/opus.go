@@ -19,7 +19,6 @@ func NewOpus(puber IPuber, stuff ...any) (opus *Opus) {
 	if opus.BytesPool == nil {
 		opus.BytesPool = make(util.BytesPool, 17)
 	}
-	go opus.Attach()
 	return
 }
 

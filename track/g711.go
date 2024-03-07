@@ -32,7 +32,6 @@ func NewG711(puber IPuber, alaw bool, stuff ...any) (g711 *G711) {
 	if g711.BytesPool == nil {
 		g711.BytesPool = make(util.BytesPool, 17)
 	}
-	go g711.Attach()
 	return
 }
 

@@ -51,6 +51,7 @@ func (aac *AAC) WriteADTS(ts uint32, b util.IBytes) {
 		aac.SampleRate = uint32(codec.SamplingFrequencies[sampleRate])
 		aac.Channels = channel
 		aac.Parse(aac.SequenceHead[2:])
+		aac.iframeReceived = true
 		aac.Attach()
 	}
 	aac.generateTimestamp(ts)

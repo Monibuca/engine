@@ -50,32 +50,19 @@ const (
 	AMF0_TYPED_OBJECT
 	AMF0_AVMPLUS_OBJECT
 )
-const (
-	AMF3_UNDEFINED = iota
-	AMF3_NULL
-	AMF3_FALSE
-	AMF3_TRUE
-	AMF3_INTEGER
-	AMF3_DOUBLE
-	AMF3_STRING
-	AMF3_XML_DOC
-	AMF3_DATE
-	AMF3_ARRAY
-	AMF3_OBJECT
-	AMF3_XML
-	AMF3_BYTE_ARRAY
-	AMF3_VECTOR_INT
-	AMF3_VECTOR_UINT
-	AMF3_VECTOR_DOUBLE
-	AMF3_VECTOR_OBJECT
-	AMF3_DICTIONARY
-)
 
 var (
 	END_OBJ   = []byte{0, 0, AMF0_END_OBJECT}
 	ObjectEnd = &struct{}{}
 	Undefined = &struct{}{}
 )
+
+type IAMF interface {
+	IBuffer
+	Unmarshal() (any, error)
+	Marshal(any) []byte
+	Marshals(...any) []byte
+}
 
 type EcmaArray map[string]any
 
@@ -283,6 +270,15 @@ func (amf *AMF) Marshal(v any) []byte {
 				amf.Marshal(v.Index(i).Interface())
 			}
 			amf.Write(END_OBJ)
+		case reflect.Ptr:
+			vv := reflect.Indirect(v)
+			if vv.Kind() == reflect.Struct {
+				amf.WriteByte(AMF0_OBJECT)
+				for i := 0; i < vv.NumField(); i++ {
+					amf.writeProperty(vv.Type().Field(i).Name, vv.Field(i).Interface())
+				}
+				amf.Write(END_OBJ)
+			}
 		default:
 			panic("amf Marshal faild")
 		}

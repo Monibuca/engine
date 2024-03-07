@@ -58,6 +58,10 @@ func (av *Audio) Flush() {
 		av.Value.ADTS = item
 	}
 	av.Media.Flush()
+	if av.CodecID != codec.CodecID_AAC && !av.iframeReceived {
+		av.iframeReceived = true
+		av.Attach()
+	}
 }
 
 func (av *Audio) WriteRawBytes(pts uint32, raw util.IBytes) {
