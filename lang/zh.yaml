@@ -17,6 +17,7 @@ version:  版本
 name:     名称
 state:    状态
 initialize: 初始化
+"no tracks": 没有轨道
 "start read": 开始读取
 "start pull": 开始从远端拉流
 "stop pull": 停止从远端拉流

@@ -266,14 +266,15 @@ func (s *Stream) SetIDR(video common.Track) {
 }
 func findOrCreateStream(streamPath string, waitTimeout time.Duration) (s *Stream, created bool) {
 	p := strings.Split(streamPath, "/")
-	if len(p) < 2 {
+	pl := len(p)
+	if pl < 2 {
 		log.Warn(Red("Stream Path Format Error:"), streamPath)
 		return nil, false
 	}
 	actual, loaded := Streams.LoadOrStore(streamPath, &Stream{
 		Path:       streamPath,
-		AppName:    p[0],
-		StreamName: strings.Join(p[1:], "/"),
+		AppName:    strings.Join(p[1:pl-1], "/"),
+		StreamName: p[pl-1],
 		StartTime:  time.Now(),
 		timeout:    time.NewTimer(waitTimeout),
 	})
@@ -484,8 +485,10 @@ func (s *Stream) run() {
 					if !lost {
 						if trackCount == 0 {
 							s.Warn("no tracks")
-							lost = true
-							s.action(ACTION_CLOSE)
+							if time.Since(s.StartTime) > timeout {
+								lost = true
+								s.action(ACTION_CLOSE)
+							}
 							continue
 						} else if s.Publisher != nil && s.Publisher.IsClosed() {
 							s.Warn("publish is closed", zap.Error(context.Cause(s.publisher)), zap.String("ptr", fmt.Sprintf("%p", s.publisher.Context)))
@@ -543,7 +546,7 @@ func (s *Stream) run() {
 				needKick := !republish && oldPuber != nil && conf.KickExist // 需要踢掉老的发布者
 				if needKick {
 					s.Warn("kick", zap.String("old type", oldPuber.Type))
-					s.Publisher.OnEvent(SEKick{CreateEvent[struct{}](util.Null)})
+					s.Publisher.OnEvent(SEKick{CreateEvent(util.Null)})
 				}
 				s.Publisher = v.Value
 				s.PublishTimeout = conf.PublishTimeout
