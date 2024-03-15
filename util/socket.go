@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -173,8 +175,15 @@ func ReturnFetchValue[T any](fetch func() T, rw http.ResponseWriter, r *http.Req
 				})
 			}
 		} else {
-			if err := json.NewEncoder(rw).Encode(data); err != nil {
-				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			t := reflect.TypeOf(data)
+			switch t.Kind() {
+			case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
+				rw.Header().Set("Content-Type", "text/plain")
+				fmt.Fprint(rw, data)
+			default:
+				if err := json.NewEncoder(rw).Encode(data); err != nil {
+					http.Error(rw, err.Error(), http.StatusInternalServerError)
+				}
 			}
 		}
 	}
