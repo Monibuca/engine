@@ -321,7 +321,15 @@ func (s *Subscriber) PlayBlock(subType byte) {
 		subMode, _ = strconv.Atoi(s.Args.Get(conf.SubModeArgName))
 	}
 	var initState = 0
-	var videoFrame, audioFrame *AVFrame
+	var videoFrame, audioFrame ,lastSentAF, lastSentVF *AVFrame
+	defer func(){
+		if lastSentVF != nil {
+			lastSentVF.ReaderLeave()
+		}
+		if lastSentAF != nil {
+			lastSentAF.ReaderLeave()
+		}
+	}()
 	for ctx.Err() == nil {
 		if hasVideo {
 			for ctx.Err() == nil {
@@ -343,6 +351,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 					if audioFrame != nil {
 						if util.Conditoinal(conf.SyncMode == 0, videoFrame.Timestamp > audioFrame.Timestamp, videoFrame.WriteTime.After(audioFrame.WriteTime)) {
 							// fmt.Println("switch audio", audioFrame.CanRead)
+							lastSentAF = audioFrame
 							sendAudioFrame(audioFrame)
 							audioFrame = nil
 							break
@@ -353,6 +362,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 
 				if !conf.IFrameOnly || videoFrame.IFrame {
+					lastSentVF = videoFrame
 					sendVideoFrame(videoFrame)
 				} else {
 					// fmt.Println("skip video", frame.Sequence)
@@ -389,12 +399,14 @@ func (s *Subscriber) PlayBlock(subType byte) {
 				}
 				if hasVideo && videoFrame != nil {
 					if util.Conditoinal(conf.SyncMode == 0, audioFrame.Timestamp > videoFrame.Timestamp, audioFrame.WriteTime.After(videoFrame.WriteTime)) {
+						lastSentVF = videoFrame
 						sendVideoFrame(videoFrame)
 						videoFrame = nil
 						break
 					}
 				}
 				if audioFrame.Timestamp >= s.AudioReader.SkipTs {
+					lastSentAF = audioFrame
 					sendAudioFrame(audioFrame)
 				} else {
 					// fmt.Println("skip audio", frame.AbsTime, s.AudioReader.SkipTs)
@@ -402,12 +414,7 @@ func (s *Subscriber) PlayBlock(subType byte) {
 			}
 		}
 	}
-	if videoFrame != nil {
-		videoFrame.ReaderLeave()
-	}
-	if audioFrame != nil {
-		audioFrame.ReaderLeave()
-	}
+
 	stopReason = zap.Error(ctx.Err())
 }
 

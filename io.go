@@ -214,7 +214,7 @@ func (io *IO) receive(streamPath string, specific common.IIO) error {
 		io.Info("publish", zap.String("ptr", fmt.Sprintf("%p", iPub)))
 		s.pubLocker.Lock()
 		defer s.pubLocker.Unlock()
-		if config.Global.EnableAuth {
+		if _, isPuller := specific.(IPuller); config.Global.EnableAuth && !isPuller {
 			onAuthPub := OnAuthPub
 			if auth, ok := specific.(AuthPub); ok {
 				onAuthPub = auth.OnAuth
