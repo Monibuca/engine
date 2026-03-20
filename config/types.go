@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,7 +45,22 @@ type Publish struct {
 	Key               string        `desc:"发布鉴权key"`                          // 发布鉴权key
 	SecretArgName     string        `default:"secret" desc:"发布鉴权参数名"`         // 发布鉴权参数名
 	ExpireArgName     string        `default:"expire" desc:"发布鉴权失效时间参数名"`     // 发布鉴权失效时间参数名
-	RingSize          string        `default:"256-1024" desc:"缓冲范围"`          // 初始缓冲区大小
+	RingSize          string        `default:"256-1024" desc:"缓冲范围，取连字符前一段为轨道环形缓冲初始容量"` // 如 "512-1024" 表示初始 512；后缀预留
+}
+
+// InitialRingSize 解析 RingSize（首段为整数）；非法或为空时返回 256。
+func (c *Publish) InitialRingSize() int {
+	s := strings.TrimSpace(c.RingSize)
+	if s == "" {
+		return 256
+	}
+	head, _, _ := strings.Cut(s, "-")
+	head = strings.TrimSpace(head)
+	n, err := strconv.Atoi(head)
+	if err != nil || n <= 0 {
+		return 256
+	}
+	return n
 }
 
 func (c Publish) GetPublishConfig() Publish {
