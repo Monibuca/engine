@@ -158,7 +158,7 @@ func (av *Media) SetStuff(stuff ...any) {
 			pubConf := v.GetConfig()
 			av.BufferTime = pubConf.BufferTime
 			av.Base.SetStuff(v)
-			av.Init(256, NewAVFrame)
+			av.Init(pubConf.InitialRingSize(), NewAVFrame)
 			av.SSRC = uint32(uintptr(unsafe.Pointer(av)))
 			av.等待上限 = pubConf.SpeedLimit
 		case uint32:
