@@ -277,7 +277,7 @@ func (amf *AMF) Marshal(v any) []byte {
 				amf.Write(END_OBJ)
 			}
 		default:
-			panic("amf Marshal faild")
+			panic("amf Marshal failed")
 		}
 	}
 	return amf.Buffer
