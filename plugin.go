@@ -314,7 +314,7 @@ func (opt *Plugin) Pull(streamPath string, url string, puller IPuller, save int)
 	}
 	if save > 0 {
 		if err = opt.Save(); err != nil {
-			opt.Error("save faild", zap.Error(err))
+			opt.Error("save failed", zap.Error(err))
 		}
 	}
 	return
@@ -328,7 +328,7 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 	opt.Info("push", zp, zu)
 	defer func() {
 		if err != nil {
-			opt.Error("push faild", zap.Error(err))
+			opt.Error("push failed", zap.Error(err))
 		}
 	}()
 	conf, ok := opt.Config.(config.PushConfig)
@@ -344,7 +344,7 @@ func (opt *Plugin) Push(streamPath string, url string, pusher IPusher, save bool
 		pushConfig.AddPush(url, streamPath)
 		opt.RawConfig.Get("push").Get("pushlist").Modify = pushConfig.PushList
 		if err = opt.Save(); err != nil {
-			opt.Error("save faild", zap.Error(err))
+			opt.Error("save failed", zap.Error(err))
 		}
 	}
 	return
